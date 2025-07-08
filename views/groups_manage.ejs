@@ -1,0 +1,160 @@
+<% layout('layout', { title: title, session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><%= group.name %> - 代理店管理</h2>
+    <div>
+      <a
+        href="/groups/edit/<%= group.id %>"
+        class="btn btn-outline-primary me-2"
+      >
+        <i class="bi bi-pencil"></i> グループ編集
+      </a>
+      <a href="/groups/list" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> グループ一覧
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- 所属中の代理店 -->
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0">
+            <i class="bi bi-people"></i>
+            所属中の代理店 (<%= groupAgencies.length %>社)
+          </h5>
+        </div>
+        <div class="card-body">
+          <% if (groupAgencies.length === 0) { %>
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-inbox fs-1"></i>
+            <p class="mt-2">まだ代理店が割り当てられていません</p>
+          </div>
+          <% } else { %>
+          <div class="list-group list-group-flush">
+            <% groupAgencies.forEach(agency => { %>
+            <div
+              class="list-group-item d-flex justify-content-between align-items-center"
+            >
+              <div>
+                <i class="bi bi-building text-success me-2"></i>
+                <%= agency.name %>
+              </div>
+              <form
+                method="post"
+                action="/groups/remove-agency/<%= group.id %>/<%= agency.id %>"
+                style="display: inline"
+                onsubmit="return confirm('「<%= agency.name %>」をグループから削除しますか？')"
+              >
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-x-circle"></i> 削除
+                </button>
+              </form>
+            </div>
+            <% }) %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <!-- 未所属の代理店 -->
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">
+            <i class="bi bi-plus-circle"></i>
+            追加可能な代理店 (<%= availableAgencies.length %>社)
+          </h5>
+        </div>
+        <div class="card-body">
+          <% if (availableAgencies.length === 0) { %>
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-check-circle fs-1"></i>
+            <p class="mt-2">すべての代理店がグループに所属済みです</p>
+          </div>
+          <% } else { %>
+          <form method="post" action="/groups/add-agency/<%= group.id %>">
+            <div class="mb-3">
+              <label class="form-label">代理店を選択:</label>
+              <select name="agency_id" class="form-select" required>
+                <option value="">代理店を選択してください</option>
+                <% availableAgencies.forEach(agency => { %>
+                <option value="<%= agency.id %>"><%= agency.name %></option>
+                <% }) %>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bi bi-plus-circle"></i> グループに追加
+            </button>
+          </form>
+
+          <hr class="my-3" />
+
+          <div class="list-group list-group-flush">
+            <% availableAgencies.slice(0, 5).forEach(agency => { %>
+            <div
+              class="list-group-item d-flex justify-content-between align-items-center py-2"
+            >
+              <div>
+                <i class="bi bi-building text-muted me-2"></i>
+                <small><%= agency.name %></small>
+              </div>
+              <form
+                method="post"
+                action="/groups/add-agency/<%= group.id %>"
+                style="display: inline"
+              >
+                <input
+                  type="hidden"
+                  name="agency_id"
+                  value="<%= agency.id %>"
+                />
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-plus"></i>
+                </button>
+              </form>
+            </div>
+            <% }) %> <% if (availableAgencies.length > 5) { %>
+            <div class="list-group-item text-center text-muted">
+              <small
+                >他 <%= availableAgencies.length - 5
+                %>社（上記フォームから選択）</small
+              >
+            </div>
+            <% } %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 統計情報 -->
+  <div class="mt-4">
+    <div class="row">
+      <div class="col-md-4">
+        <div class="alert alert-info">
+          <h6 class="alert-heading">グループ統計</h6>
+          <p class="mb-1">
+            <strong>所属代理店:</strong> <%= groupAgencies.length %>社
+          </p>
+          <p class="mb-0">
+            <strong>追加可能:</strong> <%= availableAgencies.length %>社
+          </p>
+        </div>
+      </div>
+      <div class="col-md-8">
+        <div class="alert alert-light">
+          <h6 class="alert-heading">使い方</h6>
+          <ul class="mb-0">
+            <li>右側から代理店を選択してグループに追加できます</li>
+            <li>左側の「削除」ボタンでグループから代理店を除外できます</li>
+            <li>代理店は複数のグループに所属できません</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

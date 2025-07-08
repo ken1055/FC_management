@@ -40,6 +40,7 @@ app.use("/api/users", require("./routes/users"));
 app.use("/sales", require("./routes/sales"));
 app.use("/auth", require("./routes/auth"));
 app.use("/materials", require("./routes/materials"));
+app.use("/groups", require("./routes/groups"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ログイン必須ミドルウェア

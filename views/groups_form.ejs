@@ -1,0 +1,56 @@
+<% layout('layout', { title: title, session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <h2 class="mb-4"><%= title %></h2>
+
+  <% if (typeof error !== 'undefined' && error) { %>
+  <div class="alert alert-danger"><%= error %></div>
+  <% } %>
+
+  <form
+    method="post"
+    action="<%= group ? '/groups/edit/' + group.id : '/groups/new' %>"
+  >
+    <div class="mb-3">
+      <label class="form-label"
+        >グループ名 <span class="text-danger">*</span></label
+      >
+      <input
+        type="text"
+        name="name"
+        class="form-control"
+        value="<%= group ? group.name : '' %>"
+        placeholder="例: 関東エリア、新規開拓チーム、など"
+        required
+      />
+      <small class="form-text text-muted">
+        代理店を分類するためのグループ名を入力してください
+      </small>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-check-circle"></i>
+        <%= group ? '更新' : '作成' %>
+      </button>
+      <a href="/groups/list" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> 一覧へ戻る
+      </a>
+    </div>
+  </form>
+
+  <% if (group) { %>
+  <hr class="my-4" />
+  <div class="alert alert-info">
+    <h6><i class="bi bi-info-circle"></i> 次のステップ</h6>
+    <p class="mb-2">
+      グループを作成した後は、代理店を割り当てることができます。
+    </p>
+    <a
+      href="/groups/manage/<%= group.id %>"
+      class="btn btn-sm btn-outline-primary"
+    >
+      <i class="bi bi-people"></i> 代理店を管理
+    </a>
+  </div>
+  <% } %>
+</div>
