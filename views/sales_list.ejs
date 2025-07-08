@@ -1,10 +1,36 @@
-<% layout('layout', { title: '売上管理', session: session }) %>
+<% layout('layout', { title: title, session: session }) %>
 <div class="card shadow-sm p-4 mb-4">
-  <h2 class="mb-4">売上管理</h2>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+      <% if (typeof isAdmin !== 'undefined' && isAdmin && agencyName) { %>
+      <%= agencyName %> の売上管理
+      <% } else { %>
+      売上管理
+      <% } %>
+    </h2>
+    <div>
+      <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+      <a href="/sales/list" class="btn btn-secondary me-2">代理店選択へ戻る</a>
+      <% } %>
+      <% if (typeof agencyId !== 'undefined' && agencyId) { %>
+      <a href="/sales/new?agency_id=<%= agencyId %>" class="btn btn-success">売上登録</a>
+      <% } else { %>
+      <a href="/sales/new" class="btn btn-success">売上登録</a>
+      <% } %>
+    </div>
+  </div>
   
-  <% if (session.user.role === 'agency') { %>
+  <% if (session.user.role === 'agency' && agencyName) { %>
     <div class="alert alert-info">
+      <i class="bi bi-info-circle"></i>
       <strong><%= agencyName %></strong> の売上データ
+    </div>
+  <% } %>
+  
+  <% if (typeof isAdmin !== 'undefined' && isAdmin && agencyName) { %>
+    <div class="alert alert-primary">
+      <i class="bi bi-building"></i>
+      <strong><%= agencyName %></strong> の売上データを管理者として表示しています
     </div>
   <% } %>
   
@@ -43,8 +69,6 @@
     </form>
   </div>
   <% } %>
-  
-  <a href="/sales/new" class="btn btn-primary mb-3">新規売上登録</a>
   
   <div class="table-responsive">
     <table class="table table-bordered table-striped">

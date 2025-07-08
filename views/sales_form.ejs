@@ -24,10 +24,19 @@
     <% if (session.user.role !== 'agency') { %>
     <div class="mb-3">
       <label class="form-label">代理店 <span class="text-danger">*</span></label>
+      <% if (typeof preselectedAgencyName !== 'undefined' && preselectedAgencyName) { %>
+      <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        <strong><%= preselectedAgencyName %></strong> が選択されています
+      </div>
+      <% } %>
       <select name="agency_id" class="form-select" required>
         <option value="">代理店を選択してください</option>
         <% agencies.forEach(a => { %>
-        <option value="<%= a.id %>" <%= (typeof sale !== 'undefined' && sale && sale.agency_id === a.id) ? 'selected' : '' %>>
+        <option value="<%= a.id %>" <%= 
+          (typeof sale !== 'undefined' && sale && sale.agency_id === a.id) ? 'selected' : 
+          (typeof preselectedAgencyId !== 'undefined' && preselectedAgencyId == a.id) ? 'selected' : ''
+        %>>
           <%= a.name %> (ID: <%= a.id %>)
         </option>
         <% }) %>

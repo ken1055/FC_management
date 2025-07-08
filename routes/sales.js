@@ -120,72 +120,80 @@ router.get(
         }
       );
     } else {
-      // 管理者・役員は全代理店のデータ
-      const groupId = req.query.group_id;
-
-      // グループ一覧を取得
-      db.all("SELECT * FROM groups", [], (err, groups) => {
-        if (err) return res.status(500).send("DBエラー");
-
-        let query = `
-        SELECT 
-          s.*, 
-          a.name as agency_name, 
-          g.name as group_name 
-        FROM sales s 
-        LEFT JOIN agencies a ON s.agency_id = a.id 
-        LEFT JOIN group_agency ga ON a.id = ga.agency_id 
-        LEFT JOIN groups g ON ga.group_id = g.id
-      `;
-        let params = [];
-
-        if (groupId) {
-          query += " WHERE ga.group_id = ?";
-          params.push(groupId);
-        }
-
-        query += " ORDER BY s.year DESC, s.month DESC";
-
-        db.all(query, params, (err, sales) => {
+      // 管理者・役員は代理店選択画面を表示
+      db.all(
+        `SELECT 
+          a.id, 
+          a.name,
+          COUNT(s.id) as sales_count,
+          SUM(s.amount) as total_sales
+        FROM agencies a 
+        LEFT JOIN sales s ON a.id = s.agency_id 
+        GROUP BY a.id, a.name 
+        ORDER BY a.name`,
+        [],
+        (err, agencies) => {
           if (err) return res.status(500).send("DBエラー");
 
-          // 全体の売上推移データを作成
-          const salesByMonth = {};
-          sales.forEach((s) => {
-            const period = `${s.year}年${s.month}月`;
-            if (!salesByMonth[period]) {
-              salesByMonth[period] = 0;
-            }
-            salesByMonth[period] += s.amount;
-          });
-
-          const chartData = Object.keys(salesByMonth)
-            .sort()
-            .map((period) => ({
-              period,
-              amount: salesByMonth[period],
-            }));
-
-          res.render("sales_list", {
-            sales,
-            chartData: JSON.stringify(chartData),
-            agencyName: null,
-            groups,
-            selectedGroupId: groupId,
+          res.render("sales_agency_list", {
+            agencies,
             session: req.session,
-            title: "売上管理",
+            title: "売上管理 - 代理店選択",
           });
-        });
-      });
+        }
+      );
     }
   }
 );
+
+// 個別代理店の売上表示
+router.get("/agency/:id", requireRole(["executive", "admin"]), (req, res) => {
+  const agencyId = req.params.id;
+
+  // 代理店情報を取得
+  db.get(
+    "SELECT name FROM agencies WHERE id = ?",
+    [agencyId],
+    (err, agency) => {
+      if (err || !agency) return res.status(404).send("代理店が見つかりません");
+
+      // 売上データを取得
+      db.all(
+        "SELECT * FROM sales WHERE agency_id = ? ORDER BY year DESC, month DESC",
+        [agencyId],
+        (err, sales) => {
+          if (err) return res.status(500).send("DBエラー");
+
+          // 月間売上推移データを作成
+          const chartData = sales.reverse().map((s) => ({
+            period: `${s.year}年${s.month}月`,
+            amount: s.amount,
+          }));
+
+          res.render("sales_list", {
+            sales: sales.reverse(),
+            chartData: JSON.stringify(chartData),
+            agencyName: agency.name,
+            agencyId: agencyId,
+            groups: [],
+            selectedGroupId: null,
+            session: req.session,
+            title: `${agency.name}の売上管理`,
+            isAdmin: true,
+          });
+        }
+      );
+    }
+  );
+});
 
 // 売上登録フォーム
 router.get(
   "/new",
   requireRole(["executive", "admin", "agency"]),
   (req, res) => {
+    const preselectedAgencyId = req.query.agency_id; // クエリパラメータから代理店IDを取得
+
     if (req.session.user.role === "agency") {
       if (!req.session.user.agency_id) {
         return res.redirect("/agencies/create-profile");
@@ -210,10 +218,21 @@ router.get(
       // 管理者は代理店一覧を取得
       db.all("SELECT * FROM agencies ORDER BY name", [], (err, agencies) => {
         if (err) return res.status(500).send("DBエラー");
+
+        // 事前選択された代理店の情報を取得
+        let preselectedAgency = null;
+        if (preselectedAgencyId) {
+          preselectedAgency = agencies.find((a) => a.id == preselectedAgencyId);
+        }
+
         res.render("sales_form", {
           session: req.session,
           agencies,
           agencyName: null,
+          preselectedAgencyId: preselectedAgencyId,
+          preselectedAgencyName: preselectedAgency
+            ? preselectedAgency.name
+            : null,
           title: "売上登録",
         });
       });
