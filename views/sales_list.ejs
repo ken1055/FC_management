@@ -1,0 +1,165 @@
+<% layout('layout', { title: '売上管理', session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <h2 class="mb-4">売上管理</h2>
+  
+  <% if (session.user.role === 'agency') { %>
+    <div class="alert alert-info">
+      <strong><%= agencyName %></strong> の売上データ
+    </div>
+  <% } %>
+  
+  <!-- 月間売上推移グラフ -->
+  <% if (chartData && JSON.parse(chartData).length > 0) { %>
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">月間売上推移</h5>
+    </div>
+    <div class="card-body">
+      <canvas id="salesChart" width="400" height="200"></canvas>
+    </div>
+  </div>
+  <% } %>
+  
+  <!-- グループフィルタリング（管理者のみ） -->
+  <% if (session.user.role !== 'agency' && groups.length > 0) { %>
+  <div class="mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-auto">
+        <label class="form-label">グループで絞り込み:</label>
+      </div>
+      <div class="col-auto">
+        <select name="group_id" class="form-select">
+          <option value="">すべて</option>
+          <% groups.forEach(g => { %>
+          <option value="<%= g.id %>" <%= selectedGroupId == g.id ? 'selected' : '' %>>
+            <%= g.name %>
+          </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary">絞り込み</button>
+      </div>
+    </form>
+  </div>
+  <% } %>
+  
+  <a href="/sales/new" class="btn btn-primary mb-3">新規売上登録</a>
+  
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped">
+      <thead class="table-dark">
+        <tr>
+          <th>ID</th>
+          <% if (session.user.role !== 'agency') { %>
+          <th>代理店名</th>
+          <th>グループ</th>
+          <% } %>
+          <th>年</th>
+          <th>月</th>
+          <th>金額</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (sales.length === 0) { %>
+        <tr>
+          <td colspan="<%= session.user.role === 'agency' ? '4' : '6' %>" class="text-center text-muted">
+            売上データがありません
+          </td>
+        </tr>
+        <% } else { %>
+        <% sales.forEach(s => { %>
+        <tr>
+          <td><%= s.id %></td>
+          <% if (session.user.role !== 'agency') { %>
+          <td><%= s.agency_name || 'ID:' + s.agency_id %></td>
+          <td><%= s.group_name || '未設定' %></td>
+          <% } %>
+          <td><%= s.year %></td>
+          <td><%= s.month %></td>
+          <td>¥<%= s.amount.toLocaleString() %></td>
+          <td>
+            <div class="btn-group-vertical btn-group-sm">
+              <a href="/sales/edit/<%= s.id %>" class="btn btn-sm btn-secondary mb-1">編集</a>
+              <form method="post" action="/sales/delete/<%= s.id %>" style="display:inline;" 
+                    onsubmit="return confirm('本当に削除しますか？')">
+                <button type="submit" class="btn btn-sm btn-danger">削除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        <% }) %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+  
+  <% if (sales.length > 0) { %>
+  <div class="mt-3">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card bg-light">
+          <div class="card-body">
+            <h6 class="card-title">合計売上</h6>
+            <h4 class="text-primary">¥<%= sales.reduce((sum, s) => sum + s.amount, 0).toLocaleString() %></h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card bg-light">
+          <div class="card-body">
+            <h6 class="card-title">平均売上</h6>
+            <h4 class="text-success">¥<%= Math.round(sales.reduce((sum, s) => sum + s.amount, 0) / sales.length).toLocaleString() %></h4>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</div>
+
+<% if (chartData && JSON.parse(chartData).length > 0) { %>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const chartData = <%- chartData %>;
+  const ctx = document.getElementById('salesChart').getContext('2d');
+  
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: chartData.map(d => d.period),
+      datasets: [{
+        label: '売上金額',
+        data: chartData.map(d => d.amount),
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+        tension: 0.1,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: '月間売上推移'
+        },
+        legend: {
+          display: false
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return '¥' + value.toLocaleString();
+            }
+          }
+        }
+      }
+    }
+  });
+</script>
+<% } %>

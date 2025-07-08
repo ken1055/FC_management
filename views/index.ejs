@@ -1,0 +1,81 @@
+<% layout('layout', { title: '代理店管理システム', session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <h1 class="mb-3">代理店管理システム</h1>
+  <p class="mb-4">やり取りは公式LINEからお願いします。</p>
+  <a
+    href="https://line.me/R/ti/p/公式LINEのID"
+    target="_blank"
+    class="btn btn-success mb-3"
+    >公式LINEへ</a
+  >
+
+  <!-- 管理者・役員向けメニュー -->
+  <% if (session && session.user && (session.user.role === 'executive' ||
+  session.user.role === 'admin')) { %>
+  <div class="mb-3">
+    <h5>管理者機能</h5>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="/agencies/list" class="btn btn-info">代理店一覧</a>
+      <a href="/sales/list" class="btn btn-primary">売上管理</a>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- 代理店ユーザー向けメニュー -->
+  <% if (session && session.user && session.user.role === 'agency') { %>
+  <div class="mb-3">
+    <h5>代理店機能</h5>
+    <% if (session.user.agency_id) { %>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-person-circle fs-1 text-primary"></i>
+            <h6 class="card-title mt-2">マイプロフィール</h6>
+            <p class="card-text text-muted">個人情報や取り扱い商品を管理</p>
+            <a
+              href="/agencies/profile/<%= session.user.agency_id %>"
+              class="btn btn-outline-primary"
+            >
+              プロフィール表示
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-graph-up fs-1 text-success"></i>
+            <h6 class="card-title mt-2">売上管理</h6>
+            <p class="card-text text-muted">月間売上の入力・確認</p>
+            <a href="/sales/list" class="btn btn-outline-success">売上管理</a>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-folder-fill fs-1 text-info"></i>
+            <h6 class="card-title mt-2">商品資料格納庫</h6>
+            <p class="card-text text-muted">商品資料の閲覧・ダウンロード</p>
+            <a
+              href="/materials/<%= session.user.agency_id %>"
+              class="btn btn-outline-info"
+            >
+              資料を見る
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <% } else { %>
+    <div class="alert alert-warning">
+      <h6>設定が必要です</h6>
+      <p class="mb-0">
+        代理店IDが設定されていません。管理者にお問い合わせください。
+      </p>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+</div>

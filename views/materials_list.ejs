@@ -1,0 +1,249 @@
+<% layout('layout', { title: '商品資料格納庫', session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="mb-1">商品資料格納庫</h2>
+      <% if (agency_name) { %>
+      <p class="text-muted mb-0"><%= agency_name %> の資料</p>
+      <% } %>
+    </div>
+    <div>
+      <% if (session.user.role === 'agency') { %>
+      <a href="/" class="btn btn-secondary">ダッシュボードへ戻る</a>
+      <% } else if (session.user.role === 'admin') { %>
+      <a href="/agencies/list" class="btn btn-secondary">代理店一覧へ戻る</a>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- 管理者用アップロード機能 -->
+  <% if (session.user.role === 'admin' && agency_id) { %>
+  <div class="card mb-4 border-success">
+    <div class="card-header bg-success text-white">
+      <h5 class="mb-0">ファイルアップロード（管理者のみ）</h5>
+    </div>
+    <div class="card-body">
+      <form
+        method="post"
+        action="/materials/upload/<%= agency_id %>"
+        enctype="multipart/form-data"
+      >
+        <div class="row g-2 align-items-center">
+          <div class="col-md-8">
+            <input
+              type="file"
+              name="file"
+              class="form-control"
+              required
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif"
+            />
+            <small class="form-text text-muted">
+              対応形式: PDF, Word, Excel, PowerPoint, 画像ファイル
+            </small>
+          </div>
+          <div class="col-md-4">
+            <button type="submit" class="btn btn-success w-100">
+              <i class="bi bi-upload"></i> アップロード
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- 代理店ユーザー向け情報 -->
+  <% if (session.user.role === 'agency') { %>
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    <strong>商品資料について:</strong>
+    こちらでは取り扱い商品に関する資料をダウンロードできます。新しい資料が追加された場合は通知いたします。
+  </div>
+  <% } %>
+
+  <!-- ファイル一覧 -->
+  <% if (files.length === 0) { %>
+  <div class="text-center py-5">
+    <i class="bi bi-folder2-open fs-1 text-muted"></i>
+    <h5 class="mt-3 text-muted">資料がありません</h5>
+    <p class="text-muted">
+      <% if (session.user.role === 'agency') { %>
+      まだ資料がアップロードされていません。管理者からの連絡をお待ちください。
+      <% } else { %> まだファイルがアップロードされていません。 <% } %>
+    </p>
+  </div>
+  <% } else { %>
+
+  <!-- ファイル検索・フィルタ -->
+  <div class="mb-3">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            id="fileSearch"
+            placeholder="ファイル名で検索..."
+          />
+        </div>
+      </div>
+      <div class="col-md-6">
+        <select class="form-select" id="fileTypeFilter">
+          <option value="">すべてのファイル</option>
+          <option value="pdf">PDF</option>
+          <option value="doc">Word文書</option>
+          <option value="xls">Excel</option>
+          <option value="ppt">PowerPoint</option>
+          <option value="image">画像</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- ファイル一覧テーブル -->
+  <div class="table-responsive">
+    <table class="table table-hover" id="filesTable">
+      <thead class="table-dark">
+        <tr>
+          <th><i class="bi bi-file-earmark"></i> ファイル名</th>
+          <% if (!agency_id && session.user.role === 'admin') { %>
+          <th><i class="bi bi-building"></i> 代理店</th>
+          <% } %>
+          <th><i class="bi bi-calendar"></i> アップロード日時</th>
+          <th><i class="bi bi-gear"></i> 操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% files.forEach(f => { %>
+        <tr
+          class="file-row"
+          data-filename="<%= f.originalname.toLowerCase() %>"
+          data-type="<%= f.originalname.split('.').pop().toLowerCase() %>"
+        >
+          <td>
+            <div class="d-flex align-items-center">
+              <% const ext = f.originalname.split('.').pop().toLowerCase(); let
+              iconClass = 'bi-file-earmark'; let iconColor = 'text-secondary';
+              if (['pdf'].includes(ext)) { iconClass = 'bi-file-earmark-pdf';
+              iconColor = 'text-danger'; } else if (['doc',
+              'docx'].includes(ext)) { iconClass = 'bi-file-earmark-word';
+              iconColor = 'text-primary'; } else if (['xls',
+              'xlsx'].includes(ext)) { iconClass = 'bi-file-earmark-excel';
+              iconColor = 'text-success'; } else if (['ppt',
+              'pptx'].includes(ext)) { iconClass = 'bi-file-earmark-ppt';
+              iconColor = 'text-warning'; } else if (['jpg', 'jpeg', 'png',
+              'gif'].includes(ext)) { iconClass = 'bi-file-earmark-image';
+              iconColor = 'text-info'; } %>
+              <i class="bi <%= iconClass %> fs-4 me-2 <%= iconColor %>"></i>
+              <div>
+                <div class="fw-medium"><%= f.originalname %></div>
+                <small class="text-muted">
+                  <%= (f.originalname.length > 50) ? f.originalname.substring(0,
+                  50) + '...' : '' %>
+                </small>
+              </div>
+            </div>
+          </td>
+          <% if (!agency_id && session.user.role === 'admin') { %>
+          <td><%= f.agency_name || '未設定' %></td>
+          <% } %>
+          <td>
+            <div>
+              <%= new Date(f.uploaded_at).toLocaleDateString('ja-JP') %>
+            </div>
+            <small class="text-muted">
+              <%= new Date(f.uploaded_at).toLocaleTimeString('ja-JP') %>
+            </small>
+          </td>
+          <td>
+            <div class="btn-group" role="group">
+              <a
+                href="/materials/download/<%= f.id %>"
+                class="btn btn-sm btn-outline-primary"
+                title="ダウンロード"
+              >
+                <i class="bi bi-download"></i> ダウンロード
+              </a>
+              <% if (session.user.role === 'admin') { %>
+              <form
+                method="post"
+                action="/materials/delete/<%= f.id %>"
+                style="display: inline"
+                onsubmit="return confirm('「<%= f.originalname %>」を削除しますか？')"
+              >
+                <button
+                  type="submit"
+                  class="btn btn-sm btn-outline-danger"
+                  title="削除"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+              <% } %>
+            </div>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ファイル統計情報 -->
+  <div class="mt-3">
+    <small class="text-muted">
+      合計 <span id="fileCount"><%= files.length %></span> 件のファイル <% if
+      (session.user.role === 'agency') { %> | 最新の資料を定期的にご確認ください
+      <% } %>
+    </small>
+  </div>
+  <% } %>
+</div>
+
+<script>
+  // ファイル検索機能
+  document.getElementById("fileSearch").addEventListener("input", function () {
+    filterFiles();
+  });
+
+  document
+    .getElementById("fileTypeFilter")
+    .addEventListener("change", function () {
+      filterFiles();
+    });
+
+  function filterFiles() {
+    const searchTerm = document
+      .getElementById("fileSearch")
+      .value.toLowerCase();
+    const typeFilter = document
+      .getElementById("fileTypeFilter")
+      .value.toLowerCase();
+    const rows = document.querySelectorAll(".file-row");
+    let visibleCount = 0;
+
+    rows.forEach((row) => {
+      const filename = row.getAttribute("data-filename");
+      const filetype = row.getAttribute("data-type");
+
+      const matchesSearch = filename.includes(searchTerm);
+      const matchesType =
+        !typeFilter ||
+        filetype === typeFilter ||
+        (typeFilter === "doc" && ["doc", "docx"].includes(filetype)) ||
+        (typeFilter === "xls" && ["xls", "xlsx"].includes(filetype)) ||
+        (typeFilter === "ppt" && ["ppt", "pptx"].includes(filetype)) ||
+        (typeFilter === "image" &&
+          ["jpg", "jpeg", "png", "gif"].includes(filetype));
+
+      if (matchesSearch && matchesType) {
+        row.style.display = "";
+        visibleCount++;
+      } else {
+        row.style.display = "none";
+      }
+    });
+
+    document.getElementById("fileCount").textContent = visibleCount;
+  }
+</script>

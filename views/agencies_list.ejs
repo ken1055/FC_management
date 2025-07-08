@@ -1,0 +1,76 @@
+<% layout('layout', { title: '代理店一覧', session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <h1 class="mb-4">代理店一覧</h1>
+  
+  <!-- グループフィルタリング -->
+  <div class="mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-auto">
+        <label class="form-label">グループで絞り込み:</label>
+      </div>
+      <div class="col-auto">
+        <select name="group_id" class="form-select">
+          <option value="">すべて</option>
+          <% groups.forEach(g => { %>
+          <option value="<%= g.id %>" <%= selectedGroupId == g.id ? 'selected' : '' %>>
+            <%= g.name %>
+          </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary">絞り込み</button>
+      </div>
+    </form>
+  </div>
+  
+  <a href="/agencies/new" class="btn btn-primary mb-3">新規登録</a>
+  
+  <!-- 横スクロール対応のテーブル -->
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped">
+      <thead class="table-dark">
+        <tr>
+          <th>ID</th>
+          <th>名前</th>
+          <th>年齢</th>
+          <th>住所</th>
+          <th>振込先情報</th>
+          <th>経験年数</th>
+          <th>契約日</th>
+          <th>活動開始日</th>
+          <th>商品の特徴</th>
+          <th>取り扱い商品</th>
+          <th>グループ</th>
+          <th>商品資料格納庫</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% agencies.forEach(a => { %>
+        <tr>
+          <td><%= a.id %></td>
+          <td>
+            <a href="/agencies/profile/<%= a.id %>" class="text-decoration-none">
+              <%= a.name %>
+            </a>
+          </td>
+          <td><%= a.age || '未設定' %></td>
+          <td><%= a.address || '未設定' %></td>
+          <td><%= a.bank_info || '未設定' %></td>
+          <td><%= a.experience_years || '未設定' %>年</td>
+          <td><%= a.contract_date || '未設定' %></td>
+          <td><%= a.start_date || '未設定' %></td>
+          <td><%= a.product_features || '未設定' %></td>
+          <td><%= a.product_names || '未設定' %></td>
+          <td><%= a.group_name || '未設定' %></td>
+          <td>
+            <a href="/materials/<%= a.id %>" class="btn btn-sm btn-success">
+              資料を見る
+            </a>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div> 

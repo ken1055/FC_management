@@ -1,0 +1,88 @@
+<% layout('layout', { title: title, session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <h2 class="mb-4"><%= title %></h2>
+  
+  <% if (typeof error !== 'undefined' && error) { %>
+  <div class="alert alert-danger">
+    <%= error %>
+  </div>
+  <% } %>
+  
+  <form method="post" action="<%= typeof sale !== 'undefined' && sale ? '/sales/edit/' + sale.id : '/sales/new' %>">
+    <% if (session.user.role !== 'agency') { %>
+    <div class="mb-3">
+      <label class="form-label">代理店 <span class="text-danger">*</span></label>
+      <select name="agency_id" class="form-select" required>
+        <option value="">代理店を選択してください</option>
+        <% agencies.forEach(a => { %>
+        <option value="<%= a.id %>" <%= (typeof sale !== 'undefined' && sale && sale.agency_id === a.id) ? 'selected' : '' %>>
+          <%= a.name %> (ID: <%= a.id %>)
+        </option>
+        <% }) %>
+      </select>
+    </div>
+    <% } else { %>
+      <% if (session.user.agency_id) { %>
+      <div class="mb-3">
+        <label class="form-label">代理店</label>
+        <input type="text" class="form-control" value="<%= agencyName %>" readonly>
+        <input type="hidden" name="agency_id" value="<%= session.user.agency_id %>">
+      </div>
+      <% } else { %>
+      <div class="alert alert-warning">
+        代理店IDが設定されていません。管理者にお問い合わせください。
+      </div>
+      <% } %>
+    <% } %>
+    
+    <div class="mb-3">
+      <label class="form-label">年 <span class="text-danger">*</span></label>
+      <input 
+        type="number" 
+        name="year" 
+        class="form-control" 
+        min="2020" 
+        max="2030"
+        value="<%= typeof sale !== 'undefined' && sale ? sale.year : new Date().getFullYear() %>"
+        required 
+      />
+    </div>
+    
+    <div class="mb-3">
+      <label class="form-label">月 <span class="text-danger">*</span></label>
+      <select name="month" class="form-select" required>
+        <option value="">月を選択してください</option>
+        <% for (let i = 1; i <= 12; i++) { %>
+        <option value="<%= i %>" <%= (typeof sale !== 'undefined' && sale && sale.month === i) ? 'selected' : '' %>>
+          <%= i %>月
+        </option>
+        <% } %>
+      </select>
+    </div>
+    
+    <div class="mb-3">
+      <label class="form-label">売上金額 <span class="text-danger">*</span></label>
+      <div class="input-group">
+        <span class="input-group-text">¥</span>
+        <input 
+          type="number" 
+          name="amount" 
+          class="form-control" 
+          min="0"
+          step="1000"
+          value="<%= typeof sale !== 'undefined' && sale ? sale.amount : '' %>"
+          placeholder="0"
+          required 
+        />
+      </div>
+      <small class="form-text text-muted">1,000円単位で入力してください</small>
+    </div>
+    
+    <% if (session.user.agency_id || session.user.role !== 'agency') { %>
+    <button type="submit" class="btn btn-success">
+      <%= typeof sale !== 'undefined' && sale ? '更新' : '登録' %>
+    </button>
+    <% } %>
+    <a href="/sales/list" class="btn btn-secondary ms-2">一覧へ戻る</a>
+  </form>
+</div>
