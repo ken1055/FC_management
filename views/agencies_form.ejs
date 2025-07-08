@@ -4,7 +4,11 @@ session }) %>
   <h1 class="mb-4">代理店<%= agency ? '編集' : '新規登録' %></h1>
   <form
     method="post"
-    action="<%= typeof isProfile !== 'undefined' && isProfile ? '/agencies/profile/' + agency.id + '/edit' : (agency ? '/agencies/edit/' + agency.id : '/agencies/new') %>"
+    action="<%= 
+      typeof isCreateProfile !== 'undefined' && isCreateProfile ? '/agencies/create-profile' :
+      typeof isProfile !== 'undefined' && isProfile ? '/agencies/profile/' + agency.id + '/edit' : 
+      (agency ? '/agencies/edit/' + agency.id : '/agencies/new') 
+    %>"
   >
     <div class="mb-3">
       <label class="form-label">名前 <span class="text-danger">*</span></label>
@@ -158,7 +162,9 @@ session }) %>
       >
     </div>
     <button type="submit" class="btn btn-success">保存</button>
-    <% if (typeof isProfile !== 'undefined' && isProfile) { %>
+    <% if (typeof isCreateProfile !== 'undefined' && isCreateProfile) { %>
+    <a href="/" class="btn btn-secondary ms-2">ダッシュボードへ戻る</a>
+    <% } else if (typeof isProfile !== 'undefined' && isProfile) { %>
     <a href="/agencies/profile/<%= agency.id %>" class="btn btn-secondary ms-2"
       >プロフィールへ戻る</a
     >

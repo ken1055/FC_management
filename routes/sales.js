@@ -83,7 +83,7 @@ router.get(
     if (req.session.user.role === "agency") {
       // 代理店は自分のデータのみ
       if (!req.session.user.agency_id) {
-        return res.status(400).send("代理店IDが設定されていません");
+        return res.redirect("/agencies/create-profile");
       }
 
       // 代理店情報を取得
@@ -188,7 +188,7 @@ router.get(
   (req, res) => {
     if (req.session.user.role === "agency") {
       if (!req.session.user.agency_id) {
-        return res.status(400).send("代理店IDが設定されていません");
+        return res.redirect("/agencies/create-profile");
       }
 
       // 代理店情報を取得

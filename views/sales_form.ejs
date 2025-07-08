@@ -8,6 +8,18 @@
   </div>
   <% } %>
   
+  <!-- 代理店ユーザーでagency_idが未設定の場合の案内 -->
+  <% if (session.user.role === 'agency' && !session.user.agency_id) { %>
+  <div class="alert alert-warning">
+    <h5><i class="bi bi-exclamation-triangle"></i> プロフィール設定が必要です</h5>
+    <p class="mb-3">売上管理を利用するには、まず代理店プロフィールを作成してください。</p>
+    <a href="/agencies/create-profile" class="btn btn-primary">
+      <i class="bi bi-person-plus"></i> プロフィールを作成
+    </a>
+    <a href="/" class="btn btn-secondary ms-2">ダッシュボードへ戻る</a>
+  </div>
+  <% } else { %>
+  
   <form method="post" action="<%= typeof sale !== 'undefined' && sale ? '/sales/edit/' + sale.id : '/sales/new' %>">
     <% if (session.user.role !== 'agency') { %>
     <div class="mb-3">
@@ -22,17 +34,11 @@
       </select>
     </div>
     <% } else { %>
-      <% if (session.user.agency_id) { %>
-      <div class="mb-3">
-        <label class="form-label">代理店</label>
-        <input type="text" class="form-control" value="<%= agencyName %>" readonly>
-        <input type="hidden" name="agency_id" value="<%= session.user.agency_id %>">
-      </div>
-      <% } else { %>
-      <div class="alert alert-warning">
-        代理店IDが設定されていません。管理者にお問い合わせください。
-      </div>
-      <% } %>
+    <div class="mb-3">
+      <label class="form-label">代理店</label>
+      <input type="text" class="form-control" value="<%= agencyName %>" readonly>
+      <input type="hidden" name="agency_id" value="<%= session.user.agency_id %>">
+    </div>
     <% } %>
     
     <div class="mb-3">
@@ -85,4 +91,6 @@
     <% } %>
     <a href="/sales/list" class="btn btn-secondary ms-2">一覧へ戻る</a>
   </form>
+  
+  <% } %>
 </div>

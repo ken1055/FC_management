@@ -441,4 +441,93 @@ router.post(
   }
 );
 
+// 代理店プロフィール作成フォーム（代理店ユーザー用）
+router.get("/create-profile", requireRole(["agency"]), (req, res) => {
+  // 既にプロフィールが存在する場合はリダイレクト
+  if (req.session.user.agency_id) {
+    return res.redirect("/agencies/profile/" + req.session.user.agency_id);
+  }
+
+  res.render("agencies_form", {
+    agency: null,
+    session: req.session,
+    title: "代理店プロフィール作成",
+    isCreateProfile: true,
+  });
+});
+
+// 代理店プロフィール作成（代理店ユーザー用）
+router.post("/create-profile", requireRole(["agency"]), (req, res) => {
+  // 既にプロフィールが存在する場合はエラー
+  if (req.session.user.agency_id) {
+    return res.status(400).send("既にプロフィールが存在します");
+  }
+
+  const {
+    name,
+    age,
+    address,
+    bank_info,
+    experience_years,
+    contract_date,
+    start_date,
+    product_features,
+    products,
+  } = req.body;
+
+  db.run(
+    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [
+      name,
+      age,
+      address,
+      bank_info,
+      experience_years,
+      contract_date,
+      start_date,
+      product_features,
+    ],
+    function (err) {
+      if (err) return res.status(500).send("DBエラー");
+
+      const agencyId = this.lastID;
+
+      // 取り扱い商品を保存
+      if (products) {
+        const productList = Array.isArray(products) ? products : [products];
+        productList.forEach((product) => {
+          db.run(
+            "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+            [agencyId, product],
+            (err) => {
+              if (err) console.error("商品保存エラー:", err);
+            }
+          );
+        });
+      }
+
+      // ユーザーテーブルのagency_idを更新
+      db.run(
+        "UPDATE users SET agency_id = ? WHERE id = ?",
+        [agencyId, req.session.user.id],
+        function (err) {
+          if (err) {
+            console.error("ユーザーのagency_id更新エラー:", err);
+            return res
+              .status(500)
+              .send(
+                "プロフィール作成は完了しましたが、アカウント連携でエラーが発生しました"
+              );
+          }
+
+          // セッションのagency_idも更新
+          req.session.user.agency_id = agencyId;
+
+          res.redirect("/agencies/profile/" + agencyId);
+        }
+      );
+    }
+  );
+});
+
 module.exports = router;
