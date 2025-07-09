@@ -158,12 +158,22 @@
           </td>
           <td>
             <div class="btn-group" role="group">
+              <!-- 詳細・プレビューボタン -->
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-info"
+                onclick="showFileDetails(<%= f.id %>)"
+                title="詳細・プレビュー"
+              >
+                <i class="bi bi-eye"></i>
+              </button>
+
               <a
                 href="/materials/download/<%= f.id %>"
                 class="btn btn-sm btn-outline-primary"
                 title="ダウンロード"
               >
-                <i class="bi bi-download"></i> ダウンロード
+                <i class="bi bi-download"></i>
               </a>
               <% if (session.user.role === 'admin') { %>
               <form
@@ -200,12 +210,56 @@
   <% } %>
 </div>
 
+<!-- ファイル詳細・プレビューモーダル -->
+<div
+  class="modal fade"
+  id="fileDetailsModal"
+  tabindex="-1"
+  aria-labelledby="fileDetailsModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fileDetailsModalLabel">ファイル詳細</h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body">
+        <div id="fileDetailsContent">
+          <div class="text-center">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">読み込み中...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          閉じる
+        </button>
+        <a id="downloadBtn" href="#" class="btn btn-primary">
+          <i class="bi bi-download"></i> ダウンロード
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
   // ファイル検索機能
   document.getElementById("fileSearch").addEventListener("input", function () {
+    const searchTerm = this.value.toLowerCase();
     filterFiles();
   });
 
+  // ファイルタイプフィルタ
   document
     .getElementById("fileTypeFilter")
     .addEventListener("change", function () {
@@ -216,34 +270,224 @@
     const searchTerm = document
       .getElementById("fileSearch")
       .value.toLowerCase();
-    const typeFilter = document
-      .getElementById("fileTypeFilter")
-      .value.toLowerCase();
+    const selectedType = document.getElementById("fileTypeFilter").value;
     const rows = document.querySelectorAll(".file-row");
-    let visibleCount = 0;
 
-    rows.forEach((row) => {
+    rows.forEach(function (row) {
       const filename = row.getAttribute("data-filename");
       const filetype = row.getAttribute("data-type");
 
-      const matchesSearch = filename.includes(searchTerm);
-      const matchesType =
-        !typeFilter ||
-        filetype === typeFilter ||
-        (typeFilter === "doc" && ["doc", "docx"].includes(filetype)) ||
-        (typeFilter === "xls" && ["xls", "xlsx"].includes(filetype)) ||
-        (typeFilter === "ppt" && ["ppt", "pptx"].includes(filetype)) ||
-        (typeFilter === "image" &&
-          ["jpg", "jpeg", "png", "gif"].includes(filetype));
+      let showRow = true;
 
-      if (matchesSearch && matchesType) {
-        row.style.display = "";
-        visibleCount++;
-      } else {
-        row.style.display = "none";
+      // 検索条件チェック
+      if (searchTerm && !filename.includes(searchTerm)) {
+        showRow = false;
       }
-    });
 
-    document.getElementById("fileCount").textContent = visibleCount;
+      // ファイルタイプフィルタチェック
+      if (selectedType) {
+        if (
+          selectedType === "image" &&
+          !["jpg", "jpeg", "png", "gif", "webp"].includes(filetype)
+        ) {
+          showRow = false;
+        } else if (selectedType === "pdf" && filetype !== "pdf") {
+          showRow = false;
+        } else if (
+          selectedType === "doc" &&
+          !["doc", "docx"].includes(filetype)
+        ) {
+          showRow = false;
+        } else if (
+          selectedType === "xls" &&
+          !["xls", "xlsx"].includes(filetype)
+        ) {
+          showRow = false;
+        } else if (
+          selectedType === "ppt" &&
+          !["ppt", "pptx"].includes(filetype)
+        ) {
+          showRow = false;
+        }
+      }
+
+      row.style.display = showRow ? "" : "none";
+    });
+  }
+
+  // ファイル詳細表示
+  async function showFileDetails(fileId) {
+    const modal = new bootstrap.Modal(
+      document.getElementById("fileDetailsModal")
+    );
+    const content = document.getElementById("fileDetailsContent");
+    const downloadBtn = document.getElementById("downloadBtn");
+
+    // ローディング表示
+    content.innerHTML = `
+    <div class="text-center">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">読み込み中...</span>
+      </div>
+    </div>
+  `;
+
+    // ダウンロードボタンのリンクを設定
+    downloadBtn.href = `/materials/download/${fileId}`;
+
+    modal.show();
+
+    try {
+      const response = await fetch(`/materials/info/${fileId}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "エラーが発生しました");
+      }
+
+      // ファイルサイズをフォーマット
+      const formatFileSize = (bytes) => {
+        if (bytes === 0) return "0 Bytes";
+        const k = 1024;
+        const sizes = ["Bytes", "KB", "MB", "GB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+      };
+
+      // アップロード日時をフォーマット
+      const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleString("ja-JP");
+      };
+
+      // ファイルタイプアイコンを取得
+      const getFileIcon = (mimetype, filename) => {
+        const ext = filename.split(".").pop().toLowerCase();
+        if (mimetype.startsWith("image/"))
+          return "bi-file-earmark-image text-info";
+        if (mimetype === "application/pdf")
+          return "bi-file-earmark-pdf text-danger";
+        if (mimetype.includes("word"))
+          return "bi-file-earmark-word text-primary";
+        if (mimetype.includes("excel") || mimetype.includes("spreadsheet"))
+          return "bi-file-earmark-excel text-success";
+        if (
+          mimetype.includes("powerpoint") ||
+          mimetype.includes("presentation")
+        )
+          return "bi-file-earmark-ppt text-warning";
+        return "bi-file-earmark text-secondary";
+      };
+
+      let contentHtml = `
+      <div class="row">
+        <div class="col-12">
+          <div class="d-flex align-items-center mb-3">
+            <i class="bi ${getFileIcon(
+              data.mimetype,
+              data.originalname
+            )} fs-1 me-3"></i>
+            <div>
+              <h6 class="mb-1">${data.originalname}</h6>
+              <small class="text-muted">${data.mimetype}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="row">
+        <div class="col-md-6">
+          <table class="table table-sm">
+            <tbody>
+              <tr>
+                <th width="40%">ファイル名:</th>
+                <td>${data.originalname}</td>
+              </tr>
+              <tr>
+                <th>ファイルサイズ:</th>
+                <td>${formatFileSize(data.size)}</td>
+              </tr>
+              <tr>
+                <th>ファイルタイプ:</th>
+                <td>${data.mimetype}</td>
+              </tr>
+              <tr>
+                <th>アップロード日時:</th>
+                <td>${formatDate(data.uploadedAt)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+    `;
+
+      if (data.isImage) {
+        contentHtml += `
+        <div class="col-md-6">
+          <div class="text-center">
+            <h6>プレビュー</h6>
+            <img 
+              src="${data.previewUrl}" 
+              alt="${data.originalname}" 
+              class="img-fluid rounded shadow-sm"
+              style="max-height: 300px; cursor: pointer;"
+              onclick="openImageFullscreen('${data.previewUrl}', '${data.originalname}')"
+              title="クリックで拡大表示"
+            />
+            <br>
+            <small class="text-muted">画像をクリックで拡大表示</small>
+          </div>
+        </div>
+      `;
+      } else {
+        contentHtml += `
+        <div class="col-md-6">
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            このファイルはプレビューできません。<br>
+            ダウンロードして内容をご確認ください。
+          </div>
+        </div>
+      `;
+      }
+
+      contentHtml += "</div>";
+      content.innerHTML = contentHtml;
+    } catch (error) {
+      content.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle"></i>
+        ${error.message}
+      </div>
+    `;
+    }
+  }
+
+  // 画像フルスクリーン表示
+  function openImageFullscreen(imageUrl, imageName) {
+    const fullscreenModal = document.createElement("div");
+    fullscreenModal.className = "modal fade";
+    fullscreenModal.innerHTML = `
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">${imageName}</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body d-flex justify-content-center align-items-center bg-dark">
+          <img src="${imageUrl}" alt="${imageName}" class="img-fluid" style="max-height: 90vh;">
+        </div>
+      </div>
+    </div>
+  `;
+
+    document.body.appendChild(fullscreenModal);
+
+    const modal = new bootstrap.Modal(fullscreenModal);
+    modal.show();
+
+    // モーダルが閉じられたときに要素を削除
+    fullscreenModal.addEventListener("hidden.bs.modal", function () {
+      document.body.removeChild(fullscreenModal);
+    });
   }
 </script>

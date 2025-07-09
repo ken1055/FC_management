@@ -100,41 +100,149 @@ router.post(
   }
 );
 
-// 削除（管理者のみ）
+// ファイル削除（管理者のみ）
 router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
-  db.get("SELECT * FROM materials WHERE id=?", [req.params.id], (err, file) => {
-    if (err || !file) return res.status(404).send("ファイルがありません");
-    fs.unlinkSync(path.join(uploadDir, file.filename));
-    db.run("DELETE FROM materials WHERE id=?", [req.params.id], function (err) {
-      if (err) return res.status(500).send("DBエラー");
-      // agency_idがnullの場合は全体ページにリダイレクト
-      if (file.agency_id) {
-        res.redirect(`/materials/${file.agency_id}`);
-      } else {
-        res.redirect("/materials");
+  const fileId = req.params.id;
+
+  db.get("SELECT * FROM materials WHERE id = ?", [fileId], (err, file) => {
+    if (err || !file) {
+      return res.status(404).send("ファイルが見つかりません");
+    }
+
+    // ファイルシステムからファイルを削除
+    const filePath = path.join(uploadDir, file.filename);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (deleteErr) {
+        console.error("ファイル削除エラー:", deleteErr);
       }
+    }
+
+    // データベースからレコードを削除
+    db.run("DELETE FROM materials WHERE id = ?", [fileId], function (err) {
+      if (err) {
+        console.error("DB削除エラー:", err);
+        return res.status(500).send("削除に失敗しました");
+      }
+
+      // 元の画面にリダイレクト
+      const agencyId = file.agency_id;
+      res.redirect(`/materials/${agencyId}`);
     });
   });
 });
 
 // ダウンロード
 router.get("/download/:id", (req, res) => {
-  db.get("SELECT * FROM materials WHERE id=?", [req.params.id], (err, file) => {
-    if (err || !file) return res.status(404).send("ファイルがありません");
+  db.get(
+    "SELECT * FROM materials WHERE id = ?",
+    [req.params.id],
+    (err, file) => {
+      if (err || !file) return res.status(404).send("ファイルが見つかりません");
 
-    // 代理店は自分の資料のみダウンロード可能
-    if (req.session.user.role === "agency") {
-      if (!req.session.user.agency_id) {
-        return res.status(400).send("代理店IDが設定されていません");
+      // 代理店は自分の資料のみ、管理者は全て閲覧可能
+      if (req.session.user.role === "agency") {
+        if (!req.session.user.agency_id) {
+          return res.status(400).send("代理店IDが設定されていません");
+        }
+        if (req.session.user.agency_id !== file.agency_id) {
+          return res.status(403).send("権限がありません");
+        }
       }
-      if (req.session.user.agency_id !== file.agency_id) {
-        return res.status(403).send("権限がありません");
+
+      const filePath = path.join(uploadDir, file.filename);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).send("ファイルが見つかりません");
       }
+
+      res.download(filePath, file.originalname);
     }
+  );
+});
 
-    const filePath = path.join(uploadDir, file.filename);
-    res.download(filePath, file.originalname);
-  });
+// 画像プレビュー用
+router.get("/preview/:id", (req, res) => {
+  db.get(
+    "SELECT * FROM materials WHERE id = ?",
+    [req.params.id],
+    (err, file) => {
+      if (err || !file) return res.status(404).send("ファイルが見つかりません");
+
+      // 代理店は自分の資料のみ、管理者は全て閲覧可能
+      if (req.session.user.role === "agency") {
+        if (!req.session.user.agency_id) {
+          return res.status(400).send("代理店IDが設定されていません");
+        }
+        if (req.session.user.agency_id !== file.agency_id) {
+          return res.status(403).send("権限がありません");
+        }
+      }
+
+      // 画像ファイルかどうかチェック
+      const imageTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+      ];
+      if (!imageTypes.includes(file.mimetype)) {
+        return res.status(400).send("画像ファイルではありません");
+      }
+
+      const filePath = path.join(uploadDir, file.filename);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).send("ファイルが見つかりません");
+      }
+
+      // 画像ファイルを直接配信
+      res.sendFile(filePath);
+    }
+  );
+});
+
+// ファイル情報取得API
+router.get("/info/:id", (req, res) => {
+  db.get(
+    "SELECT * FROM materials WHERE id = ?",
+    [req.params.id],
+    (err, file) => {
+      if (err || !file)
+        return res.status(404).json({ error: "ファイルが見つかりません" });
+
+      // 代理店は自分の資料のみ、管理者は全て閲覧可能
+      if (req.session.user.role === "agency") {
+        if (!req.session.user.agency_id) {
+          return res
+            .status(400)
+            .json({ error: "代理店IDが設定されていません" });
+        }
+        if (req.session.user.agency_id !== file.agency_id) {
+          return res.status(403).json({ error: "権限がありません" });
+        }
+      }
+
+      const filePath = path.join(uploadDir, file.filename);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "ファイルが見つかりません" });
+      }
+
+      // ファイルサイズを取得
+      const stats = fs.statSync(filePath);
+      const isImage = file.mimetype.startsWith("image/");
+
+      res.json({
+        id: file.id,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: stats.size,
+        uploadedAt: file.uploaded_at,
+        isImage: isImage,
+        previewUrl: isImage ? `/materials/preview/${file.id}` : null,
+      });
+    }
+  );
 });
 
 module.exports = router;
