@@ -1,0 +1,147 @@
+<% layout('layout', { title: title, session: session }) %>
+<div class="card shadow-sm p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><%= title %></h2>
+    <a href="/api/users/list" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> 一覧へ戻る
+    </a>
+  </div>
+
+  <% if (typeof error !== 'undefined' && error) { %>
+  <div class="alert alert-danger">
+    <i class="bi bi-exclamation-triangle"></i> <%= error %>
+  </div>
+  <% } %>
+
+  <div class="row">
+    <div class="col-md-8">
+      <form method="post" action="/api/users/">
+        <div class="mb-3">
+          <label class="form-label">
+            メールアドレス <span class="text-danger">*</span>
+          </label>
+          <input
+            type="email"
+            name="email"
+            class="form-control"
+            placeholder="例: admin@company.com"
+            required
+          />
+          <small class="form-text text-muted">
+            ログイン時に使用するメールアドレスを入力してください
+          </small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">
+            パスワード <span class="text-danger">*</span>
+          </label>
+          <input
+            type="password"
+            name="password"
+            class="form-control"
+            placeholder="安全なパスワードを入力"
+            required
+          />
+          <small class="form-text text-muted">
+            8文字以上の安全なパスワードを設定してください
+          </small>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">
+            権限レベル <span class="text-danger">*</span>
+          </label>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="card border-warning">
+                <div class="card-body">
+                  <div class="form-check">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="role"
+                      id="executive"
+                      value="executive"
+                      required
+                    />
+                    <label class="form-check-label" for="executive">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-star-fill text-warning me-2"></i>
+                        <strong>役員</strong>
+                      </div>
+                    </label>
+                  </div>
+                  <small class="text-muted">
+                    システム全体の最高権限<br />
+                    <strong>制限:</strong> 1つまで作成可能
+                  </small>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card border-success">
+                <div class="card-body">
+                  <div class="form-check">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="role"
+                      id="admin"
+                      value="admin"
+                      required
+                    />
+                    <label class="form-check-label" for="admin">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-shield-check text-success me-2"></i>
+                        <strong>管理者</strong>
+                      </div>
+                    </label>
+                  </div>
+                  <small class="text-muted">
+                    代理店・売上管理権限<br />
+                    <strong>制限:</strong> 4つまで作成可能
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-person-plus"></i> アカウント作成
+          </button>
+          <a href="/api/users/list" class="btn btn-secondary">
+            <i class="bi bi-x-circle"></i> キャンセル
+          </a>
+        </div>
+      </form>
+    </div>
+
+    <div class="col-md-4">
+      <div class="alert alert-info">
+        <h6 class="alert-heading">
+          <i class="bi bi-info-circle"></i> アカウント作成について
+        </h6>
+        <ul class="mb-0">
+          <li><strong>役員:</strong> システム全体を管理</li>
+          <li><strong>管理者:</strong> 代理店管理、売上管理等</li>
+          <li>メールアドレスは一意である必要があります</li>
+          <li>パスワードは安全なものを設定してください</li>
+        </ul>
+      </div>
+
+      <div class="alert alert-warning">
+        <h6 class="alert-heading">
+          <i class="bi bi-exclamation-triangle"></i> 制限について
+        </h6>
+        <ul class="mb-0">
+          <li><strong>役員:</strong> 最大1つまで</li>
+          <li><strong>管理者:</strong> 最大4つまで</li>
+          <li>制限に達している場合は作成できません</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
