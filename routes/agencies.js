@@ -4,6 +4,7 @@ const db = require("../db");
 const {
   sendProfileRegistrationNotification,
   sendProfileUpdateNotification,
+  getAdminEmails,
 } = require("../config/email");
 
 function requireRole(roles) {
@@ -18,6 +19,9 @@ function requireRole(roles) {
 // メール設定テスト（管理者のみ）
 router.post("/test-email", requireRole(["admin"]), async (req, res) => {
   try {
+    // 管理者メールアドレス一覧を取得
+    const adminEmails = getAdminEmails();
+
     // テスト用のダミーデータ
     const testAgencyData = {
       id: 999,
@@ -45,13 +49,14 @@ router.post("/test-email", requireRole(["admin"]), async (req, res) => {
     if (result) {
       res.json({
         success: true,
-        message:
-          "テストメールが正常に送信されました。管理者のメールボックスを確認してください。",
+        message: `テストメールが正常に送信されました。${adminEmails.length}件の管理者メールアドレスに送信しました。`,
+        adminEmails: adminEmails,
       });
     } else {
       res.json({
         success: false,
         message: "メール送信に失敗しました。サーバーログを確認してください。",
+        adminEmails: adminEmails,
       });
     }
   } catch (error) {

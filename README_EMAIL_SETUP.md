@@ -1,6 +1,7 @@
 # メール通知機能設定手順
 
 代理店プロフィール登録・更新時に管理者へメール通知を送信する機能が実装されています。
+**複数の管理者アカウント**に同時に通知を送信することができます。
 
 ## 必要な環境変数
 
@@ -18,8 +19,32 @@ SMTP_USER=your-email@gmail.com
 # Gmailアプリパスワード（2段階認証要）
 SMTP_PASS=your-app-password
 
-# 管理者メールアドレス（通知受信者）
-ADMIN_EMAIL=admin@example.com
+# 管理者メールアドレス（複数対応・カンマ区切り）
+ADMIN_EMAILS=admin1@example.com,admin2@example.com,admin3@example.com,admin4@example.com,admin5@example.com
+
+# または単一アドレスの場合（後方互換性）
+# ADMIN_EMAIL=admin@example.com
+```
+
+## 複数管理者アドレス設定
+
+### 複数アドレス設定（推奨）
+
+```env
+ADMIN_EMAILS=admin1@company.com, admin2@company.com, ceo@company.com, manager@company.com, director@company.com
+```
+
+### 設定のポイント
+
+- **カンマ区切り**で複数のメールアドレスを設定
+- **スペースは自動で除去**されるため、見やすく設定可能
+- **最大制限なし**: 必要な数だけ管理者アドレスを追加可能
+- **後方互換性**: `ADMIN_EMAIL`（単一）も引き続き使用可能
+
+### 例: 5 つの管理者アカウント
+
+```env
+ADMIN_EMAILS=ceo@company.com, cto@company.com, manager1@company.com, manager2@company.com, admin@company.com
 ```
 
 ## Gmail 設定手順

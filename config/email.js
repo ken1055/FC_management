@@ -11,8 +11,20 @@ const emailConfig = {
   },
 };
 
-// 管理者メールアドレス
-const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
+// 管理者メールアドレス（複数対応）
+function getAdminEmails() {
+  const adminEmailsEnv =
+    process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@example.com";
+
+  // カンマ区切りで複数のメールアドレスを分割
+  const emails = adminEmailsEnv
+    .split(",")
+    .map((email) => email.trim())
+    .filter((email) => email.length > 0);
+
+  console.log("管理者メールアドレス:", emails);
+  return emails;
+}
 
 // トランスポーター作成
 let transporter = null;
@@ -32,17 +44,52 @@ function createTransporter() {
   }
 }
 
-// 代理店プロフィール登録通知メール
-async function sendProfileRegistrationNotification(agency, user) {
+// 複数の管理者にメール送信
+async function sendToMultipleAdmins(mailOptions) {
   const transport = createTransporter();
   if (!transport) {
     console.log("メール送信をスキップしました（設定不備）");
-    return false;
+    return { success: false, errors: ["トランスポーター作成失敗"] };
   }
 
+  const adminEmails = getAdminEmails();
+  const results = [];
+  const errors = [];
+
+  for (const adminEmail of adminEmails) {
+    try {
+      const options = {
+        ...mailOptions,
+        to: adminEmail,
+      };
+
+      const info = await transport.sendMail(options);
+      console.log(`メール送信成功 (${adminEmail}):`, info.messageId);
+      results.push({
+        email: adminEmail,
+        success: true,
+        messageId: info.messageId,
+      });
+    } catch (error) {
+      console.error(`メール送信エラー (${adminEmail}):`, error);
+      errors.push({ email: adminEmail, error: error.message });
+      results.push({ email: adminEmail, success: false, error: error.message });
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    results,
+    errors,
+    totalSent: results.filter((r) => r.success).length,
+    totalFailed: errors.length,
+  };
+}
+
+// 代理店プロフィール登録通知メール
+async function sendProfileRegistrationNotification(agency, user) {
   const mailOptions = {
     from: `"代理店管理システム" <${emailConfig.auth.user}>`,
-    to: adminEmail,
     subject: "【代理店管理システム】新規代理店プロフィール登録通知",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -127,27 +174,25 @@ async function sendProfileRegistrationNotification(agency, user) {
     `,
   };
 
-  try {
-    const info = await transport.sendMail(mailOptions);
-    console.log("プロフィール登録通知メール送信成功:", info.messageId);
-    return true;
-  } catch (error) {
-    console.error("メール送信エラー:", error);
-    return false;
+  const result = await sendToMultipleAdmins(mailOptions);
+
+  if (result.success) {
+    console.log(
+      `プロフィール登録通知メール送信成功: ${result.totalSent}件送信`
+    );
+  } else {
+    console.log(
+      `プロフィール登録通知メール送信完了: ${result.totalSent}件成功, ${result.totalFailed}件失敗`
+    );
   }
+
+  return result.success;
 }
 
 // 代理店プロフィール更新通知メール
 async function sendProfileUpdateNotification(agency, user) {
-  const transport = createTransporter();
-  if (!transport) {
-    console.log("メール送信をスキップしました（設定不備）");
-    return false;
-  }
-
   const mailOptions = {
     from: `"代理店管理システム" <${emailConfig.auth.user}>`,
-    to: adminEmail,
     subject: "【代理店管理システム】代理店プロフィール更新通知",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -183,17 +228,23 @@ async function sendProfileUpdateNotification(agency, user) {
     `,
   };
 
-  try {
-    const info = await transport.sendMail(mailOptions);
-    console.log("プロフィール更新通知メール送信成功:", info.messageId);
-    return true;
-  } catch (error) {
-    console.error("メール送信エラー:", error);
-    return false;
+  const result = await sendToMultipleAdmins(mailOptions);
+
+  if (result.success) {
+    console.log(
+      `プロフィール更新通知メール送信成功: ${result.totalSent}件送信`
+    );
+  } else {
+    console.log(
+      `プロフィール更新通知メール送信完了: ${result.totalSent}件成功, ${result.totalFailed}件失敗`
+    );
   }
+
+  return result.success;
 }
 
 module.exports = {
   sendProfileRegistrationNotification,
   sendProfileUpdateNotification,
+  getAdminEmails, // 管理者メール一覧取得（テスト用）
 };

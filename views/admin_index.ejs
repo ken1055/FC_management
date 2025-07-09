@@ -61,7 +61,8 @@
             <div class="col-md-6">
               <h6><i class="bi bi-envelope"></i> メール通知テスト</h6>
               <p class="text-muted small">
-                代理店プロフィール登録時のメール通知機能をテストします。
+                代理店プロフィール登録時のメール通知機能をテストします。<br />
+                <strong>複数の管理者アドレス</strong>に一斉送信されます。
               </p>
               <button
                 id="testEmailBtn"
@@ -78,6 +79,10 @@
               <h6><i class="bi bi-info-circle"></i> システム情報</h6>
               <ul class="list-unstyled small text-muted">
                 <li>• メール通知: 代理店プロフィール登録・更新時に自動送信</li>
+                <li>
+                  • <strong>複数管理者対応</strong>:
+                  ADMIN_EMAILSでカンマ区切り設定
+                </li>
                 <li>• 設定方法: README_EMAIL_SETUP.mdを参照</li>
                 <li>• 環境変数: .envファイルでSMTP設定を行ってください</li>
               </ul>
@@ -112,12 +117,26 @@
         result.innerHTML = `
         <div class="alert alert-success alert-sm">
           <i class="bi bi-check-circle"></i> ${data.message}
+          ${
+            data.adminEmails
+              ? "<br><small><strong>送信先:</strong> " +
+                data.adminEmails.join(", ") +
+                "</small>"
+              : ""
+          }
         </div>
       `;
       } else {
         result.innerHTML = `
         <div class="alert alert-danger alert-sm">
           <i class="bi bi-exclamation-triangle"></i> ${data.message}
+          ${
+            data.adminEmails
+              ? "<br><small><strong>設定されている送信先:</strong> " +
+                data.adminEmails.join(", ") +
+                "</small>"
+              : ""
+          }
         </div>
       `;
       }
