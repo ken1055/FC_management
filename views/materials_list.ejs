@@ -28,24 +28,35 @@
         action="/materials/upload/<%= agency_id %>"
         enctype="multipart/form-data"
       >
-        <div class="row g-2 align-items-center">
-          <div class="col-md-8">
-            <input
-              type="file"
-              name="file"
-              class="form-control"
-              required
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif"
-            />
-            <small class="form-text text-muted">
-              対応形式: PDF, Word, Excel, PowerPoint, 画像ファイル
-            </small>
-          </div>
-          <div class="col-md-4">
-            <button type="submit" class="btn btn-success w-100">
-              <i class="bi bi-upload"></i> アップロード
-            </button>
-          </div>
+        <div class="mb-3">
+          <label class="form-label">ファイル選択</label>
+          <input
+            type="file"
+            name="file"
+            class="form-control"
+            required
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif"
+          />
+          <small class="form-text text-muted">
+            対応形式: PDF, Word, Excel, PowerPoint, 画像ファイル
+          </small>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">説明・補足情報（任意）</label>
+          <textarea
+            name="description"
+            class="form-control"
+            rows="3"
+            placeholder="例: 商品カタログ、価格表、使用方法など..."
+          ></textarea>
+          <small class="form-text text-muted">
+            ファイルの内容や用途について説明を入力してください
+          </small>
+        </div>
+        <div class="d-grid">
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-upload"></i> アップロード
+          </button>
         </div>
       </form>
     </div>
@@ -138,10 +149,15 @@
               <i class="bi <%= iconClass %> fs-4 me-2 <%= iconColor %>"></i>
               <div>
                 <div class="fw-medium"><%= f.originalname %></div>
+                <% if (f.description && f.description.trim()) { %>
                 <small class="text-muted">
-                  <%= (f.originalname.length > 50) ? f.originalname.substring(0,
-                  50) + '...' : '' %>
+                  <i class="bi bi-info-circle me-1"></i>
+                  <%= (f.description.length > 60) ? f.description.substring(0,
+                  60) + '...' : f.description %>
                 </small>
+                <% } else { %>
+                <small class="text-muted">説明なし</small>
+                <% } %>
               </div>
             </div>
           </td>
@@ -404,6 +420,37 @@
                 <td>${data.originalname}</td>
               </tr>
               <tr>
+                <th>説明:</th>
+                <td>
+                  <div id="descriptionDisplay">
+                    ${
+                      data.description ||
+                      '<span class="text-muted">説明なし</span>'
+                    }
+                  </div>
+                  <% if (session.user.role === 'admin') { %>
+                  <div id="descriptionEdit" style="display: none;">
+                    <textarea id="descriptionInput" class="form-control mb-2" rows="3">${
+                      data.description || ""
+                    }</textarea>
+                    <div class="btn-group btn-group-sm">
+                      <button class="btn btn-success" onclick="saveDescription(${
+                        data.id
+                      })">
+                        <i class="bi bi-check"></i> 保存
+                      </button>
+                      <button class="btn btn-secondary" onclick="cancelEditDescription()">
+                        <i class="bi bi-x"></i> キャンセル
+                      </button>
+                    </div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-secondary mt-1" onclick="editDescription()">
+                    <i class="bi bi-pencil"></i> 編集
+                  </button>
+                  <% } %>
+                </td>
+              </tr>
+              <tr>
                 <th>ファイルサイズ:</th>
                 <td>${formatFileSize(data.size)}</td>
               </tr>
@@ -489,5 +536,66 @@
     fullscreenModal.addEventListener("hidden.bs.modal", function () {
       document.body.removeChild(fullscreenModal);
     });
+  }
+
+  // 説明編集機能
+  function editDescription() {
+    document.getElementById("descriptionDisplay").style.display = "none";
+    document.getElementById("descriptionEdit").style.display = "block";
+    document.querySelector(
+      'button[onclick="editDescription()"]'
+    ).style.display = "none";
+  }
+
+  function cancelEditDescription() {
+    document.getElementById("descriptionDisplay").style.display = "block";
+    document.getElementById("descriptionEdit").style.display = "none";
+    document.querySelector(
+      'button[onclick="editDescription()"]'
+    ).style.display = "inline-block";
+  }
+
+  async function saveDescription(fileId) {
+    const description = document.getElementById("descriptionInput").value;
+
+    try {
+      const response = await fetch(`/materials/update-description/${fileId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ description: description }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // 表示を更新
+        document.getElementById("descriptionDisplay").innerHTML =
+          description || '<span class="text-muted">説明なし</span>';
+        cancelEditDescription();
+
+        // 成功メッセージを表示
+        const alertDiv = document.createElement("div");
+        alertDiv.className =
+          "alert alert-success alert-dismissible fade show mt-2";
+        alertDiv.innerHTML = `
+          <i class="bi bi-check-circle"></i> ${result.message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.getElementById("fileDetailsContent").appendChild(alertDiv);
+
+        // 3秒後にアラートを自動削除
+        setTimeout(() => {
+          if (alertDiv.parentNode) {
+            alertDiv.remove();
+          }
+        }, 3000);
+      } else {
+        throw new Error(result.error || "更新に失敗しました");
+      }
+    } catch (error) {
+      alert("エラー: " + error.message);
+    }
   }
 </script>

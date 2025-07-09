@@ -83,6 +83,7 @@ db.serialize(() => {
       filename TEXT NOT NULL,
       originalname TEXT NOT NULL,
       mimetype TEXT NOT NULL,
+      description TEXT,
       agency_id INTEGER,
       uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (agency_id) REFERENCES agencies(id)

@@ -88,10 +88,17 @@ router.post(
   (req, res) => {
     if (!req.file) return res.status(400).send("ファイルがありません");
     const agency_id = req.params.agency_id;
+    const description = req.body.description || "";
 
     db.run(
-      "INSERT INTO materials (filename, originalname, mimetype, agency_id) VALUES (?, ?, ?, ?)",
-      [req.file.filename, req.file.originalname, req.file.mimetype, agency_id],
+      "INSERT INTO materials (filename, originalname, mimetype, description, agency_id) VALUES (?, ?, ?, ?, ?)",
+      [
+        req.file.filename,
+        req.file.originalname,
+        req.file.mimetype,
+        description,
+        agency_id,
+      ],
       function (err) {
         if (err) return res.status(500).send("DBエラー");
         res.redirect(`/materials/${agency_id}`);
@@ -99,6 +106,35 @@ router.post(
     );
   }
 );
+
+// ファイル説明更新（管理者のみ）
+router.post("/update-description/:id", requireRole(["admin"]), (req, res) => {
+  const fileId = req.params.id;
+  const description = req.body.description || "";
+
+  db.get(
+    "SELECT agency_id FROM materials WHERE id = ?",
+    [fileId],
+    (err, file) => {
+      if (err || !file) {
+        return res.status(404).json({ error: "ファイルが見つかりません" });
+      }
+
+      db.run(
+        "UPDATE materials SET description = ? WHERE id = ?",
+        [description, fileId],
+        function (err) {
+          if (err) {
+            console.error("説明更新エラー:", err);
+            return res.status(500).json({ error: "更新に失敗しました" });
+          }
+
+          res.json({ success: true, message: "説明を更新しました" });
+        }
+      );
+    }
+  );
+});
 
 // ファイル削除（管理者のみ）
 router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
@@ -236,6 +272,7 @@ router.get("/info/:id", (req, res) => {
         id: file.id,
         originalname: file.originalname,
         mimetype: file.mimetype,
+        description: file.description || "",
         size: stats.size,
         uploadedAt: file.uploaded_at,
         isImage: isImage,
