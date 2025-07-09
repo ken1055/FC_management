@@ -395,6 +395,9 @@
         return "bi-file-earmark text-secondary";
       };
 
+      // 管理者かどうかの判定
+      const isAdmin = "<%= session.user.role %>" === "admin";
+
       let contentHtml = `
       <div class="row">
         <div class="col-12">
@@ -427,8 +430,11 @@
                       data.description ||
                       '<span class="text-muted">説明なし</span>'
                     }
-                  </div>
-                  <% if (session.user.role === 'admin') { %>
+                  </div>`;
+
+      // 管理者の場合のみ編集機能を追加
+      if (isAdmin) {
+        contentHtml += `
                   <div id="descriptionEdit" style="display: none;">
                     <textarea id="descriptionInput" class="form-control mb-2" rows="3">${
                       data.description || ""
@@ -446,8 +452,10 @@
                   </div>
                   <button class="btn btn-sm btn-outline-secondary mt-1" onclick="editDescription()">
                     <i class="bi bi-pencil"></i> 編集
-                  </button>
-                  <% } %>
+                  </button>`;
+      }
+
+      contentHtml += `
                 </td>
               </tr>
               <tr>
