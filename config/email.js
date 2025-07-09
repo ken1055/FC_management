@@ -24,7 +24,7 @@ function createTransporter() {
   }
 
   try {
-    transporter = nodemailer.createTransporter(emailConfig);
+    transporter = nodemailer.createTransport(emailConfig);
     return transporter;
   } catch (error) {
     console.error("メールトランスポーター作成エラー:", error);
