@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const {
+  sendProfileRegistrationNotification,
+  sendProfileUpdateNotification,
+} = require("../config/email");
 
 function requireRole(roles) {
   return (req, res, next) => {
@@ -10,6 +14,54 @@ function requireRole(roles) {
     next();
   };
 }
+
+// メール設定テスト（管理者のみ）
+router.post("/test-email", requireRole(["admin"]), async (req, res) => {
+  try {
+    // テスト用のダミーデータ
+    const testAgencyData = {
+      id: 999,
+      name: "テスト代理店",
+      age: 30,
+      address: "東京都テスト区テスト町1-1-1",
+      bank_info: "テスト銀行 普通 1234567",
+      experience_years: 5,
+      contract_date: "2024-01-01",
+      start_date: "2024-01-15",
+      product_features: "これはメール通知のテストです。",
+    };
+
+    const testUserData = {
+      email: req.session.user.email,
+      id: req.session.user.id,
+    };
+
+    // テストメール送信
+    const result = await sendProfileRegistrationNotification(
+      testAgencyData,
+      testUserData
+    );
+
+    if (result) {
+      res.json({
+        success: true,
+        message:
+          "テストメールが正常に送信されました。管理者のメールボックスを確認してください。",
+      });
+    } else {
+      res.json({
+        success: false,
+        message: "メール送信に失敗しました。サーバーログを確認してください。",
+      });
+    }
+  } catch (error) {
+    console.error("テストメール送信エラー:", error);
+    res.json({
+      success: false,
+      message: "エラーが発生しました: " + error.message,
+    });
+  }
+});
 
 // 代理店一覧取得
 router.get("/", (req, res) => {
@@ -435,6 +487,24 @@ router.post(
           }
         );
 
+        // プロフィール更新通知メール（代理店ユーザーが自分で更新した場合のみ）
+        if (req.session.user.role === "agency") {
+          const agencyData = {
+            id: agencyId,
+            name,
+          };
+
+          const userData = {
+            email: req.session.user.email,
+            id: req.session.user.id,
+          };
+
+          // 非同期でメール送信
+          sendProfileUpdateNotification(agencyData, userData).catch((error) => {
+            console.error("プロフィール更新メール送信エラー:", error);
+          });
+        }
+
         res.redirect("/agencies/profile/" + agencyId);
       }
     );
@@ -522,6 +592,31 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
 
           // セッションのagency_idも更新
           req.session.user.agency_id = agencyId;
+
+          // プロフィール作成時のメール通知を送信
+          const agencyData = {
+            id: agencyId,
+            name,
+            age,
+            address,
+            bank_info,
+            experience_years,
+            contract_date,
+            start_date,
+            product_features,
+          };
+
+          const userData = {
+            email: req.session.user.email,
+            id: req.session.user.id,
+          };
+
+          // 非同期でメール送信（エラーがあってもリダイレクトは継続）
+          sendProfileRegistrationNotification(agencyData, userData).catch(
+            (error) => {
+              console.error("メール送信エラー:", error);
+            }
+          );
 
           res.redirect("/agencies/profile/" + agencyId);
         }
