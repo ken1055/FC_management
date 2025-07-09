@@ -578,10 +578,13 @@
       const result = await response.json();
 
       if (response.ok) {
-        // 表示を更新
+        // モーダル内の表示を更新
         document.getElementById("descriptionDisplay").innerHTML =
           description || '<span class="text-muted">説明なし</span>';
         cancelEditDescription();
+
+        // ファイル一覧ページの説明も更新
+        updateFileListDescription(fileId, description);
 
         // 成功メッセージを表示
         const alertDiv = document.createElement("div");
@@ -605,5 +608,44 @@
     } catch (error) {
       alert("エラー: " + error.message);
     }
+  }
+
+  // ファイル一覧の説明表示を更新する関数
+  function updateFileListDescription(fileId, description) {
+    // ファイル一覧のテーブル行を取得（各行のボタンにfileIdが含まれている）
+    const fileRows = document.querySelectorAll(".file-row");
+
+    fileRows.forEach((row) => {
+      // 各行の詳細ボタンからfileIdを抽出
+      const detailButton = row.querySelector(
+        'button[onclick*="showFileDetails"]'
+      );
+      if (detailButton) {
+        const onclickValue = detailButton.getAttribute("onclick");
+        const match = onclickValue.match(/showFileDetails\((\d+)\)/);
+        if (match && match[1] == fileId) {
+          // 該当ファイルの行が見つかった場合、説明部分を更新
+          const descriptionElement =
+            row.querySelector(".fw-medium").nextElementSibling;
+          if (descriptionElement) {
+            if (description && description.trim()) {
+              const truncatedDescription =
+                description.length > 60
+                  ? description.substring(0, 60) + "..."
+                  : description;
+              descriptionElement.innerHTML = `
+                <i class="bi bi-info-circle me-1"></i>
+                ${truncatedDescription}
+              `;
+              descriptionElement.className = "text-muted";
+            } else {
+              descriptionElement.innerHTML = "説明なし";
+              descriptionElement.className = "text-muted";
+            }
+          }
+          return; // 見つかったので処理終了
+        }
+      }
+    });
   }
 </script>
