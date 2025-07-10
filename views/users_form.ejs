@@ -49,68 +49,23 @@
         </div>
 
         <div class="mb-4">
-          <label class="form-label">
-            権限レベル <span class="text-danger">*</span>
-          </label>
-          <div class="row">
-            <div class="col-md-6">
-              <div class="card border-warning">
-                <div class="card-body">
-                  <div class="form-check">
-                    <input
-                      class="form-check-input"
-                      type="radio"
-                      name="role"
-                      id="executive"
-                      value="executive"
-                      required
-                    />
-                    <label class="form-check-label" for="executive">
-                      <div class="d-flex align-items-center">
-                        <i class="bi bi-star-fill text-warning me-2"></i>
-                        <strong>役員</strong>
-                      </div>
-                    </label>
-                  </div>
-                  <small class="text-muted">
-                    システム全体の最高権限<br />
-                    <strong>制限:</strong> 1つまで作成可能
-                  </small>
-                </div>
+          <div class="card border-success">
+            <div class="card-body">
+              <div class="d-flex align-items-center mb-2">
+                <i class="bi bi-shield-check text-success me-2 fs-4"></i>
+                <strong class="fs-5">管理者アカウント作成</strong>
               </div>
-            </div>
-            <div class="col-md-6">
-              <div class="card border-success">
-                <div class="card-body">
-                  <div class="form-check">
-                    <input
-                      class="form-check-input"
-                      type="radio"
-                      name="role"
-                      id="admin"
-                      value="admin"
-                      required
-                    />
-                    <label class="form-check-label" for="admin">
-                      <div class="d-flex align-items-center">
-                        <i class="bi bi-shield-check text-success me-2"></i>
-                        <strong>管理者</strong>
-                      </div>
-                    </label>
-                  </div>
-                  <small class="text-muted">
-                    代理店・売上管理権限<br />
-                    <strong>制限:</strong> 4つまで作成可能
-                  </small>
-                </div>
-              </div>
+              <p class="text-muted mb-0">
+                代理店管理、売上管理、システム全体へのアクセス権限を持つアカウントを作成します。<br />
+                <strong>制限:</strong> 最大5つまで作成可能
+              </p>
             </div>
           </div>
         </div>
 
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-success">
-            <i class="bi bi-person-plus"></i> アカウント作成
+            <i class="bi bi-person-plus"></i> 管理者アカウント作成
           </button>
           <a href="/api/users/list" class="btn btn-secondary">
             <i class="bi bi-x-circle"></i> キャンセル
@@ -122,13 +77,14 @@
     <div class="col-md-4">
       <div class="alert alert-info">
         <h6 class="alert-heading">
-          <i class="bi bi-info-circle"></i> アカウント作成について
+          <i class="bi bi-info-circle"></i> 管理者アカウントについて
         </h6>
         <ul class="mb-0">
-          <li><strong>役員:</strong> システム全体を管理</li>
-          <li><strong>管理者:</strong> 代理店管理、売上管理等</li>
-          <li>メールアドレスは一意である必要があります</li>
-          <li>パスワードは安全なものを設定してください</li>
+          <li><strong>代理店管理:</strong> 代理店の登録・編集・削除</li>
+          <li><strong>売上管理:</strong> 全代理店の売上確認・管理</li>
+          <li><strong>グループ管理:</strong> 代理店グループの作成・管理</li>
+          <li><strong>アカウント管理:</strong> 管理者アカウントの作成・削除</li>
+          <li><strong>資料管理:</strong> 商品資料格納庫の管理</li>
         </ul>
       </div>
 
@@ -137,9 +93,9 @@
           <i class="bi bi-exclamation-triangle"></i> 制限について
         </h6>
         <ul class="mb-0">
-          <li><strong>役員:</strong> 最大1つまで</li>
-          <li><strong>管理者:</strong> 最大4つまで</li>
-          <li>制限に達している場合は作成できません</li>
+          <li><strong>最大数:</strong> 管理者アカウントは最大5つまで</li>
+          <li><strong>一意制約:</strong> メールアドレスは重複できません</li>
+          <li><strong>ID管理:</strong> 削除時にIDが自動調整されます</li>
         </ul>
       </div>
     </div>

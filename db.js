@@ -7,7 +7,7 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      role TEXT CHECK(role IN ('executive', 'admin', 'agency')) NOT NULL,
+      role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
       agency_id INTEGER,
       FOREIGN KEY (agency_id) REFERENCES agencies(id)
     )

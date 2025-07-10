@@ -122,7 +122,7 @@
                 method="post" 
                 action="/agencies/delete/<%= a.id %>" 
                 style="display: inline"
-                onsubmit="return confirm('「<%= a.name %>」の代理店データを削除しますか？\n\n注意: 以下のデータもすべて削除されます：\n• 売上データ\n• 商品資料\n• グループ所属情報\n• 取り扱い商品情報\n• 関連ユーザーアカウントとの紐付け\n\nこの操作は取り消せません。')"
+                onsubmit="return confirm('「<%= a.name %>」の代理店データを削除しますか？\n\n注意: 以下のデータもすべて削除されます：\n• 売上データ\n• 商品資料\n• グループ所属情報\n• 取り扱い商品情報\n• 関連ユーザーアカウントとの紐付け\n\n削除後、代理店IDが自動的に再割り当てされ連番が維持されます。\n\nこの操作は取り消せません。')"
               >
                 <button type="submit" class="btn btn-sm btn-outline-danger">
                   <i class="bi bi-trash"></i> 削除

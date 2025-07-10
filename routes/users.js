@@ -12,24 +12,79 @@ function requireRole(roles) {
   };
 }
 
-// 役員・管理者アカウント一覧表示（管理者のみ）
+// ID再割り当て機能
+function reassignUserIds(callback) {
+  // 現在のユーザーを取得（adminとagencyのみ、emailでソート）
+  db.all(
+    "SELECT id, email, role, agency_id FROM users WHERE role IN ('admin', 'agency') ORDER BY role, email",
+    [],
+    (err, users) => {
+      if (err) return callback(err);
+
+      if (users.length === 0) return callback(null);
+
+      // 一時テーブルを作成
+      db.run(
+        "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
+        (err) => {
+          if (err) return callback(err);
+
+          // 元のユーザーデータを削除
+          db.run(
+            "DELETE FROM users WHERE role IN ('admin', 'agency')",
+            (err) => {
+              if (err) return callback(err);
+
+              // 新しいIDで再挿入
+              let completed = 0;
+              users.forEach((user, index) => {
+                const newId = index + 1;
+                db.run(
+                  "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
+                  [newId, user.id],
+                  (err) => {
+                    if (err) console.error("ID再割り当てエラー:", err);
+                    completed++;
+                    if (completed === users.length) {
+                      // 一時テーブルを削除
+                      db.run("DROP TABLE temp_users", () => {
+                        // シーケンステーブルをリセット
+                        db.run(
+                          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
+                          [users.length],
+                          () => {
+                            callback(null);
+                          }
+                        );
+                      });
+                    }
+                  }
+                );
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+}
+
+// 管理者アカウント一覧表示（管理者のみ）
 router.get("/list", requireRole(["admin"]), (req, res) => {
   db.all(
-    "SELECT id, email, role FROM users WHERE role IN ('executive', 'admin') ORDER BY role, email",
+    "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
     [],
     (err, users) => {
       if (err) return res.status(500).send("DBエラー");
 
-      // 役員・管理者数を集計
-      const executives = users.filter((u) => u.role === "executive");
+      // 管理者数を集計
       const admins = users.filter((u) => u.role === "admin");
 
       res.render("users_list", {
         users,
-        executives,
         admins,
         session: req.session,
-        title: "役員・管理者アカウント管理",
+        title: "管理者アカウント管理",
       });
     }
   );
@@ -40,44 +95,37 @@ router.get("/new", requireRole(["admin"]), (req, res) => {
   res.render("users_form", {
     user: null,
     session: req.session,
-    title: "新規アカウント作成",
+    title: "新規管理者アカウント作成",
   });
 });
 
-// 役員・管理者アカウント追加
+// 管理者アカウント追加
 router.post("/", requireRole(["admin"]), (req, res) => {
-  const { email, password, role } = req.body;
-  if (!email || !password || !role)
+  const { email, password } = req.body;
+  if (!email || !password)
     return res.render("users_form", {
       user: null,
       error: "必須項目が不足しています",
       session: req.session,
-      title: "新規アカウント作成",
+      title: "新規管理者アカウント作成",
     });
 
   db.get(
-    "SELECT COUNT(*) as cnt FROM users WHERE role = ?",
-    [role],
+    "SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'",
+    [],
     (err, row) => {
       if (err) return res.status(500).send("DBエラー");
-      if (role === "executive" && row.cnt >= 1)
+      if (row.cnt >= 5)
         return res.render("users_form", {
           user: null,
-          error: "役員アカウントは1つまでです",
+          error: "管理者アカウントは5つまでです",
           session: req.session,
-          title: "新規アカウント作成",
-        });
-      if (role === "admin" && row.cnt >= 4)
-        return res.render("users_form", {
-          user: null,
-          error: "管理者アカウントは4つまでです",
-          session: req.session,
-          title: "新規アカウント作成",
+          title: "新規管理者アカウント作成",
         });
 
       db.run(
-        "INSERT INTO users (email, password, role) VALUES (?, ?, ?)",
-        [email, password, role],
+        "INSERT INTO users (email, password, role) VALUES (?, ?, 'admin')",
+        [email, password],
         function (err) {
           if (err)
             return res.render("users_form", {
@@ -85,7 +133,7 @@ router.post("/", requireRole(["admin"]), (req, res) => {
               error:
                 "アカウント作成に失敗しました（メールアドレスの重複の可能性があります）",
               session: req.session,
-              title: "新規アカウント作成",
+              title: "新規管理者アカウント作成",
             });
           res.redirect("/api/users/list");
         }
@@ -106,9 +154,9 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
     );
   }
 
-  // ユーザー情報を取得して役員・管理者かチェック
+  // ユーザー情報を取得して管理者かチェック
   db.get(
-    "SELECT * FROM users WHERE id = ? AND role IN ('executive', 'admin')",
+    "SELECT * FROM users WHERE id = ? AND role = 'admin'",
     [userId],
     (err, user) => {
       if (err) return res.status(500).send("DBエラー");
@@ -120,10 +168,26 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
 
       db.run("DELETE FROM users WHERE id = ?", [userId], function (err) {
         if (err) return res.status(500).send("削除エラー");
-        res.redirect(
-          "/api/users/list?success=" +
-            encodeURIComponent(`${user.email} のアカウントを削除しました`)
-        );
+
+        // ID再割り当てを実行
+        reassignUserIds((err) => {
+          if (err) {
+            console.error("ID再割り当てエラー:", err);
+            return res.redirect(
+              "/api/users/list?error=" +
+                encodeURIComponent(
+                  "削除は完了しましたが、ID再割り当てでエラーが発生しました"
+                )
+            );
+          }
+
+          res.redirect(
+            "/api/users/list?success=" +
+              encodeURIComponent(
+                `${user.email} のアカウントを削除し、IDを再割り当てしました`
+              )
+          );
+        });
       });
     }
   );

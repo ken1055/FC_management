@@ -57,8 +57,7 @@
               >
             </li>
             <% } %> <% } %> <% if (session && session.user && (session.user.role
-            === 'admin' || session.user.role === 'executive')) { %> <% } %> <%
-            if (session && session.user) { %>
+            === 'admin')) { %> <% } %> <% if (session && session.user) { %>
             <li class="nav-item">
               <a class="nav-link" href="/auth/logout">ログアウト</a>
             </li>

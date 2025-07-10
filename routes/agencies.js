@@ -328,6 +328,96 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
   );
 });
 
+// ID再割り当て機能（代理店用）
+function reassignAgencyIds(callback) {
+  // 現在の代理店を取得（nameでソート）
+  db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
+    if (err) return callback(err);
+
+    if (agencies.length === 0) return callback(null);
+
+    // 一時テーブルを作成
+    db.run(
+      "CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies",
+      (err) => {
+        if (err) return callback(err);
+
+        // 元の代理店データを削除
+        db.run("DELETE FROM agencies", (err) => {
+          if (err) return callback(err);
+
+          // 新しいIDで再挿入
+          let completed = 0;
+          agencies.forEach((agency, index) => {
+            const newId = index + 1;
+            db.run(
+              "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+              [newId, agency.id],
+              (err) => {
+                if (err) console.error("代理店ID再割り当てエラー:", err);
+
+                // 関連テーブルのagency_idも更新
+                Promise.all([
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                ]).then(() => {
+                  completed++;
+                  if (completed === agencies.length) {
+                    // 一時テーブルを削除
+                    db.run("DROP TABLE temp_agencies", () => {
+                      // シーケンステーブルをリセット
+                      db.run(
+                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+                        [agencies.length],
+                        () => {
+                          callback(null);
+                        }
+                      );
+                    });
+                  }
+                });
+              }
+            );
+          });
+        });
+      }
+    );
+  });
+}
+
 // 代理店削除（管理者のみ）
 router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
   const agencyId = req.params.id;
@@ -404,12 +494,25 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
             );
           }
 
-          res.redirect(
-            "/agencies/list?success=" +
-              encodeURIComponent(
-                `「${agency.name}」の代理店データを削除しました`
-              )
-          );
+          // ID再割り当てを実行
+          reassignAgencyIds((err) => {
+            if (err) {
+              console.error("代理店ID再割り当てエラー:", err);
+              return res.redirect(
+                "/agencies/list?error=" +
+                  encodeURIComponent(
+                    "削除は完了しましたが、ID再割り当てでエラーが発生しました"
+                  )
+              );
+            }
+
+            res.redirect(
+              "/agencies/list?success=" +
+                encodeURIComponent(
+                  `「${agency.name}」の代理店データを削除し、IDを再割り当てしました`
+                )
+            );
+          });
         });
       });
     }
