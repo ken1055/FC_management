@@ -45,5 +45,5 @@ coverage/
 temp/
 tmp/
 
-# 静的ファイル競合を防ぐため（/staticパスで配信）
-public/ 
+# 競合する特定のファイルのみを除外
+public/index.html 
