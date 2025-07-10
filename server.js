@@ -247,7 +247,7 @@ try {
 
 try {
   app.use("/groups", require("./routes/groups"));
-  console.log("groups ルート読み込み完了");
+  console.log("groups ルート読み完了");
 } catch (error) {
   console.error("groups ルート読み込みエラー:", error);
 }
@@ -261,9 +261,12 @@ try {
 
 console.log("全ルート読み込み処理完了");
 
-// メインページ（簡素化・安全化）
+// メインページ（簡素化・安全化）- 最優先でルート定義
 app.get("/", (req, res) => {
   console.log("Main page requested");
+  console.log("Request headers:", req.headers);
+  console.log("Session data:", req.session);
+
   try {
     // セッションチェックを簡素化
     if (!req.session || !req.session.user) {
