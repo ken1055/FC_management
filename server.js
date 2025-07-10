@@ -85,6 +85,27 @@ app.get("/test", (req, res) => {
   res.status(200).send("Server is working!");
 });
 
+// HTMLテストページ
+app.get("/simple", (req, res) => {
+  console.log("Simple HTML page requested");
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>テスト</title>
+    </head>
+    <body>
+        <h1>Vercelテストページ</h1>
+        <p>時刻: ${new Date().toISOString()}</p>
+        <p>環境: ${isVercel ? "Vercel" : "Local"}</p>
+        <a href="/health">ヘルスチェック</a> | 
+        <a href="/test">テスト</a> | 
+        <a href="/">メインページ</a>
+    </body>
+    </html>
+  `);
+});
+
 // ルート設定（エラーハンドリング強化）
 try {
   console.log("Loading routes...");
@@ -160,9 +181,24 @@ app.use((err, req, res, next) => {
 
 // ローカル環境でのサーバー起動
 if (!isVercel) {
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`サーバーがポート ${port} で起動しました`);
     console.log(`http://localhost:${port} でアクセスできます`);
+  });
+
+  // タイムアウト設定
+  server.timeout = 30000; // 30秒
+} else {
+  // Vercel環境用の設定
+  console.log("Vercel環境で動作中");
+
+  // リクエストタイムアウトの設定
+  app.use((req, res, next) => {
+    res.setTimeout(25000, () => {
+      console.log("Request timeout");
+      res.status(408).send("Request Timeout");
+    });
+    next();
   });
 }
 
