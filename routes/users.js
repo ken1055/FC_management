@@ -107,44 +107,60 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
   checkUserIdIntegrity((err, integrityInfo) => {
     if (err) return res.status(500).send("DBエラー");
 
-    db.all(
-      "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
-      [],
-      (err, users) => {
-        if (err) return res.status(500).send("DBエラー");
+    // ID整合性に問題がある場合、自動的に修正
+    if (!integrityInfo.isIntegrityOk) {
+      fixUserIds((fixErr) => {
+        if (fixErr) {
+          console.error("自動ID修正エラー:", fixErr);
+          // エラーがあっても画面は表示
+          return renderUsersList(
+            req,
+            res,
+            integrityInfo,
+            "自動ID修正でエラーが発生しました"
+          );
+        }
 
-        // 管理者数を集計
-        const admins = users.filter((u) => u.role === "admin");
-
-        res.render("users_list", {
-          users,
-          admins,
-          integrityInfo,
-          session: req.session,
-          title: "管理者アカウント管理",
+        // 修正後に再度チェックして画面表示
+        checkUserIdIntegrity((recheckErr, newIntegrityInfo) => {
+          if (recheckErr) return res.status(500).send("DBエラー");
+          return renderUsersList(
+            req,
+            res,
+            newIntegrityInfo,
+            "ユーザーIDを自動的に連番に修正しました"
+          );
         });
-      }
-    );
-  });
-});
-
-// ID修正エンドポイント（管理者のみ）
-router.post("/fix-ids", requireRole(["admin"]), (req, res) => {
-  fixUserIds((err) => {
-    if (err) {
-      console.error("ID修正エラー:", err);
-      return res.redirect(
-        "/api/users/list?error=" +
-          encodeURIComponent("ID修正でエラーが発生しました")
-      );
+      });
+    } else {
+      // 問題がない場合は通常表示
+      return renderUsersList(req, res, integrityInfo);
     }
-
-    res.redirect(
-      "/api/users/list?success=" +
-        encodeURIComponent("ユーザーIDを連番に修正しました")
-    );
   });
 });
+
+// ユーザー一覧画面の描画関数
+function renderUsersList(req, res, integrityInfo, message = null) {
+  db.all(
+    "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
+    [],
+    (err, users) => {
+      if (err) return res.status(500).send("DBエラー");
+
+      // 管理者数を集計
+      const admins = users.filter((u) => u.role === "admin");
+
+      res.render("users_list", {
+        users,
+        admins,
+        integrityInfo,
+        autoFixMessage: message,
+        session: req.session,
+        title: "管理者アカウント管理",
+      });
+    }
+  );
+}
 
 // 新規アカウント作成画面
 router.get("/new", requireRole(["admin"]), (req, res) => {

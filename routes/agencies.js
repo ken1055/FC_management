@@ -201,61 +201,79 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
   checkAgencyIdIntegrity((err, integrityInfo) => {
     if (err) return res.status(500).send("DBエラー");
 
-    // グループ一覧を取得
-    db.all("SELECT * FROM groups", [], (err, groups) => {
-      if (err) return res.status(500).send("DBエラー");
+    // ID整合性に問題がある場合、自動的に修正
+    if (!integrityInfo.isIntegrityOk) {
+      fixAgencyIds((fixErr) => {
+        if (fixErr) {
+          console.error("自動代理店ID修正エラー:", fixErr);
+          // エラーがあっても画面は表示
+          return renderAgenciesList(
+            req,
+            res,
+            groupId,
+            integrityInfo,
+            "自動代理店ID修正でエラーが発生しました"
+          );
+        }
 
-      let query = `
-        SELECT 
-          a.*,
-          g.name as group_name,
-          GROUP_CONCAT(ap.product_name, ', ') as product_names
-        FROM agencies a 
-        LEFT JOIN group_agency ga ON a.id = ga.agency_id 
-        LEFT JOIN groups g ON ga.group_id = g.id
-        LEFT JOIN agency_products ap ON a.id = ap.agency_id
-      `;
-      let params = [];
-
-      if (groupId) {
-        query += " WHERE ga.group_id = ?";
-        params.push(groupId);
-      }
-
-      query += " GROUP BY a.id ORDER BY a.id";
-
-      db.all(query, params, (err, agencies) => {
-        if (err) return res.status(500).send("DBエラー");
-        res.render("agencies_list", {
-          agencies,
-          groups,
-          selectedGroupId: groupId,
-          integrityInfo,
-          session: req.session,
-          title: "代理店一覧",
+        // 修正後に再度チェックして画面表示
+        checkAgencyIdIntegrity((recheckErr, newIntegrityInfo) => {
+          if (recheckErr) return res.status(500).send("DBエラー");
+          return renderAgenciesList(
+            req,
+            res,
+            groupId,
+            newIntegrityInfo,
+            "代理店IDを自動的に連番に修正しました"
+          );
         });
+      });
+    } else {
+      // 問題がない場合は通常表示
+      return renderAgenciesList(req, res, groupId, integrityInfo);
+    }
+  });
+});
+
+// 代理店一覧画面の描画関数
+function renderAgenciesList(req, res, groupId, integrityInfo, message = null) {
+  // グループ一覧を取得
+  db.all("SELECT * FROM groups", [], (err, groups) => {
+    if (err) return res.status(500).send("DBエラー");
+
+    let query = `
+      SELECT 
+        a.*,
+        g.name as group_name,
+        GROUP_CONCAT(ap.product_name, ', ') as product_names
+      FROM agencies a 
+      LEFT JOIN group_agency ga ON a.id = ga.agency_id 
+      LEFT JOIN groups g ON ga.group_id = g.id
+      LEFT JOIN agency_products ap ON a.id = ap.agency_id
+    `;
+    let params = [];
+
+    if (groupId) {
+      query += " WHERE ga.group_id = ?";
+      params.push(groupId);
+    }
+
+    query += " GROUP BY a.id ORDER BY a.id";
+
+    db.all(query, params, (err, agencies) => {
+      if (err) return res.status(500).send("DBエラー");
+      res.render("agencies_list", {
+        agencies,
+        groups,
+        selectedGroupId: groupId,
+        integrityInfo,
+        autoFixMessage: message,
+        session: req.session,
+        title: "代理店一覧",
       });
     });
   });
-});
-
-// ID修正エンドポイント（代理店用・管理者のみ）
-router.post("/fix-ids", requireRole(["admin"]), (req, res) => {
-  fixAgencyIds((err) => {
-    if (err) {
-      console.error("代理店ID修正エラー:", err);
-      return res.redirect(
-        "/agencies/list?error=" +
-          encodeURIComponent("代理店ID修正でエラーが発生しました")
-      );
-    }
-
-    res.redirect(
-      "/agencies/list?success=" +
-        encodeURIComponent("代理店IDを連番に修正しました")
-    );
-  });
-});
+}
 
 // 新規登録フォーム
 router.get("/new", requireRole(["admin"]), (req, res) => {
