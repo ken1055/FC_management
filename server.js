@@ -9,49 +9,93 @@ const app = express();
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 const port = process.env.PORT || 3000;
 
+console.log("=== サーバー起動 ===");
 console.log("Environment:", {
   isVercel,
   NODE_ENV: process.env.NODE_ENV,
   VERCEL_ENV: process.env.VERCEL_ENV,
+  SESSION_SECRET: process.env.SESSION_SECRET ? "設定済み" : "未設定",
 });
 
-// ビューエンジンの設定
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views"));
+// 重要なエラーハンドリング
+process.on("uncaughtException", (err) => {
+  console.error("=== Uncaught Exception ===");
+  console.error(err);
+});
 
-// 静的ファイルの設定（Vercel対応）
-app.use(
-  express.static(path.join(__dirname, "public"), {
-    maxAge: isVercel ? "1d" : 0,
-  })
-);
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("=== Unhandled Rejection ===");
+  console.error("Promise:", promise);
+  console.error("Reason:", reason);
+});
 
-// レイアウト機能の設定
-const expressLayouts = require("express-ejs-layouts");
-app.use(expressLayouts);
-app.set("layout", "layout");
+// 基本設定
+try {
+  console.log("ビューエンジン設定中...");
+  app.set("view engine", "ejs");
+  app.set("views", path.join(__dirname, "views"));
+  console.log("ビューエンジン設定完了");
+} catch (error) {
+  console.error("ビューエンジン設定エラー:", error);
+}
+
+// 静的ファイル設定
+try {
+  console.log("静的ファイル設定中...");
+  app.use(
+    express.static(path.join(__dirname, "public"), {
+      maxAge: isVercel ? "1d" : 0,
+    })
+  );
+  console.log("静的ファイル設定完了");
+} catch (error) {
+  console.error("静的ファイル設定エラー:", error);
+}
+
+// レイアウト設定
+try {
+  console.log("レイアウト設定中...");
+  const expressLayouts = require("express-ejs-layouts");
+  app.use(expressLayouts);
+  app.set("layout", "layout");
+  console.log("レイアウト設定完了");
+} catch (error) {
+  console.error("レイアウト設定エラー:", error);
+}
 
 // ミドルウェア設定
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+try {
+  console.log("ミドルウェア設定中...");
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+  console.log("ミドルウェア設定完了");
+} catch (error) {
+  console.error("ミドルウェア設定エラー:", error);
+}
 
-// セッション設定（Vercel最適化）
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "default-secret-key-for-development",
-    resave: false,
-    saveUninitialized: false,
-    store: new MemoryStore({
-      checkPeriod: 86400000, // 24時間
-    }),
-    cookie: {
-      secure: false, // Vercelで問題が起きる場合は一時的にfalse
-      maxAge: 86400000, // 24時間
-      httpOnly: true,
-      sameSite: "lax",
-    },
-  })
-);
+// セッション設定
+try {
+  console.log("セッション設定中...");
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "emergency-fallback-secret-key",
+      resave: false,
+      saveUninitialized: false,
+      store: new MemoryStore({
+        checkPeriod: 86400000,
+      }),
+      cookie: {
+        secure: false,
+        maxAge: 86400000,
+        httpOnly: true,
+        sameSite: "lax",
+      },
+    })
+  );
+  console.log("セッション設定完了");
+} catch (error) {
+  console.error("セッション設定エラー:", error);
+}
 
 // セキュリティヘッダー
 app.use((req, res, next) => {
@@ -67,16 +111,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// ヘルスチェック用エンドポイント（最優先）
+// 緊急時エンドポイント（最優先）
+app.get("/emergency", (req, res) => {
+  res.send(`
+    <h1>緊急確認ページ</h1>
+    <p>時刻: ${new Date().toISOString()}</p>
+    <p>環境: ${isVercel ? "Vercel" : "Local"}</p>
+    <p>Node.js: ${process.version}</p>
+    <p>SESSION_SECRET: ${process.env.SESSION_SECRET ? "設定済み" : "未設定"}</p>
+  `);
+});
+
+// ヘルスチェック用エンドポイント
 app.get("/health", (req, res) => {
   console.log("Health check requested");
-  res.status(200).json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    environment: isVercel ? "vercel" : "local",
-    nodeVersion: process.version,
-    platform: process.platform,
-  });
+  try {
+    res.status(200).json({
+      status: "OK",
+      timestamp: new Date().toISOString(),
+      environment: isVercel ? "vercel" : "local",
+      nodeVersion: process.version,
+      platform: process.platform,
+      sessionSecret: process.env.SESSION_SECRET ? "設定済み" : "未設定",
+    });
+  } catch (error) {
+    console.error("Health check error:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // シンプルなテストエンドポイント
@@ -100,6 +161,7 @@ app.get("/simple", (req, res) => {
         <p>環境: ${isVercel ? "Vercel" : "Local"}</p>
         <a href="/health">ヘルスチェック</a> | 
         <a href="/test">テスト</a> | 
+        <a href="/emergency">緊急確認</a> |
         <a href="/">メインページ</a>
     </body>
     </html>
@@ -107,27 +169,58 @@ app.get("/simple", (req, res) => {
 });
 
 // ルート設定（エラーハンドリング強化）
+console.log("ルート読み込み開始...");
 try {
-  console.log("Loading routes...");
   app.use("/auth", require("./routes/auth"));
-  app.use("/api/users", require("./routes/users"));
-  app.use("/agencies", require("./routes/agencies"));
-  app.use("/sales", require("./routes/sales"));
-  app.use("/groups", require("./routes/groups"));
-  app.use("/materials", require("./routes/materials"));
-  console.log("All routes loaded successfully");
+  console.log("auth ルート読み込み完了");
 } catch (error) {
-  console.error("Error loading routes:", error);
-  // ルート読み込みエラーでもアプリを停止させない
+  console.error("auth ルート読み込みエラー:", error);
 }
 
-// メインページ（簡素化）
+try {
+  app.use("/api/users", require("./routes/users"));
+  console.log("users ルート読み込み完了");
+} catch (error) {
+  console.error("users ルート読み込みエラー:", error);
+}
+
+try {
+  app.use("/agencies", require("./routes/agencies"));
+  console.log("agencies ルート読み込み完了");
+} catch (error) {
+  console.error("agencies ルート読み込みエラー:", error);
+}
+
+try {
+  app.use("/sales", require("./routes/sales"));
+  console.log("sales ルート読み込み完了");
+} catch (error) {
+  console.error("sales ルート読み込みエラー:", error);
+}
+
+try {
+  app.use("/groups", require("./routes/groups"));
+  console.log("groups ルート読み込み完了");
+} catch (error) {
+  console.error("groups ルート読み込みエラー:", error);
+}
+
+try {
+  app.use("/materials", require("./routes/materials"));
+  console.log("materials ルート読み込み完了");
+} catch (error) {
+  console.error("materials ルート読み込みエラー:", error);
+}
+
+console.log("全ルート読み込み処理完了");
+
+// メインページ（簡素化・安全化）
 app.get("/", (req, res) => {
   console.log("Main page requested");
   try {
     // セッションチェックを簡素化
     if (!req.session || !req.session.user) {
-      console.log("No session, redirecting to login");
+      console.log("No session, redirecting to auth/login");
       return res.redirect("/auth/login");
     }
 
@@ -146,7 +239,11 @@ app.get("/", (req, res) => {
     }
   } catch (error) {
     console.error("Error in main route:", error);
-    res.status(500).send("サーバーエラーが発生しました: " + error.message);
+    res.status(500).send(`
+      <h1>メインページエラー</h1>
+      <p>エラー: ${error.message}</p>
+      <a href="/emergency">緊急確認ページ</a>
+    `);
   }
 });
 
@@ -154,28 +251,46 @@ app.get("/", (req, res) => {
 app.use((req, res) => {
   console.log("404 for path:", req.path);
   try {
-    res.status(404).render("404", {
+    // レイアウトを無効化してエラーページをレンダリング
+    res.status(404);
+    res.locals.layout = false;
+    res.render("404", {
       session: req.session || {},
       title: "ページが見つかりません",
     });
   } catch (error) {
     console.error("Error rendering 404:", error);
-    res.status(404).send("ページが見つかりません");
+    res.status(404).send(`
+      <h1>404 - ページが見つかりません</h1>
+      <p>パス: ${req.path}</p>
+      <a href="/emergency">緊急確認ページ</a>
+    `);
   }
 });
 
 // エラーハンドリング
 app.use((err, req, res, next) => {
-  console.error("Application Error:", err);
+  console.error("=== Application Error ===");
+  console.error("Error:", err);
+  console.error("Stack:", err.stack);
+
   try {
-    res.status(500).render("500", {
+    // レイアウトを無効化してエラーページをレンダリング
+    res.status(500);
+    res.locals.layout = false;
+    res.render("500", {
       session: req.session || {},
       title: "サーバーエラー",
       error: process.env.NODE_ENV === "development" ? err : null,
     });
   } catch (renderError) {
     console.error("Error rendering error page:", renderError);
-    res.status(500).send("サーバーエラーが発生しました: " + err.message);
+    res.status(500).send(`
+      <h1>サーバーエラー</h1>
+      <p>エラー: ${err.message}</p>
+      <p>レンダリングエラー: ${renderError.message}</p>
+      <a href="/emergency">緊急確認ページ</a>
+    `);
   }
 });
 
@@ -201,6 +316,8 @@ if (!isVercel) {
     next();
   });
 }
+
+console.log("=== サーバー設定完了 ===");
 
 // Vercel用のエクスポート
 module.exports = app;
