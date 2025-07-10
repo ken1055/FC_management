@@ -275,6 +275,8 @@ app.get("/", (req, res) => {
   console.log("時刻:", new Date().toISOString());
   console.log("ユーザーエージェント:", req.headers["user-agent"]);
   console.log("リクエストパス:", req.path);
+  console.log("リクエストURL:", req.url);
+  console.log("Vercel環境:", isVercel);
   console.log("セッション存在:", !!req.session);
   console.log("ユーザー情報:", req.session?.user);
 
@@ -283,6 +285,24 @@ app.get("/", (req, res) => {
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   res.setHeader("ETag", ""); // ETagを削除
+  res.setHeader("X-Powered-By", "Express-Dynamic");
+
+  // Vercel環境での動作確認用のテスト応答
+  if (isVercel && req.query.test === "dynamic") {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>動的レスポンステスト</title></head>
+      <body>
+        <h1>動的レスポンス確認</h1>
+        <p>時刻: ${new Date().toISOString()}</p>
+        <p>環境: Vercel</p>
+        <p>このページは動的に生成されています</p>
+        <a href="/">通常のメインページ</a>
+      </body>
+      </html>
+    `);
+  }
 
   try {
     // セッションチェック
