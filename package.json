@@ -6,7 +6,6 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "vercel-build": "npm install && echo 'Vercel build complete'",
     "build": "echo 'Build complete'"
   },
   "dependencies": {
@@ -23,7 +22,7 @@
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "18.x"
   },
   "keywords": [
     "agency",
