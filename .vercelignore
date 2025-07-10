@@ -43,4 +43,7 @@ coverage/
 
 # 一時ファイル
 temp/
-tmp/ 
+tmp/
+
+# 静的ファイル競合を防ぐため（/staticパスで配信）
+public/ 
