@@ -22,7 +22,7 @@ app.set("views", path.join(__dirname, "views"));
 // 静的ファイルの設定（Vercel対応）
 app.use(
   express.static(path.join(__dirname, "public"), {
-    maxAge: isVercel ? "1y" : 0,
+    maxAge: isVercel ? "1d" : 0,
   })
 );
 
@@ -32,29 +32,20 @@ app.use(expressLayouts);
 app.set("layout", "layout");
 
 // ミドルウェア設定
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Vercel用の追加ヘッダー
-app.use((req, res, next) => {
-  if (isVercel) {
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-  }
-  next();
-});
-
-// セッション設定
+// セッション設定（Vercel最適化）
 app.use(
   session({
-    secret:
-      process.env.SESSION_SECRET || "your-secret-key-change-in-production",
+    secret: process.env.SESSION_SECRET || "default-secret-key-for-development",
     resave: false,
     saveUninitialized: false,
     store: new MemoryStore({
       checkPeriod: 86400000, // 24時間
     }),
     cookie: {
-      secure: isVercel || process.env.NODE_ENV === "production",
+      secure: false, // Vercelで問題が起きる場合は一時的にfalse
       maxAge: 86400000, // 24時間
       httpOnly: true,
       sameSite: "lax",
@@ -70,16 +61,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// デバッグ用ログ（Vercel環境で）
-if (isVercel) {
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
-    next();
-  });
-}
+// リクエストログ
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  next();
+});
 
-// ルート設定
+// ヘルスチェック用エンドポイント（最優先）
+app.get("/health", (req, res) => {
+  console.log("Health check requested");
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    environment: isVercel ? "vercel" : "local",
+    nodeVersion: process.version,
+    platform: process.platform,
+  });
+});
+
+// シンプルなテストエンドポイント
+app.get("/test", (req, res) => {
+  console.log("Test endpoint requested");
+  res.status(200).send("Server is working!");
+});
+
+// ルート設定（エラーハンドリング強化）
 try {
+  console.log("Loading routes...");
   app.use("/auth", require("./routes/auth"));
   app.use("/api/users", require("./routes/users"));
   app.use("/agencies", require("./routes/agencies"));
@@ -89,14 +97,20 @@ try {
   console.log("All routes loaded successfully");
 } catch (error) {
   console.error("Error loading routes:", error);
+  // ルート読み込みエラーでもアプリを停止させない
 }
 
-// メインページ
+// メインページ（簡素化）
 app.get("/", (req, res) => {
+  console.log("Main page requested");
   try {
-    if (!req.session.user) {
+    // セッションチェックを簡素化
+    if (!req.session || !req.session.user) {
+      console.log("No session, redirecting to login");
       return res.redirect("/auth/login");
     }
+
+    console.log("User found in session:", req.session.user.role);
 
     if (req.session.user.role === "admin") {
       return res.render("admin_index", {
@@ -111,19 +125,8 @@ app.get("/", (req, res) => {
     }
   } catch (error) {
     console.error("Error in main route:", error);
-    res.status(500).send("サーバーエラーが発生しました");
+    res.status(500).send("サーバーエラーが発生しました: " + error.message);
   }
-});
-
-// ヘルスチェック用エンドポイント
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    environment: isVercel ? "vercel" : "local",
-    nodeVersion: process.version,
-    platform: process.platform,
-  });
 });
 
 // 404エラーハンドリング
@@ -151,7 +154,7 @@ app.use((err, req, res, next) => {
     });
   } catch (renderError) {
     console.error("Error rendering error page:", renderError);
-    res.status(500).send("サーバーエラーが発生しました");
+    res.status(500).send("サーバーエラーが発生しました: " + err.message);
   }
 });
 
