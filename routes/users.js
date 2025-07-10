@@ -12,8 +12,40 @@ function requireRole(roles) {
   };
 }
 
-// ID再割り当て機能
-function reassignUserIds(callback) {
+// ID整合性チェック機能
+function checkUserIdIntegrity(callback) {
+  db.all(
+    "SELECT id, email, role, agency_id FROM users WHERE role IN ('admin', 'agency') ORDER BY role, email",
+    [],
+    (err, users) => {
+      if (err) return callback(err, null);
+
+      const issues = [];
+      let expectedId = 1;
+
+      users.forEach((user, index) => {
+        if (user.id !== expectedId) {
+          issues.push({
+            currentId: user.id,
+            expectedId: expectedId,
+            email: user.email,
+            role: user.role,
+          });
+        }
+        expectedId++;
+      });
+
+      callback(null, {
+        totalUsers: users.length,
+        issues: issues,
+        isIntegrityOk: issues.length === 0,
+      });
+    }
+  );
+}
+
+// ID修正機能（オンデマンド）
+function fixUserIds(callback) {
   // 現在のユーザーを取得（adminとagencyのみ、emailでソート）
   db.all(
     "SELECT id, email, role, agency_id FROM users WHERE role IN ('admin', 'agency') ORDER BY role, email",
@@ -43,7 +75,7 @@ function reassignUserIds(callback) {
                   "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
                   [newId, user.id],
                   (err) => {
-                    if (err) console.error("ID再割り当てエラー:", err);
+                    if (err) console.error("ID修正エラー:", err);
                     completed++;
                     if (completed === users.length) {
                       // 一時テーブルを削除
@@ -71,23 +103,47 @@ function reassignUserIds(callback) {
 
 // 管理者アカウント一覧表示（管理者のみ）
 router.get("/list", requireRole(["admin"]), (req, res) => {
-  db.all(
-    "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
-    [],
-    (err, users) => {
-      if (err) return res.status(500).send("DBエラー");
+  // ID整合性をチェック
+  checkUserIdIntegrity((err, integrityInfo) => {
+    if (err) return res.status(500).send("DBエラー");
 
-      // 管理者数を集計
-      const admins = users.filter((u) => u.role === "admin");
+    db.all(
+      "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
+      [],
+      (err, users) => {
+        if (err) return res.status(500).send("DBエラー");
 
-      res.render("users_list", {
-        users,
-        admins,
-        session: req.session,
-        title: "管理者アカウント管理",
-      });
+        // 管理者数を集計
+        const admins = users.filter((u) => u.role === "admin");
+
+        res.render("users_list", {
+          users,
+          admins,
+          integrityInfo,
+          session: req.session,
+          title: "管理者アカウント管理",
+        });
+      }
+    );
+  });
+});
+
+// ID修正エンドポイント（管理者のみ）
+router.post("/fix-ids", requireRole(["admin"]), (req, res) => {
+  fixUserIds((err) => {
+    if (err) {
+      console.error("ID修正エラー:", err);
+      return res.redirect(
+        "/api/users/list?error=" +
+          encodeURIComponent("ID修正でエラーが発生しました")
+      );
     }
-  );
+
+    res.redirect(
+      "/api/users/list?success=" +
+        encodeURIComponent("ユーザーIDを連番に修正しました")
+    );
+  });
 });
 
 // 新規アカウント作成画面
@@ -169,25 +225,10 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
       db.run("DELETE FROM users WHERE id = ?", [userId], function (err) {
         if (err) return res.status(500).send("削除エラー");
 
-        // ID再割り当てを実行
-        reassignUserIds((err) => {
-          if (err) {
-            console.error("ID再割り当てエラー:", err);
-            return res.redirect(
-              "/api/users/list?error=" +
-                encodeURIComponent(
-                  "削除は完了しましたが、ID再割り当てでエラーが発生しました"
-                )
-            );
-          }
-
-          res.redirect(
-            "/api/users/list?success=" +
-              encodeURIComponent(
-                `${user.email} のアカウントを削除し、IDを再割り当てしました`
-              )
-          );
-        });
+        res.redirect(
+          "/api/users/list?success=" +
+            encodeURIComponent(`${user.email} のアカウントを削除しました`)
+        );
       });
     }
   );

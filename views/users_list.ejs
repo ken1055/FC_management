@@ -23,6 +23,46 @@
   </div>
   <% } %>
 
+  <!-- ID整合性チェック結果 -->
+  <% if (integrityInfo && !integrityInfo.isIntegrityOk) { %>
+  <div class="alert alert-warning alert-dismissible fade show">
+    <h6 class="alert-heading">
+      <i class="bi bi-exclamation-triangle"></i> ID整合性の問題が検出されました
+    </h6>
+    <p class="mb-2">
+      <strong><%= integrityInfo.issues.length %>件</strong
+      >のIDに連番の問題があります。
+    </p>
+    <div class="mb-2">
+      <small class="text-muted">問題のあるアカウント:</small>
+      <ul class="small mb-2">
+        <% integrityInfo.issues.forEach(issue => { %>
+        <li>
+          <%= issue.email %> (現在: ID<%= issue.currentId %> → 期待値: ID<%=
+          issue.expectedId %>)
+        </li>
+        <% }) %>
+      </ul>
+    </div>
+    <form
+      method="post"
+      action="/api/users/fix-ids"
+      style="display: inline"
+      onsubmit="return confirm('ユーザーIDを連番に修正しますか？\n\nこの操作により、IDが自動的に1,2,3...の順番に再割り当てされます。\n\n注意: この操作は取り消せません。')"
+    >
+      <button type="submit" class="btn btn-warning btn-sm">
+        <i class="bi bi-arrow-clockwise"></i> IDを連番に修正
+      </button>
+    </form>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  <% } else if (integrityInfo && integrityInfo.isIntegrityOk) { %>
+  <div class="alert alert-success alert-dismissible fade show">
+    <i class="bi bi-check-circle"></i> ユーザーIDの連番は正常です
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  <% } %>
+
   <!-- アカウント統計 -->
   <div class="row mb-4">
     <div class="col-md-6">
@@ -106,7 +146,7 @@
               method="post"
               action="/api/users/delete/<%= user.id %>"
               style="display: inline"
-              onsubmit="return confirm('「<%= user.email %>」のアカウントを削除しますか？\n\n削除後、アカウントIDが自動的に再割り当てされ連番が維持されます。\n\nこの操作は取り消せません。')"
+              onsubmit="return confirm('「<%= user.email %>」のアカウントを削除しますか？\n\n削除後、ID整合性をチェックして必要に応じて手動でIDを修正してください。\n\nこの操作は取り消せません。')"
             >
               <button type="submit" class="btn btn-sm btn-outline-danger">
                 <i class="bi bi-trash"></i> 削除
@@ -136,8 +176,8 @@
           現在ログイン中のアカウントは削除できません。
         </li>
         <li>
-          <strong>ID自動調整:</strong>
-          アカウント削除後、IDが自動的に再割り当てされ連番が維持されます。
+          <strong>ID管理:</strong>
+          削除後にIDの連番に問題がある場合、上部にアラートが表示されます。必要に応じて修正ボタンで調整できます。
         </li>
         <li>
           <strong>パスワード:</strong>

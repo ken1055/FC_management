@@ -76,43 +76,184 @@ router.get("/", (req, res) => {
   });
 });
 
+// ID整合性チェック機能（代理店用）
+function checkAgencyIdIntegrity(callback) {
+  db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
+    if (err) return callback(err, null);
+
+    const issues = [];
+    let expectedId = 1;
+
+    agencies.forEach((agency, index) => {
+      if (agency.id !== expectedId) {
+        issues.push({
+          currentId: agency.id,
+          expectedId: expectedId,
+          name: agency.name,
+        });
+      }
+      expectedId++;
+    });
+
+    callback(null, {
+      totalAgencies: agencies.length,
+      issues: issues,
+      isIntegrityOk: issues.length === 0,
+    });
+  });
+}
+
+// ID修正機能（代理店用・オンデマンド）
+function fixAgencyIds(callback) {
+  // 現在の代理店を取得（nameでソート）
+  db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
+    if (err) return callback(err);
+
+    if (agencies.length === 0) return callback(null);
+
+    // 一時テーブルを作成
+    db.run(
+      "CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies",
+      (err) => {
+        if (err) return callback(err);
+
+        // 元の代理店データを削除
+        db.run("DELETE FROM agencies", (err) => {
+          if (err) return callback(err);
+
+          // 新しいIDで再挿入
+          let completed = 0;
+          agencies.forEach((agency, index) => {
+            const newId = index + 1;
+            db.run(
+              "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+              [newId, agency.id],
+              (err) => {
+                if (err) console.error("代理店ID修正エラー:", err);
+
+                // 関連テーブルのagency_idも更新
+                Promise.all([
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, agency.id],
+                      () => resolve()
+                    );
+                  }),
+                ]).then(() => {
+                  completed++;
+                  if (completed === agencies.length) {
+                    // 一時テーブルを削除
+                    db.run("DROP TABLE temp_agencies", () => {
+                      // シーケンステーブルをリセット
+                      db.run(
+                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+                        [agencies.length],
+                        () => {
+                          callback(null);
+                        }
+                      );
+                    });
+                  }
+                });
+              }
+            );
+          });
+        });
+      }
+    );
+  });
+}
+
 // 代理店一覧ページ
 router.get("/list", requireRole(["admin"]), (req, res) => {
   const groupId = req.query.group_id;
 
-  // グループ一覧を取得
-  db.all("SELECT * FROM groups", [], (err, groups) => {
+  // ID整合性をチェック
+  checkAgencyIdIntegrity((err, integrityInfo) => {
     if (err) return res.status(500).send("DBエラー");
 
-    let query = `
-      SELECT 
-        a.*,
-        g.name as group_name,
-        GROUP_CONCAT(ap.product_name, ', ') as product_names
-      FROM agencies a 
-      LEFT JOIN group_agency ga ON a.id = ga.agency_id 
-      LEFT JOIN groups g ON ga.group_id = g.id
-      LEFT JOIN agency_products ap ON a.id = ap.agency_id
-    `;
-    let params = [];
-
-    if (groupId) {
-      query += " WHERE ga.group_id = ?";
-      params.push(groupId);
-    }
-
-    query += " GROUP BY a.id ORDER BY a.id";
-
-    db.all(query, params, (err, agencies) => {
+    // グループ一覧を取得
+    db.all("SELECT * FROM groups", [], (err, groups) => {
       if (err) return res.status(500).send("DBエラー");
-      res.render("agencies_list", {
-        agencies,
-        groups,
-        selectedGroupId: groupId,
-        session: req.session,
-        title: "代理店一覧",
+
+      let query = `
+        SELECT 
+          a.*,
+          g.name as group_name,
+          GROUP_CONCAT(ap.product_name, ', ') as product_names
+        FROM agencies a 
+        LEFT JOIN group_agency ga ON a.id = ga.agency_id 
+        LEFT JOIN groups g ON ga.group_id = g.id
+        LEFT JOIN agency_products ap ON a.id = ap.agency_id
+      `;
+      let params = [];
+
+      if (groupId) {
+        query += " WHERE ga.group_id = ?";
+        params.push(groupId);
+      }
+
+      query += " GROUP BY a.id ORDER BY a.id";
+
+      db.all(query, params, (err, agencies) => {
+        if (err) return res.status(500).send("DBエラー");
+        res.render("agencies_list", {
+          agencies,
+          groups,
+          selectedGroupId: groupId,
+          integrityInfo,
+          session: req.session,
+          title: "代理店一覧",
+        });
       });
     });
+  });
+});
+
+// ID修正エンドポイント（代理店用・管理者のみ）
+router.post("/fix-ids", requireRole(["admin"]), (req, res) => {
+  fixAgencyIds((err) => {
+    if (err) {
+      console.error("代理店ID修正エラー:", err);
+      return res.redirect(
+        "/agencies/list?error=" +
+          encodeURIComponent("代理店ID修正でエラーが発生しました")
+      );
+    }
+
+    res.redirect(
+      "/agencies/list?success=" +
+        encodeURIComponent("代理店IDを連番に修正しました")
+    );
   });
 });
 
@@ -328,96 +469,6 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
   );
 });
 
-// ID再割り当て機能（代理店用）
-function reassignAgencyIds(callback) {
-  // 現在の代理店を取得（nameでソート）
-  db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
-    if (err) return callback(err);
-
-    if (agencies.length === 0) return callback(null);
-
-    // 一時テーブルを作成
-    db.run(
-      "CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies",
-      (err) => {
-        if (err) return callback(err);
-
-        // 元の代理店データを削除
-        db.run("DELETE FROM agencies", (err) => {
-          if (err) return callback(err);
-
-          // 新しいIDで再挿入
-          let completed = 0;
-          agencies.forEach((agency, index) => {
-            const newId = index + 1;
-            db.run(
-              "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
-              [newId, agency.id],
-              (err) => {
-                if (err) console.error("代理店ID再割り当てエラー:", err);
-
-                // 関連テーブルのagency_idも更新
-                Promise.all([
-                  new Promise((resolve) => {
-                    db.run(
-                      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
-                      () => resolve()
-                    );
-                  }),
-                  new Promise((resolve) => {
-                    db.run(
-                      "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
-                      () => resolve()
-                    );
-                  }),
-                  new Promise((resolve) => {
-                    db.run(
-                      "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
-                      () => resolve()
-                    );
-                  }),
-                  new Promise((resolve) => {
-                    db.run(
-                      "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
-                      () => resolve()
-                    );
-                  }),
-                  new Promise((resolve) => {
-                    db.run(
-                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
-                      () => resolve()
-                    );
-                  }),
-                ]).then(() => {
-                  completed++;
-                  if (completed === agencies.length) {
-                    // 一時テーブルを削除
-                    db.run("DROP TABLE temp_agencies", () => {
-                      // シーケンステーブルをリセット
-                      db.run(
-                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
-                        [agencies.length],
-                        () => {
-                          callback(null);
-                        }
-                      );
-                    });
-                  }
-                });
-              }
-            );
-          });
-        });
-      }
-    );
-  });
-}
-
 // 代理店削除（管理者のみ）
 router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
   const agencyId = req.params.id;
@@ -494,25 +545,12 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
             );
           }
 
-          // ID再割り当てを実行
-          reassignAgencyIds((err) => {
-            if (err) {
-              console.error("代理店ID再割り当てエラー:", err);
-              return res.redirect(
-                "/agencies/list?error=" +
-                  encodeURIComponent(
-                    "削除は完了しましたが、ID再割り当てでエラーが発生しました"
-                  )
-              );
-            }
-
-            res.redirect(
-              "/agencies/list?success=" +
-                encodeURIComponent(
-                  `「${agency.name}」の代理店データを削除し、IDを再割り当てしました`
-                )
-            );
-          });
+          res.redirect(
+            "/agencies/list?success=" +
+              encodeURIComponent(
+                `「${agency.name}」の代理店データを削除しました`
+              )
+          );
         });
       });
     }

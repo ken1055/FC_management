@@ -20,6 +20,38 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
   <% } %>
+
+  <!-- ID整合性チェック結果 -->
+  <% if (integrityInfo && !integrityInfo.isIntegrityOk) { %>
+  <div class="alert alert-warning alert-dismissible fade show">
+    <h6 class="alert-heading">
+      <i class="bi bi-exclamation-triangle"></i> 代理店IDの整合性問題が検出されました
+    </h6>
+    <p class="mb-2">
+      <strong><%= integrityInfo.issues.length %>件</strong>の代理店IDに連番の問題があります。
+    </p>
+    <div class="mb-2">
+      <small class="text-muted">問題のある代理店:</small>
+      <ul class="small mb-2">
+        <% integrityInfo.issues.forEach(issue => { %>
+        <li><%= issue.name %> (現在: ID<%= issue.currentId %> → 期待値: ID<%= issue.expectedId %>)</li>
+        <% }) %>
+      </ul>
+    </div>
+    <form method="post" action="/agencies/fix-ids" style="display: inline" 
+          onsubmit="return confirm('代理店IDを連番に修正しますか？\n\nこの操作により、IDが自動的に1,2,3...の順番に再割り当てされます。\n関連する売上データ、資料、グループ所属なども自動的に更新されます。\n\n注意: この操作は取り消せません。')">
+      <button type="submit" class="btn btn-warning btn-sm">
+        <i class="bi bi-arrow-clockwise"></i> 代理店IDを連番に修正
+      </button>
+    </form>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  <% } else if (integrityInfo && integrityInfo.isIntegrityOk) { %>
+  <div class="alert alert-success alert-dismissible fade show">
+    <i class="bi bi-check-circle"></i> 代理店IDの連番は正常です
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  <% } %>
   
   <!-- グループフィルタリング -->
   <div class="mb-3">
@@ -122,7 +154,7 @@
                 method="post" 
                 action="/agencies/delete/<%= a.id %>" 
                 style="display: inline"
-                onsubmit="return confirm('「<%= a.name %>」の代理店データを削除しますか？\n\n注意: 以下のデータもすべて削除されます：\n• 売上データ\n• 商品資料\n• グループ所属情報\n• 取り扱い商品情報\n• 関連ユーザーアカウントとの紐付け\n\n削除後、代理店IDが自動的に再割り当てされ連番が維持されます。\n\nこの操作は取り消せません。')"
+                onsubmit="return confirm('「<%= a.name %>」の代理店データを削除しますか？\n\n注意: 以下のデータもすべて削除されます：\n• 売上データ\n• 商品資料\n• グループ所属情報\n• 取り扱い商品情報\n• 関連ユーザーアカウントとの紐付け\n\n削除後、代理店IDの整合性をチェックして必要に応じて手動でIDを修正してください。\n\nこの操作は取り消せません。')"
               >
                 <button type="submit" class="btn btn-sm btn-outline-danger">
                   <i class="bi bi-trash"></i> 削除
@@ -181,6 +213,7 @@
       <ul class="mb-0">
         <li><strong>関連データの削除:</strong> 代理店を削除すると、売上データ、商品資料、グループ所属情報、取り扱い商品情報もすべて削除されます。</li>
         <li><strong>ユーザーアカウント:</strong> 代理店ユーザーアカウントとの紐付けも解除されますが、アカウント自体は削除されません。</li>
+        <li><strong>ID管理:</strong> 削除後にIDの連番に問題がある場合、上部にアラートが表示されます。必要に応じて修正ボタンで調整できます。</li>
         <li><strong>復元不可:</strong> 一度削除した代理店データは復元できません。慎重に操作してください。</li>
       </ul>
     </div>
