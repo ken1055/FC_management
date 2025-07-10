@@ -8,6 +8,7 @@ const app = express();
 // Vercel環境の検出
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 const port = process.env.PORT || 3000;
+const disableLayouts = process.env.DISABLE_LAYOUTS === "true"; // 緊急時フラグ
 
 console.log("=== サーバー起動 ===");
 console.log("Environment:", {
@@ -15,6 +16,7 @@ console.log("Environment:", {
   NODE_ENV: process.env.NODE_ENV,
   VERCEL_ENV: process.env.VERCEL_ENV,
   SESSION_SECRET: process.env.SESSION_SECRET ? "設定済み" : "未設定",
+  disableLayouts: disableLayouts,
 });
 
 // 重要なエラーハンドリング
@@ -53,14 +55,34 @@ try {
 }
 
 // レイアウト設定
-try {
-  console.log("レイアウト設定中...");
-  const expressLayouts = require("express-ejs-layouts");
-  app.use(expressLayouts);
-  app.set("layout", "layout");
-  console.log("レイアウト設定完了");
-} catch (error) {
-  console.error("レイアウト設定エラー:", error);
+if (!disableLayouts) {
+  try {
+    console.log("レイアウト設定中...");
+    const expressLayouts = require("express-ejs-layouts");
+    app.use(expressLayouts);
+    app.set("layout", "layout");
+
+    // デフォルト変数の設定
+    app.use((req, res, next) => {
+      res.locals.title = res.locals.title || "代理店管理システム";
+      res.locals.session = req.session || {};
+      next();
+    });
+
+    console.log("レイアウト設定完了");
+  } catch (error) {
+    console.error("レイアウト設定エラー:", error);
+  }
+} else {
+  console.log("レイアウト機能は無効化されています");
+
+  // レイアウト無効時のデフォルト変数設定
+  app.use((req, res, next) => {
+    res.locals.title = res.locals.title || "代理店管理システム";
+    res.locals.session = req.session || {};
+    res.locals.layout = false;
+    next();
+  });
 }
 
 // ミドルウェア設定
