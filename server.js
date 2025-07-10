@@ -8,7 +8,7 @@ const app = express();
 // Vercel環境の検出
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 const port = process.env.PORT || 3000;
-const disableLayouts = process.env.DISABLE_LAYOUTS === "true"; // 緊急時フラグ
+const disableLayouts = true; // 強制的にレイアウト無効化
 
 console.log("=== サーバー起動 ===");
 console.log("Environment:", {
@@ -249,15 +249,33 @@ app.get("/", (req, res) => {
     console.log("User found in session:", req.session.user.role);
 
     if (req.session.user.role === "admin") {
-      return res.render("admin_index", {
-        session: req.session,
-        title: "管理者ダッシュボード",
-      });
+      if (disableLayouts) {
+        // レイアウト無効時は独立テンプレートを使用
+        return res.render("admin_index_standalone", {
+          session: req.session,
+          title: "管理者ダッシュボード",
+        });
+      } else {
+        return res.render("admin_index", {
+          session: req.session,
+          title: "管理者ダッシュボード",
+        });
+      }
     } else {
-      return res.render("index", {
-        session: req.session,
-        title: "代理店管理システム",
-      });
+      if (disableLayouts) {
+        // 代理店用の独立テンプレートも後で作成予定
+        return res.send(`
+          <h1>代理店ダッシュボード</h1>
+          <p>ユーザー: ${req.session.user.email}</p>
+          <p>レイアウト無効モードで動作中</p>
+          <a href="/auth/logout">ログアウト</a>
+        `);
+      } else {
+        return res.render("index", {
+          session: req.session,
+          title: "代理店管理システム",
+        });
+      }
     }
   } catch (error) {
     console.error("Error in main route:", error);
