@@ -41,11 +41,19 @@ try {
   console.error("ビューエンジン設定エラー:", error);
 }
 
-// 静的ファイル設定
+// 静的ファイル設定（ルートパスでの競合を回避）
 try {
   console.log("静的ファイル設定中...");
   app.use(
+    "/static",
     express.static(path.join(__dirname, "public"), {
+      maxAge: isVercel ? "1d" : 0,
+    })
+  );
+  // アップロードファイル用の設定
+  app.use(
+    "/uploads",
+    express.static(path.join(__dirname, "uploads"), {
       maxAge: isVercel ? "1d" : 0,
     })
   );
@@ -263,22 +271,31 @@ console.log("全ルート読み込み処理完了");
 
 // メインページ（簡素化・安全化）- 最優先でルート定義
 app.get("/", (req, res) => {
-  console.log("Main page requested");
-  console.log("Request headers:", req.headers);
-  console.log("Session data:", req.session);
+  console.log("=== メインページリクエスト ===");
+  console.log("時刻:", new Date().toISOString());
+  console.log("ユーザーエージェント:", req.headers["user-agent"]);
+  console.log("リクエストパス:", req.path);
+  console.log("セッション存在:", !!req.session);
+  console.log("ユーザー情報:", req.session?.user);
+
+  // 強制的にキャッシュを無効化
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("ETag", ""); // ETagを削除
 
   try {
-    // セッションチェックを簡素化
+    // セッションチェック
     if (!req.session || !req.session.user) {
-      console.log("No session, redirecting to auth/login");
-      return res.redirect("/auth/login");
+      console.log("セッションなし - ログインページにリダイレクト");
+      return res.redirect(302, "/auth/login");
     }
 
-    console.log("User found in session:", req.session.user.role);
+    console.log("認証済みユーザー:", req.session.user.role);
 
     if (req.session.user.role === "admin") {
+      console.log("管理者ダッシュボードをレンダリング");
       if (disableLayouts) {
-        // レイアウト無効時は独立テンプレートを使用
         return res.render("admin_index_standalone", {
           session: req.session,
           title: "管理者ダッシュボード",
@@ -290,8 +307,8 @@ app.get("/", (req, res) => {
         });
       }
     } else {
+      console.log("代理店ダッシュボードをレンダリング");
       if (disableLayouts) {
-        // 代理店用の独立テンプレートを使用
         return res.render("agency_index_standalone", {
           session: req.session,
           title: "代理店ダッシュボード",
@@ -304,11 +321,13 @@ app.get("/", (req, res) => {
       }
     }
   } catch (error) {
-    console.error("Error in main route:", error);
+    console.error("メインルートエラー:", error);
     res.status(500).send(`
       <h1>メインページエラー</h1>
+      <p>時刻: ${new Date().toISOString()}</p>
       <p>エラー: ${error.message}</p>
       <a href="/emergency">緊急確認ページ</a>
+      <a href="/auth/login">ログインページ</a>
     `);
   }
 });
