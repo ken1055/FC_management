@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "functions": {
     "api/index.js": {
       "maxDuration": 30
@@ -6,7 +7,7 @@
   },
   "headers": [
     {
-      "source": "/",
+      "source": "/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -23,14 +24,10 @@
       ]
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/",
-      "destination": "/api"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api"
+      "src": "/(.*)",
+      "dest": "/api"
     }
   ]
 }
