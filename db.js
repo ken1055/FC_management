@@ -1,5 +1,11 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const crypto = require("crypto");
+
+// パスワードハッシュ化関数
+function hashPassword(password) {
+  return crypto.createHash("sha256").update(password).digest("hex");
+}
 
 // Vercel環境の検出
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
@@ -138,16 +144,23 @@ function initializeInMemoryDatabase() {
     `);
 
     // 初期管理者アカウントを作成
+    const adminPassword =
+      process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
+
     db.run(
       `
       INSERT OR IGNORE INTO users (email, password, role) 
-      VALUES ('admin', 'admin', 'admin')
+      VALUES ('admin', ?, 'admin')
     `,
+      [adminPassword],
       (err) => {
         if (err) {
           console.error("初期管理者作成エラー:", err);
         } else {
           console.log("初期管理者アカウントを作成しました");
+          if (process.env.NODE_ENV === "production") {
+            console.log("⚠️  本番環境では初期パスワードを必ず変更してください");
+          }
         }
       }
     );

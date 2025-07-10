@@ -21,21 +21,48 @@
 
 Vercel ダッシュボードの「Settings」→「Environment Variables」で以下を設定：
 
-| 変数名           | 値の例                                  | 説明                           |
-| ---------------- | --------------------------------------- | ------------------------------ |
-| `SESSION_SECRET` | `super-secure-random-string-32-chars`   | セッション暗号化キー（必須）   |
-| `NODE_ENV`       | `production`                            | 本番環境設定                   |
-| `SMTP_HOST`      | `smtp.gmail.com`                        | メール送信設定（オプション）   |
-| `SMTP_PORT`      | `587`                                   | メールポート（オプション）     |
-| `SMTP_USER`      | `your-email@gmail.com`                  | メールアドレス（オプション）   |
-| `SMTP_PASS`      | `your-app-password`                     | アプリパスワード（オプション） |
-| `ADMIN_EMAILS`   | `admin1@company.com,admin2@company.com` | 管理者メール（オプション）     |
+| 変数名                 | 値の例                                  | 必須 | 説明                                |
+| ---------------------- | --------------------------------------- | ---- | ----------------------------------- |
+| `SESSION_SECRET`       | `super-secure-random-string-32-chars`   | ✅   | セッション暗号化キー（32 文字以上） |
+| `NODE_ENV`             | `production`                            | ✅   | 本番環境設定                        |
+| `ADMIN_PROMOTION_PASS` | `your-admin-promotion-password`         | 🔧   | 管理者昇格パスワード（推奨）        |
+| `SMTP_HOST`            | `smtp.gmail.com`                        | 📧   | メール送信設定（オプション）        |
+| `SMTP_PORT`            | `587`                                   | 📧   | メールポート（オプション）          |
+| `SMTP_USER`            | `your-email@gmail.com`                  | 📧   | メールアドレス（オプション）        |
+| `SMTP_PASS`            | `your-app-password`                     | 📧   | アプリパスワード（オプション）      |
+| `ADMIN_EMAILS`         | `admin1@company.com,admin2@company.com` | 📧   | 管理者メール（オプション）          |
 
 ### 4. デプロイの実行
 
 1. 環境変数設定後、自動的に再デプロイされます
 2. デプロイが完了すると、Vercel が URL を提供します
 3. `https://your-project-name.vercel.app`でアクセス可能
+
+## 🔒 セキュリティ設定
+
+### 必須セキュリティ対策
+
+1. **SESSION_SECRET の設定**
+
+   ```bash
+   # 強力なランダム文字列を生成
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. **初期管理者パスワードの変更**
+
+   - デプロイ後、必ず初期パスワード（admin/admin）を変更
+   - パスワードは 8 文字以上を推奨
+
+3. **HTTPS の確認**
+   - Vercel は自動的に HTTPS を有効化
+   - カスタムドメインでも SSL 証明書が自動適用
+
+### 本番環境での変更点
+
+- **パスワードハッシュ化**: 本番環境では SHA-256 でハッシュ化
+- **セキュリティヘッダー**: CSP、XSS Protection 等が自動適用
+- **セッション設定**: HTTPS 必須、セキュアクッキー有効
 
 ## 📝 重要な注意事項
 
@@ -82,8 +109,13 @@ git push origin main
    - HTTPS 環境での Cookie 設定を確認
 
 3. **データが消える**
+
    - SQLite は一時的なため正常な動作
    - 永続化には外部データベースが必要
+
+4. **セキュリティ警告**
+   - SESSION_SECRET が未設定または弱い場合に発生
+   - 強力なランダム文字列に変更
 
 ### ログの確認方法
 
@@ -93,8 +125,21 @@ git push origin main
 
 ## 🎯 本番運用時の推奨改善
 
+### 短期（すぐに実施）
+
+1. **パスワード変更**: 初期管理者パスワードの変更
+2. **SESSION_SECRET**: 強力なランダム文字列に変更
+3. **管理者昇格パスワード**: ADMIN_PROMOTION_PASS の設定
+
+### 中期（1-2 週間以内）
+
 1. **データベース移行**: PostgreSQL への移行
-2. **セッションストア**: Redis の導入
-3. **ファイルアップロード**: Vercel Blob または外部ストレージ
-4. **監視**: Vercel Analytics の導入
-5. **セキュリティ**: CSP ヘッダーの強化
+2. **メール通知**: SMTP 設定でリアルタイム通知
+3. **バックアップ**: 定期的なデータエクスポート
+
+### 長期（1-3 ヶ月以内）
+
+1. **セッションストア**: Redis の導入
+2. **ファイルアップロード**: Vercel Blob または外部ストレージ
+3. **監視**: Vercel Analytics の導入
+4. **セキュリティ**: 定期的なセキュリティ監査

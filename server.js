@@ -98,25 +98,40 @@ try {
 // セッション設定
 try {
   console.log("セッション設定中...");
+
+  // セッションシークレットの検証
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret || sessionSecret === "emergency-fallback-secret-key") {
+    console.warn("⚠️  SESSION_SECRETが未設定または危険なデフォルト値です");
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("本番環境では必ずSESSION_SECRETを設定してください");
+    }
+  }
+
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "emergency-fallback-secret-key",
+      secret: sessionSecret || "emergency-fallback-secret-key",
       resave: false,
       saveUninitialized: false,
       store: new MemoryStore({
-        checkPeriod: 86400000,
+        checkPeriod: 86400000, // 24時間
       }),
       cookie: {
-        secure: false,
-        maxAge: 86400000,
+        secure:
+          process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS, // 本番では HTTPS 必須
+        maxAge: 86400000, // 24時間
         httpOnly: true,
         sameSite: "lax",
       },
+      name: "sessionId", // デフォルトのconnect.sidを変更
     })
   );
   console.log("セッション設定完了");
 } catch (error) {
   console.error("セッション設定エラー:", error);
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
 }
 
 // セキュリティヘッダー
@@ -124,6 +139,16 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; " +
+      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+      "script-src 'self' https://cdn.jsdelivr.net; " +
+      "font-src 'self' https://cdn.jsdelivr.net; " +
+      "img-src 'self' data: https:; " +
+      "frame-src 'none';"
+  );
   next();
 });
 
@@ -263,13 +288,11 @@ app.get("/", (req, res) => {
       }
     } else {
       if (disableLayouts) {
-        // 代理店用の独立テンプレートも後で作成予定
-        return res.send(`
-          <h1>代理店ダッシュボード</h1>
-          <p>ユーザー: ${req.session.user.email}</p>
-          <p>レイアウト無効モードで動作中</p>
-          <a href="/auth/logout">ログアウト</a>
-        `);
+        // 代理店用の独立テンプレートを使用
+        return res.render("agency_index_standalone", {
+          session: req.session,
+          title: "代理店ダッシュボード",
+        });
       } else {
         return res.render("index", {
           session: req.session,

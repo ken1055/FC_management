@@ -1,6 +1,22 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const crypto = require("crypto");
+
+// パスワードハッシュ化関数
+function hashPassword(password) {
+  return crypto.createHash("sha256").update(password).digest("hex");
+}
+
+// 開発環境での簡易認証（本番では削除推奨）
+function verifyPassword(inputPassword, storedPassword) {
+  // プレーンテキストの場合（開発・デバッグ用）
+  if (inputPassword === storedPassword) {
+    return true;
+  }
+  // ハッシュ化されたパスワードの場合
+  return hashPassword(inputPassword) === storedPassword;
+}
 
 // ログイン画面
 router.get("/login", (req, res) => {
@@ -49,46 +65,54 @@ router.post("/login", (req, res) => {
   console.log("Login attempt:", req.body);
   const { email, password } = req.body;
 
-  try {
-    db.get(
-      "SELECT * FROM users WHERE email=? AND password=?",
-      [email, password],
-      (err, user) => {
-        console.log("DB query result:", { err, user });
+  // 入力値検証
+  if (!email || !password) {
+    return res.send(`
+      <h1>ログインエラー</h1>
+      <p>メールアドレスとパスワードを入力してください</p>
+      <a href="/auth/login">ログインに戻る</a>
+    `);
+  }
 
-        if (err) {
-          console.error("Database error:", err);
-          return res.send(`
+  try {
+    db.get("SELECT * FROM users WHERE email=?", [email], (err, user) => {
+      console.log("DB query result:", {
+        err,
+        user: user ? { id: user.id, email: user.email, role: user.role } : null,
+      });
+
+      if (err) {
+        console.error("Database error:", err);
+        return res.send(`
             <h1>データベースエラー</h1>
             <p>エラー: ${err.message}</p>
             <a href="/auth/login">ログインに戻る</a>
           `);
-        }
+      }
 
-        if (user) {
-          console.log("User found, creating session");
-          req.session.user = {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-            agency_id: user.agency_id,
-          };
+      if (user && verifyPassword(password, user.password)) {
+        console.log("User found, creating session");
+        req.session.user = {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          agency_id: user.agency_id,
+        };
 
-          console.log("Session created:", req.session.user);
-          console.log("Redirecting to /");
+        console.log("Session created:", req.session.user);
+        console.log("Redirecting to /");
 
-          // 権限に応じてリダイレクト
-          return res.redirect("/");
-        } else {
-          console.log("Invalid credentials");
-          return res.send(`
+        // 権限に応じてリダイレクト
+        return res.redirect("/");
+      } else {
+        console.log("Invalid credentials");
+        return res.send(`
             <h1>ログインエラー</h1>
             <p>メールアドレスまたはパスワードが違います</p>
             <a href="/auth/login">ログインに戻る</a>
           `);
-        }
       }
-    );
+    });
   } catch (error) {
     console.error("Login process error:", error);
     res.status(500).send(`
@@ -141,9 +165,22 @@ router.post("/register", (req, res) => {
     `);
   }
 
+  // パスワードの強度チェック
+  if (password.length < 4) {
+    return res.send(`
+      <h1>登録エラー</h1>
+      <p>パスワードは4文字以上で入力してください</p>
+      <a href="/auth/register">登録に戻る</a>
+    `);
+  }
+
   try {
     let agency_id = null;
     if (role === "agency") agency_id = null;
+
+    // 本番環境ではパスワードをハッシュ化
+    const hashedPassword =
+      process.env.NODE_ENV === "production" ? hashPassword(password) : password;
 
     const dbInsert =
       role === "agency"
@@ -151,8 +188,8 @@ router.post("/register", (req, res) => {
         : "INSERT INTO users (email, password, role) VALUES (?, ?, ?)";
     const params =
       role === "agency"
-        ? [email, password, role, agency_id]
-        : [email, password, role];
+        ? [email, hashedPassword, role, agency_id]
+        : [email, hashedPassword, role];
 
     db.run(dbInsert, params, function (err) {
       if (err) {

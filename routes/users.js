@@ -1,6 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const crypto = require("crypto");
+
+// パスワードハッシュ化関数
+function hashPassword(password) {
+  return crypto.createHash("sha256").update(password).digest("hex");
+}
 
 // 権限チェック機能
 function requireRole(roles) {
@@ -210,6 +216,62 @@ router.post("/", requireRole(["admin"]), (req, res) => {
           res.redirect("/api/users/list");
         }
       );
+    }
+  );
+});
+
+// 新規ユーザー作成（管理者のみ）
+router.post("/create", requireRole(["admin"]), (req, res) => {
+  const { email, password, role } = req.body;
+
+  if (!email || !password || !role) {
+    return res.status(400).json({
+      success: false,
+      message: "全ての項目を入力してください",
+    });
+  }
+
+  if (password.length < 4) {
+    return res.status(400).json({
+      success: false,
+      message: "パスワードは4文字以上で入力してください",
+    });
+  }
+
+  // 本番環境ではパスワードをハッシュ化
+  const hashedPassword =
+    process.env.NODE_ENV === "production" ? hashPassword(password) : password;
+
+  db.run(
+    "INSERT INTO users (email, password, role) VALUES (?, ?, ?)",
+    [email, hashedPassword, role],
+    function (err) {
+      if (err) {
+        console.error("ユーザー作成エラー:", err);
+        if (err.code === "SQLITE_CONSTRAINT") {
+          return res.status(400).json({
+            success: false,
+            message: "このメールアドレスは既に使用されています",
+          });
+        }
+        return res.status(500).json({
+          success: false,
+          message: "ユーザー作成に失敗しました",
+        });
+      }
+
+      // 作成成功後にID修正を実行
+      fixUserIds((fixErr) => {
+        if (fixErr) {
+          console.error("ID修正エラー:", fixErr);
+        }
+
+        res.json({
+          success: true,
+          message: `ユーザー「${email}」を作成しました`,
+          userId: this.lastID,
+        });
+      });
     }
   );
 });
