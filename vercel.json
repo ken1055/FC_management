@@ -1,15 +1,11 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
+  "functions": {
+    "server.js": {
+      "runtime": "@vercel/node",
+      "maxDuration": 30
     }
-  ],
+  },
   "routes": [
     {
       "handle": "filesystem"
@@ -18,13 +14,5 @@
       "src": "/(.*)",
       "dest": "/server.js"
     }
-  ],
-  "functions": {
-    "server.js": {
-      "maxDuration": 30
-    },
-    "api/index.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
