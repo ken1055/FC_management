@@ -11,28 +11,68 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
 });
 
+// 高速初期化フラグ
+const FAST_MODE = true;
+
 // サーバーを読み込む前にログ出力
-console.log("Loading server...");
+console.log("Loading server...", { FAST_MODE });
 
 try {
   const app = require("../server");
 
-  // キャッシュ無効化ミドルウェアを最初に追加
-  app.use((req, res, next) => {
-    // すべてのレスポンスに強力なキャッシュ無効化ヘッダーを設定
-    res.set({
-      "Cache-Control":
-        "private, no-cache, no-store, must-revalidate, max-age=0",
-      "CDN-Cache-Control":
-        "private, no-cache, no-store, must-revalidate, max-age=0",
-      "Vercel-CDN-Cache-Control":
-        "private, no-cache, no-store, must-revalidate, max-age=0",
-      Pragma: "no-cache",
-      Expires: "0",
-      ETag: `"force-reload-v${Date.now()}"`,
-      "Last-Modified": "Thu, 01 Jan 1970 00:00:00 GMT",
-      Vary: "*",
+  // 高速キャッシュ無効化ミドルウェア
+  if (FAST_MODE) {
+    app.use((req, res, next) => {
+      res.set({
+        "Cache-Control":
+          "private, no-cache, no-store, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      next();
     });
+  } else {
+    // 詳細なキャッシュ無効化（通常モード）
+    app.use((req, res, next) => {
+      res.set({
+        "Cache-Control":
+          "private, no-cache, no-store, must-revalidate, max-age=0",
+        "CDN-Cache-Control":
+          "private, no-cache, no-store, must-revalidate, max-age=0",
+        "Vercel-CDN-Cache-Control":
+          "private, no-cache, no-store, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+        ETag: `"force-reload-v${Date.now()}"`,
+        "Last-Modified": "Thu, 01 Jan 1970 00:00:00 GMT",
+        Vary: "*",
+      });
+      next();
+    });
+  }
+
+  // 早期タイムアウト警告
+  app.use((req, res, next) => {
+    const startTime = Date.now();
+
+    const timeoutWarning = setTimeout(() => {
+      console.warn(
+        `⚠️ Request taking too long: ${req.method} ${req.url} (${
+          Date.now() - startTime
+        }ms)`
+      );
+    }, 15000); // 15秒で警告
+
+    res.on("finish", () => {
+      clearTimeout(timeoutWarning);
+      const duration = Date.now() - startTime;
+      if (duration > 10000) {
+        console.warn(
+          `🐌 Slow request: ${req.method} ${req.url} took ${duration}ms`
+        );
+      }
+    });
+
     next();
   });
 
@@ -52,6 +92,7 @@ try {
       error: "Server initialization failed",
       message: error.message,
       timestamp: new Date().toISOString(),
+      suggestion: "Try accessing /emergency or /auth/login directly",
     });
   });
 

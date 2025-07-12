@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "maxDuration": 30
+      "maxDuration": 25
     }
   },
   "headers": [
@@ -31,7 +31,7 @@
         },
         {
           "key": "ETag",
-          "value": "\"force-reload-v2\""
+          "value": "\"force-reload-v3\""
         },
         {
           "key": "Last-Modified",

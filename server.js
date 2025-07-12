@@ -412,12 +412,29 @@ if (!isVercel) {
   // Vercel環境用の設定
   console.log("Vercel環境で動作中");
 
-  // リクエストタイムアウトの設定
+  // 早期タイムアウト設定（20秒）
   app.use((req, res, next) => {
-    res.setTimeout(25000, () => {
-      console.log("Request timeout");
-      res.status(408).send("Request Timeout");
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        console.log("Request timeout - 20秒制限");
+        res.status(408).send(`
+          <h1>Request Timeout</h1>
+          <p>処理に時間がかかりすぎています。</p>
+          <p>時刻: ${new Date().toISOString()}</p>
+          <a href="/emergency">緊急確認ページ</a>
+          <a href="/auth/login">ログイン画面</a>
+        `);
+      }
+    }, 20000); // 20秒
+
+    res.on("finish", () => {
+      clearTimeout(timeout);
     });
+
+    res.on("close", () => {
+      clearTimeout(timeout);
+    });
+
     next();
   });
 }
