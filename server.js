@@ -170,10 +170,71 @@ app.get("/emergency", (req, res) => {
   res.send(`
     <h1>緊急確認ページ</h1>
     <p>時刻: ${new Date().toISOString()}</p>
-    <p>環境: ${isVercel ? "Vercel" : "Local"}</p>
+    <p>環境: ${isVercel ? "Vercel" : "Railway"}</p>
     <p>Node.js: ${process.version}</p>
     <p>SESSION_SECRET: ${process.env.SESSION_SECRET ? "設定済み" : "未設定"}</p>
   `);
+});
+
+// Railway専用デバッグエンドポイント
+app.get("/debug", (req, res) => {
+  try {
+    const viewsPath = path.join(__dirname, "views");
+    const fs = require("fs");
+
+    // viewsディレクトリの内容を確認
+    let viewFiles = [];
+    try {
+      viewFiles = fs.readdirSync(viewsPath);
+    } catch (err) {
+      viewFiles = [`Error reading views: ${err.message}`];
+    }
+
+    // 環境変数の状態
+    const envInfo = {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT,
+      SESSION_SECRET: process.env.SESSION_SECRET ? "設定済み" : "未設定",
+      ADMIN_PROMOTION_PASS: process.env.ADMIN_PROMOTION_PASS
+        ? "設定済み"
+        : "未設定",
+    };
+
+    res.send(`
+      <h1>Railway デバッグ情報</h1>
+      <h2>基本情報</h2>
+      <ul>
+        <li>時刻: ${new Date().toISOString()}</li>
+        <li>Node.js: ${process.version}</li>
+        <li>プラットフォーム: ${process.platform}</li>
+        <li>作業ディレクトリ: ${process.cwd()}</li>
+        <li>レイアウト無効化: ${disableLayouts}</li>
+      </ul>
+      
+      <h2>環境変数</h2>
+      <pre>${JSON.stringify(envInfo, null, 2)}</pre>
+      
+      <h2>Viewsディレクトリ</h2>
+      <p>パス: ${viewsPath}</p>
+      <ul>
+        ${viewFiles.map((file) => `<li>${file}</li>`).join("")}
+      </ul>
+      
+      <h2>テストリンク</h2>
+      <ul>
+        <li><a href="/health">ヘルスチェック</a></li>
+        <li><a href="/test">テストページ</a></li>
+        <li><a href="/auth/login">ログインページ</a></li>
+        <li><a href="/agencies/list">代理店一覧（要認証）</a></li>
+      </ul>
+    `);
+  } catch (error) {
+    res.status(500).send(`
+      <h1>デバッグエラー</h1>
+      <p>エラー: ${error.message}</p>
+      <p>スタック: ${error.stack}</p>
+    `);
+  }
 });
 
 // ヘルスチェック用エンドポイント
