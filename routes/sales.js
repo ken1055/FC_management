@@ -203,6 +203,7 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
           session: req.session,
           agencies: [],
           agencyName: agency ? agency.name : "未設定",
+          sale: null, // sale変数を追加
           title: "売上登録",
         });
       }
@@ -226,6 +227,7 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
         preselectedAgencyName: preselectedAgency
           ? preselectedAgency.name
           : null,
+        sale: null, // sale変数を追加
         title: "売上登録",
       });
     });
@@ -266,6 +268,7 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
                 agencies: [],
                 agencyName: agency ? agency.name : "未設定",
                 title: "売上登録",
+                sale: null, // sale変数を追加
                 error: "同じ年月の売上データが既に存在します",
               });
             }
@@ -283,6 +286,7 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
                 agencies,
                 agencyName: null,
                 title: "売上登録",
+                sale: null, // sale変数を追加
                 error: "同じ年月の売上データが既に存在します",
               });
             }
