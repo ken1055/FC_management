@@ -210,28 +210,10 @@ function initializeInMemoryDatabase() {
       )
     `);
 
-    // 初期管理者アカウントを作成
-    const adminPassword =
-      process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
-
-    db.run(
-      `INSERT OR IGNORE INTO users (email, password, role) VALUES ('admin', ?, 'admin')`,
-      [adminPassword],
-      (err) => {
-        if (err) {
-          console.error("初期管理者作成エラー:", err);
-        } else {
-          console.log("初期管理者アカウントを作成しました");
-          if (process.env.NODE_ENV === "production") {
-            console.log("⚠️  本番環境では初期パスワードを必ず変更してください");
-          }
-        }
-
-        isInitialized = true;
-        const duration = Date.now() - startTime;
-        console.log(`メモリDB初期化完了: ${duration}ms`);
-      }
-    );
+    // 初期化完了
+    isInitialized = true;
+    const duration = Date.now() - startTime;
+    console.log(`メモリDB初期化完了: ${duration}ms`);
   });
 }
 
@@ -327,6 +309,7 @@ function initializeLocalDatabase() {
       )
     `);
 
+    // 初期化完了
     isInitialized = true;
     console.log("ローカルDB初期化完了");
   });

@@ -125,8 +125,7 @@ try {
         checkPeriod: 86400000, // 24時間
       }),
       cookie: {
-        secure:
-          process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS, // 本番では HTTPS 必須
+        secure: false, // HTTPSでも一時的に無効化してテスト
         maxAge: 86400000, // 24時間
         httpOnly: true,
         sameSite: "lax",

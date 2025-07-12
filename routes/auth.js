@@ -43,17 +43,17 @@ router.get("/login", (req, res) => {
         <form method="POST" action="/auth/login">
           <div class="form-group">
             <label>Email:</label><br>
-            <input type="text" name="email" value="admin" required>
+            <input type="text" name="email" required>
           </div>
           <div class="form-group">
             <label>Password:</label><br>
-            <input type="password" name="password" value="admin" required>
+            <input type="password" name="password" required>
           </div>
           <div class="form-group">
             <button type="submit">ログイン</button>
           </div>
         </form>
-        <p><small>初期ログイン: admin / admin</small></p>
+        <p><a href="/auth/register">新規登録</a></p>
       </body>
       </html>
     `);
