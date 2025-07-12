@@ -288,6 +288,7 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
             }
           );
         }
+        return; // 重複データが存在する場合は、ここで処理を終了
       }
 
       db.run(
