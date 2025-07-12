@@ -111,14 +111,14 @@ try {
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret || sessionSecret === "emergency-fallback-secret-key") {
     console.warn("⚠️  SESSION_SECRETが未設定または危険なデフォルト値です");
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.NODE_ENV === "production" && !process.env.VERCEL_ENV) {
       throw new Error("本番環境では必ずSESSION_SECRETを設定してください");
     }
   }
 
   app.use(
     session({
-      secret: sessionSecret || "emergency-fallback-secret-key",
+      secret: sessionSecret || "emergency-fallback-secret-key-for-vercel",
       resave: false,
       saveUninitialized: false,
       store: new MemoryStore({
@@ -137,7 +137,7 @@ try {
   console.log("セッション設定完了");
 } catch (error) {
   console.error("セッション設定エラー:", error);
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && !process.env.VERCEL_ENV) {
     process.exit(1);
   }
 }

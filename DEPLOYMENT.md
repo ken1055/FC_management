@@ -23,7 +23,7 @@ Vercel ダッシュボードの「Settings」→「Environment Variables」で�
 
 | 変数名                 | 値の例                                  | 必須 | 説明                                |
 | ---------------------- | --------------------------------------- | ---- | ----------------------------------- |
-| `SESSION_SECRET`       | `super-secure-random-string-32-chars`   | ✅   | セッション暗号化キー（32 文字以上） |
+| `SESSION_SECRET`       | `Tn-0904-1021-1055-0117-0430-0904`      | ✅   | セッション暗号化キー（32 文字以上） |
 | `NODE_ENV`             | `production`                            | ✅   | 本番環境設定                        |
 | `ADMIN_PROMOTION_PASS` | `your-admin-promotion-password`         | 🔧   | 管理者昇格パスワード（推奨）        |
 | `SMTP_HOST`            | `smtp.gmail.com`                        | 📧   | メール送信設定（オプション）        |
