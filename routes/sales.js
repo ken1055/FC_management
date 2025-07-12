@@ -252,13 +252,42 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
     (err, existing) => {
       if (err) return res.status(500).send("DBエラー");
       if (existing) {
-        return res.render("sales_form", {
-          session: req.session,
-          agencies: [],
-          agencyName: null,
-          title: "売上登録",
-          error: "同じ年月の売上データが既に存在します",
-        });
+        // エラー時も代理店リストを再取得して渡す
+        if (req.session.user.role === "agency") {
+          // 代理店情報を取得
+          db.get(
+            "SELECT name FROM agencies WHERE id = ?",
+            [req.session.user.agency_id],
+            (err, agency) => {
+              if (err) return res.status(500).send("DBエラー");
+
+              return res.render("sales_form", {
+                session: req.session,
+                agencies: [],
+                agencyName: agency ? agency.name : "未設定",
+                title: "売上登録",
+                error: "同じ年月の売上データが既に存在します",
+              });
+            }
+          );
+        } else {
+          // 管理者は代理店一覧を取得
+          db.all(
+            "SELECT * FROM agencies ORDER BY name",
+            [],
+            (err, agencies) => {
+              if (err) return res.status(500).send("DBエラー");
+
+              return res.render("sales_form", {
+                session: req.session,
+                agencies,
+                agencyName: null,
+                title: "売上登録",
+                error: "同じ年月の売上データが既に存在します",
+              });
+            }
+          );
+        }
       }
 
       db.run(
