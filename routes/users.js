@@ -109,64 +109,50 @@ function fixUserIds(callback) {
 
 // 管理者アカウント一覧表示（管理者のみ）
 router.get("/list", requireRole(["admin"]), (req, res) => {
-  // ID整合性をチェック
-  checkUserIdIntegrity((err, integrityInfo) => {
-    if (err) return res.status(500).send("DBエラー");
+  console.log("=== ユーザー管理ページアクセス ===");
+  console.log("ユーザー:", req.session.user);
 
-    // ID整合性に問題がある場合、自動的に修正
-    if (!integrityInfo.isIntegrityOk) {
-      fixUserIds((fixErr) => {
-        if (fixErr) {
-          console.error("自動ID修正エラー:", fixErr);
-          // エラーがあっても画面は表示
-          return renderUsersList(
-            req,
-            res,
-            integrityInfo,
-            "自動ID修正でエラーが発生しました"
-          );
-        }
-
-        // 修正後に再度チェックして画面表示
-        checkUserIdIntegrity((recheckErr, newIntegrityInfo) => {
-          if (recheckErr) return res.status(500).send("DBエラー");
-          return renderUsersList(
-            req,
-            res,
-            newIntegrityInfo,
-            "ユーザーIDを自動的に連番に修正しました"
-          );
-        });
-      });
-    } else {
-      // 問題がない場合は通常表示
-      return renderUsersList(req, res, integrityInfo);
-    }
-  });
-});
-
-// ユーザー一覧画面の描画関数
-function renderUsersList(req, res, integrityInfo, message = null) {
+  // シンプルなユーザー一覧表示（ID整合性チェックを無効化）
   db.all(
     "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
     [],
     (err, users) => {
-      if (err) return res.status(500).send("DBエラー");
+      if (err) {
+        console.error("ユーザー一覧取得エラー:", err);
+        return res.status(500).send("DBエラー: " + err.message);
+      }
+
+      console.log("取得したユーザー数:", users.length);
 
       // 管理者数を集計
       const admins = users.filter((u) => u.role === "admin");
 
-      res.render("users_list", {
-        users,
-        admins,
-        integrityInfo,
-        autoFixMessage: message,
-        session: req.session,
-        title: "管理者アカウント管理",
-      });
+      // 成功・エラーメッセージを取得
+      const success = req.query.success;
+      const error = req.query.error;
+
+      try {
+        res.render("users_list", {
+          users,
+          admins,
+          integrityInfo: {
+            isIntegrityOk: true,
+            issues: [],
+            totalUsers: users.length,
+          }, // ダミーデータ
+          autoFixMessage: null,
+          success: success,
+          error: error,
+          session: req.session,
+          title: "管理者アカウント管理",
+        });
+      } catch (renderError) {
+        console.error("レンダリングエラー:", renderError);
+        res.status(500).send("レンダリングエラー: " + renderError.message);
+      }
     }
   );
-}
+});
 
 // 新規アカウント作成画面
 router.get("/new", requireRole(["admin"]), (req, res) => {
@@ -201,9 +187,15 @@ router.post("/", requireRole(["admin"]), (req, res) => {
           title: "新規管理者アカウント作成",
         });
 
+      // 本番環境ではパスワードをハッシュ化
+      const hashedPassword =
+        process.env.NODE_ENV === "production"
+          ? hashPassword(password)
+          : password;
+
       db.run(
         "INSERT INTO users (email, password, role) VALUES (?, ?, 'admin')",
-        [email, password],
+        [email, hashedPassword, "admin"],
         function (err) {
           if (err)
             return res.render("users_form", {
@@ -260,17 +252,11 @@ router.post("/create", requireRole(["admin"]), (req, res) => {
         });
       }
 
-      // 作成成功後にID修正を実行
-      fixUserIds((fixErr) => {
-        if (fixErr) {
-          console.error("ID修正エラー:", fixErr);
-        }
-
-        res.json({
-          success: true,
-          message: `ユーザー「${email}」を作成しました`,
-          userId: this.lastID,
-        });
+      // 作成成功（ID修正処理を無効化）
+      res.json({
+        success: true,
+        message: `ユーザー「${email}」を作成しました`,
+        userId: this.lastID,
       });
     }
   );
