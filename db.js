@@ -12,6 +12,16 @@ const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 const isRailway = process.env.RAILWAY_ENVIRONMENT_NAME;
 const databaseUrl = process.env.DATABASE_URL;
 
+// デバッグ情報を追加
+console.log("=== 環境変数デバッグ ===");
+console.log("DATABASE_URL:", databaseUrl ? "設定済み" : "未設定");
+console.log(
+  "DATABASE_URL (先頭50文字):",
+  databaseUrl ? databaseUrl.substring(0, 50) + "..." : "null"
+);
+console.log("RAILWAY_ENVIRONMENT_NAME:", isRailway);
+console.log("NODE_ENV:", process.env.NODE_ENV);
+
 let db;
 let isInitialized = false;
 let isPostgres = false;
