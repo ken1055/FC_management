@@ -382,6 +382,8 @@ function renderAgenciesList(
           searchQuery: searchQuery,
           integrityInfo,
           autoFixMessage: message,
+          success: req.query.success,
+          error: req.query.error,
           session: req.session,
           title: "代理店一覧",
         });
@@ -499,90 +501,72 @@ router.put("/:id", (req, res) => {
 
 // 新規登録（フォームPOST対応）
 router.post("/new", requireRole(["admin"]), (req, res) => {
-  const {
-    name,
-    age,
-    address,
-    bank_info,
-    experience_years,
-    contract_date,
-    start_date,
-    product_features,
-    products,
-    email,
-    password,
-    password_confirm,
-  } = req.body;
+  console.log("=== 新規登録処理開始 ===");
+  console.log("リクエストボディ:", req.body);
 
-  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
-  const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
-  const processedExperienceYears =
-    experience_years && experience_years.trim() !== ""
-      ? parseInt(experience_years)
-      : null;
-  const processedContractDate =
-    contract_date && contract_date.trim() !== "" ? contract_date : null;
-  const processedStartDate =
-    start_date && start_date.trim() !== "" ? start_date : null;
+  try {
+    const {
+      name,
+      age,
+      address,
+      bank_info,
+      experience_years,
+      contract_date,
+      start_date,
+      product_features,
+      products,
+      email,
+      password,
+      password_confirm,
+    } = req.body;
 
-  // パスワード確認
-  if (email && password && password !== password_confirm) {
-    return res.status(400).send("パスワードが一致しません");
-  }
+    // 必須フィールドのチェック
+    if (!name || name.trim() === "") {
+      return res.status(400).send("代理店名は必須です");
+    }
 
-  // メールアドレスの重複チェック
-  if (email) {
-    db.get(
-      "SELECT id FROM users WHERE email = ?",
-      [email],
-      (err, existingUser) => {
-        if (err) return res.status(500).send("DBエラー");
-        if (existingUser) {
-          return res
-            .status(400)
-            .send("このメールアドレスは既に使用されています");
+    // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+    const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
+    const processedExperienceYears =
+      experience_years && experience_years.trim() !== ""
+        ? parseInt(experience_years)
+        : null;
+    const processedContractDate =
+      contract_date && contract_date.trim() !== "" ? contract_date : null;
+    const processedStartDate =
+      start_date && start_date.trim() !== "" ? start_date : null;
+
+    // パスワード確認
+    if (email && password && password !== password_confirm) {
+      return res.status(400).send("パスワードが一致しません");
+    }
+
+    // メールアドレスの重複チェック
+    if (email) {
+      db.get(
+        "SELECT id FROM users WHERE email = ?",
+        [email],
+        (err, existingUser) => {
+          if (err) {
+            console.error("メールアドレス重複チェックエラー:", err);
+            return res.status(500).send("DBエラー");
+          }
+          if (existingUser) {
+            return res
+              .status(400)
+              .send("このメールアドレスは既に使用されています");
+          }
+
+          // 代理店とユーザーを作成
+          createAgencyWithUser();
         }
+      );
+    } else {
+      // メールアドレスが指定されていない場合は代理店のみ作成
+      createAgencyOnly();
+    }
 
-        // 代理店とユーザーを作成
-        createAgencyWithUser();
-      }
-    );
-  } else {
-    // メールアドレスが指定されていない場合は代理店のみ作成
-    createAgencyOnly();
-  }
-
-  function createAgencyOnly() {
-    db.run(
-      "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        name,
-        processedAge,
-        address,
-        bank_info,
-        processedExperienceYears,
-        processedContractDate,
-        processedStartDate,
-        product_features,
-      ],
-      function (err) {
-        if (err) {
-          console.error("代理店作成エラー:", err);
-          return res.status(500).send(`代理店作成エラー: ${err.message}`);
-        }
-
-        const agencyId = this.lastID;
-        saveProducts(agencyId);
-      }
-    );
-  }
-
-  function createAgencyWithUser() {
-    // パスワードをハッシュ化
-    bcrypt.hash(password, 10, (err, hashedPassword) => {
-      if (err) return res.status(500).send("パスワードハッシュ化エラー");
-
-      // 代理店を作成
+    function createAgencyOnly() {
       db.run(
         "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
@@ -602,85 +586,137 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
           }
 
           const agencyId = this.lastID;
-
-          // ユーザーアカウントを作成
-          db.run(
-            "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)",
-            [email, hashedPassword, "agency", agencyId],
-            function (err) {
-              if (err) {
-                console.error("ユーザー作成エラー:", err);
-
-                // PostgreSQL固有のエラーハンドリング
-                if (
-                  err.code === "23505" &&
-                  err.constraint === "users_email_key"
-                ) {
-                  return res
-                    .status(400)
-                    .send(
-                      `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
-                    );
-                }
-
-                return res
-                  .status(500)
-                  .send(`ユーザーアカウント作成エラー: ${err.message}`);
-              }
-
-              console.log(
-                `代理店ユーザーアカウント作成: ${email} (agency_id: ${agencyId})`
-              );
-              saveProducts(agencyId);
-            }
-          );
+          saveProducts(agencyId);
         }
       );
-    });
-  }
+    }
 
-  function saveProducts(agencyId) {
-    // 取り扱い商品を保存
-    if (products) {
-      const productList = Array.isArray(products) ? products : [products];
-      productList.forEach((product) => {
+    function createAgencyWithUser() {
+      // パスワードをハッシュ化
+      bcrypt.hash(password, 10, (err, hashedPassword) => {
+        if (err) return res.status(500).send("パスワードハッシュ化エラー");
+
+        // 代理店を作成
         db.run(
-          "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
-          [agencyId, product],
-          (err) => {
-            if (err) console.error("商品保存エラー:", err);
+          "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            name,
+            processedAge,
+            address,
+            bank_info,
+            processedExperienceYears,
+            processedContractDate,
+            processedStartDate,
+            product_features,
+          ],
+          function (err) {
+            if (err) {
+              console.error("代理店作成エラー:", err);
+              return res.status(500).send(`代理店作成エラー: ${err.message}`);
+            }
+
+            const agencyId = this.lastID;
+
+            // ユーザーアカウントを作成
+            db.run(
+              "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)",
+              [email, hashedPassword, "agency", agencyId],
+              function (err) {
+                if (err) {
+                  console.error("ユーザー作成エラー:", err);
+
+                  // PostgreSQL固有のエラーハンドリング
+                  if (
+                    err.code === "23505" &&
+                    err.constraint === "users_email_key"
+                  ) {
+                    return res
+                      .status(400)
+                      .send(
+                        `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
+                      );
+                  }
+
+                  return res
+                    .status(500)
+                    .send(`ユーザーアカウント作成エラー: ${err.message}`);
+                }
+
+                console.log(
+                  `代理店ユーザーアカウント作成: ${email} (agency_id: ${agencyId})`
+                );
+                saveProducts(agencyId);
+              }
+            );
           }
         );
       });
     }
 
-    // 代理店登録完了後にメール通知を送信
-    const agencyData = {
-      id: agencyId,
-      name,
-      age,
-      address,
-      bank_info,
-      experience_years,
-      contract_date,
-      start_date,
-      product_features,
-      email: email || null, // ユーザーアカウントのメールアドレス
-    };
+    function saveProducts(agencyId) {
+      console.log("=== saveProducts開始 ===");
+      console.log("agencyId:", agencyId);
 
-    const adminUser = {
-      email: req.session.user.email,
-      id: req.session.user.id,
-    };
+      // 取り扱い商品を保存
+      if (products) {
+        const productList = Array.isArray(products) ? products : [products];
+        console.log("保存する商品:", productList);
 
-    // 非同期でメール送信（エラーがあってもリダイレクトは継続）
-    sendAgencyRegistrationNotification(agencyData, adminUser, !!email).catch(
-      (error) => {
-        console.error("代理店登録通知メール送信エラー:", error);
+        productList.forEach((product) => {
+          db.run(
+            "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+            [agencyId, product],
+            (err) => {
+              if (err) console.error("商品保存エラー:", err);
+            }
+          );
+        });
       }
-    );
 
-    res.redirect("/agencies/list");
+      // 代理店登録完了後にメール通知を送信
+      const agencyData = {
+        id: agencyId,
+        name,
+        age,
+        address,
+        bank_info,
+        experience_years,
+        contract_date,
+        start_date,
+        product_features,
+        email: email || null, // ユーザーアカウントのメールアドレス
+      };
+
+      const adminUser = {
+        email: req.session.user.email,
+        id: req.session.user.id,
+      };
+
+      console.log("メール通知送信開始");
+      // 非同期でメール送信（エラーがあってもリダイレクトは継続）
+      sendAgencyRegistrationNotification(agencyData, adminUser, !!email).catch(
+        (error) => {
+          console.error("代理店登録通知メール送信エラー:", error);
+        }
+      );
+
+      console.log("代理店登録完了、リダイレクト実行: /agencies/list");
+
+      try {
+        res.redirect(
+          "/agencies/list?success=" +
+            encodeURIComponent(`代理店「${name}」を登録しました`)
+        );
+      } catch (redirectError) {
+        console.error("リダイレクトエラー:", redirectError);
+        res
+          .status(500)
+          .send("登録は完了しましたが、リダイレクトでエラーが発生しました");
+      }
+    }
+  } catch (error) {
+    console.error("新規登録エラー:", error);
+    res.status(500).send("エラーが発生しました: " + error.message);
   }
 });
 
@@ -748,7 +784,10 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
         }
       );
 
-      res.redirect("/agencies/list");
+      res.redirect(
+        "/agencies/list?success=" +
+          encodeURIComponent(`代理店「${name}」を更新しました`)
+      );
     }
   );
 });
