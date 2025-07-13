@@ -295,16 +295,25 @@ function renderAgenciesList(
       return res.status(500).send("DBエラー: " + err.message);
     }
 
+    // データベースタイプに応じた集約関数を選択
+    const isPostgres =
+      process.env.DATABASE_URL &&
+      (process.env.RAILWAY_ENVIRONMENT_NAME ||
+        process.env.NODE_ENV === "production");
+    const aggregateFunction = isPostgres
+      ? "STRING_AGG(ap.product_name, ', ')"
+      : "GROUP_CONCAT(ap.product_name, ', ')";
+
     let query = `
-      SELECT 
-        a.*,
-        g.name as group_name,
-        GROUP_CONCAT(ap.product_name, ', ') as product_names
-      FROM agencies a 
-      LEFT JOIN group_agency ga ON a.id = ga.agency_id 
-      LEFT JOIN groups g ON ga.group_id = g.id
-      LEFT JOIN agency_products ap ON a.id = ap.agency_id
-    `;
+    SELECT 
+      a.*,
+      g.name as group_name,
+      ${aggregateFunction} as product_names
+    FROM agencies a 
+    LEFT JOIN group_agency ga ON a.id = ga.agency_id 
+    LEFT JOIN groups g ON ga.group_id = g.id
+    LEFT JOIN agency_products ap ON a.id = ap.agency_id
+  `;
     let params = [];
     let conditions = [];
 
