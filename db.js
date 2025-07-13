@@ -7,20 +7,41 @@ function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-// Vercel環境の検出
+// 環境の検出
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+const isRailway = process.env.RAILWAY_ENVIRONMENT_NAME;
+const databaseUrl = process.env.DATABASE_URL;
 
 let db;
 let isInitialized = false;
+let isPostgres = false;
 
 // 高速な初期化フラグ
 const FAST_INIT = isVercel; // Vercel環境では高速初期化
 
 console.log("=== データベース初期化開始 ===");
-console.log("Environment:", { isVercel, FAST_INIT });
+console.log("Environment:", {
+  isVercel,
+  isRailway,
+  databaseUrl: !!databaseUrl,
+  FAST_INIT,
+});
 
 try {
-  if (isVercel) {
+  if (databaseUrl && (isRailway || process.env.NODE_ENV === "production")) {
+    // PostgreSQL接続（Railway本番環境）
+    console.log("PostgreSQL環境: 本番データベースを使用");
+    const { Pool } = require("pg");
+    db = new Pool({
+      connectionString: databaseUrl,
+      ssl:
+        process.env.NODE_ENV === "production"
+          ? { rejectUnauthorized: false }
+          : false,
+    });
+    isPostgres = true;
+    initializePostgresDatabase();
+  } else if (isVercel) {
     // Vercel環境では常にメモリDBを使用（高速）
     console.log("Vercel環境: メモリDBを使用");
     db = new sqlite3.Database(":memory:");
@@ -28,7 +49,21 @@ try {
   } else {
     // ローカル環境では通常通り
     console.log("ローカル環境: 通常のデータベース接続");
-    db = new sqlite3.Database("./agency.db");
+
+    // Railway環境でも永続化されるパスを使用
+    const dbPath = isRailway ? "/app/data/agency.db" : "./agency.db";
+
+    // Railway環境では/app/dataディレクトリを作成
+    if (isRailway) {
+      const fs = require("fs");
+      const path = require("path");
+      const dbDir = path.dirname(dbPath);
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
+    }
+
+    db = new sqlite3.Database(dbPath);
     initializeLocalDatabase();
   }
 } catch (error) {
@@ -36,6 +71,102 @@ try {
   // エラー時はメモリDBにフォールバック
   db = new sqlite3.Database(":memory:");
   initializeInMemoryDatabase();
+}
+
+function initializePostgresDatabase() {
+  console.log("PostgreSQL初期化中...");
+  const startTime = Date.now();
+
+  // PostgreSQL用のテーブル作成SQL
+  const createTables = async () => {
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
+        agency_id INTEGER REFERENCES agencies(id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS agencies (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        age INTEGER,
+        address TEXT,
+        bank_info TEXT,
+        experience_years INTEGER,
+        contract_date DATE,
+        start_date DATE,
+        product_features TEXT
+      )`,
+      `CREATE TABLE IF NOT EXISTS agency_products (
+        agency_id INTEGER REFERENCES agencies(id),
+        product_name TEXT,
+        PRIMARY KEY (agency_id, product_name)
+      )`,
+      `CREATE TABLE IF NOT EXISTS product_files (
+        id SERIAL PRIMARY KEY,
+        agency_id INTEGER REFERENCES agencies(id),
+        product_name TEXT,
+        file_path TEXT,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS sales (
+        id SERIAL PRIMARY KEY,
+        agency_id INTEGER REFERENCES agencies(id),
+        year INTEGER,
+        month INTEGER,
+        amount INTEGER
+      )`,
+      `CREATE TABLE IF NOT EXISTS groups (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS group_agency (
+        group_id INTEGER REFERENCES groups(id),
+        agency_id INTEGER REFERENCES agencies(id),
+        PRIMARY KEY (group_id, agency_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS group_admin (
+        group_id INTEGER REFERENCES groups(id),
+        admin_id INTEGER REFERENCES users(id),
+        PRIMARY KEY (group_id, admin_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS materials (
+        id SERIAL PRIMARY KEY,
+        filename TEXT NOT NULL,
+        originalname TEXT NOT NULL,
+        mimetype TEXT NOT NULL,
+        description TEXT,
+        agency_id INTEGER REFERENCES agencies(id),
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+    ];
+
+    try {
+      for (const sql of tables) {
+        await db.query(sql);
+      }
+
+      // 管理者アカウントの作成
+      const adminPassword =
+        process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
+
+      await db.query(
+        `INSERT INTO users (email, password, role) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING`,
+        ["admin", adminPassword, "admin"]
+      );
+
+      console.log("管理者アカウント作成完了");
+      isInitialized = true;
+      const duration = Date.now() - startTime;
+      console.log(`PostgreSQL初期化完了: ${duration}ms`);
+    } catch (error) {
+      console.error("PostgreSQL初期化エラー:", error);
+      isInitialized = true; // エラーでも続行
+    }
+  };
+
+  createTables();
 }
 
 function initializeInMemoryDatabase() {
@@ -329,30 +460,91 @@ function waitForInitialization(callback, timeout = 5000) {
   }, 100);
 }
 
+// PostgreSQL用のクエリ変換関数
+function convertSqlToPostgres(sql) {
+  // SQLiteの?をPostgreSQLの$1, $2, ...に変換
+  let paramIndex = 1;
+  return sql.replace(/\?/g, () => `$${paramIndex++}`);
+}
+
 // データベースオブジェクトをラップして初期化を待つ
 const dbWrapper = {
   get: (sql, params, callback) => {
-    waitForInitialization((err) => {
+    waitForInitialization(async (err) => {
       if (err) return callback(err);
-      db.get(sql, params, callback);
+
+      if (isPostgres) {
+        try {
+          const convertedSql = convertSqlToPostgres(sql);
+          const result = await db.query(convertedSql, params);
+          callback(null, result.rows[0] || null);
+        } catch (error) {
+          callback(error);
+        }
+      } else {
+        db.get(sql, params, callback);
+      }
     });
   },
+
   run: (sql, params, callback) => {
-    waitForInitialization((err) => {
+    waitForInitialization(async (err) => {
       if (err) return callback(err);
-      db.run(sql, params, callback);
+
+      if (isPostgres) {
+        try {
+          let convertedSql = convertSqlToPostgres(sql);
+
+          // INSERT文の場合はRETURNING idを追加
+          if (convertedSql.toLowerCase().includes("insert into")) {
+            convertedSql += " RETURNING id";
+          }
+
+          const result = await db.query(convertedSql, params);
+
+          // SQLiteのthis.lastIDを模倣
+          const mockThis = {
+            lastID: result.rows[0] ? result.rows[0].id : null,
+            changes: result.rowCount,
+          };
+          callback.call(mockThis, null);
+        } catch (error) {
+          callback(error);
+        }
+      } else {
+        db.run(sql, params, callback);
+      }
     });
   },
+
   all: (sql, params, callback) => {
-    waitForInitialization((err) => {
+    waitForInitialization(async (err) => {
       if (err) return callback(err);
-      db.all(sql, params, callback);
+
+      if (isPostgres) {
+        try {
+          const convertedSql = convertSqlToPostgres(sql);
+          const result = await db.query(convertedSql, params);
+          callback(null, result.rows);
+        } catch (error) {
+          callback(error);
+        }
+      } else {
+        db.all(sql, params, callback);
+      }
     });
   },
+
   serialize: (callback) => {
     waitForInitialization((err) => {
       if (err) return callback(err);
-      db.serialize(callback);
+
+      if (isPostgres) {
+        // PostgreSQLでは直接実行
+        callback();
+      } else {
+        db.serialize(callback);
+      }
     });
   },
 };

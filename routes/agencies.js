@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const {
   sendProfileRegistrationNotification,
   sendProfileUpdateNotification,
+  sendAgencyRegistrationNotification, // 新規追加
   getAdminEmails,
 } = require("../config/email");
 
@@ -16,6 +17,69 @@ function requireRole(roles) {
     next();
   };
 }
+
+// 代理店登録通知メールテスト（管理者のみ）
+router.post(
+  "/test-registration-email",
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      // 管理者メールアドレス一覧を取得
+      const adminEmails = getAdminEmails();
+
+      // テスト用のダミー代理店データ
+      const testAgencyData = {
+        id: 999,
+        name: "テスト代理店株式会社",
+        age: 35,
+        address: "東京都新宿区テスト町1-2-3 テストビル4階",
+        bank_info: "テスト銀行 普通 1234567 テスト代理店",
+        experience_years: 8,
+        contract_date: "2024-01-01",
+        start_date: "2024-01-15",
+        product_features:
+          "これは代理店登録通知メールのテストです。高品質な商品を取り扱っています。",
+        email: "test-agency@example.com", // テスト用メールアドレス
+      };
+
+      const testAdminUser = {
+        email: req.session.user.email,
+        id: req.session.user.id,
+      };
+
+      // テストメール送信（ユーザーアカウントありの場合）
+      const result = await sendAgencyRegistrationNotification(
+        testAgencyData,
+        testAdminUser,
+        true // hasUserAccount = true
+      );
+
+      if (result) {
+        res.json({
+          success: true,
+          message: `代理店登録通知テストメールが正常に送信されました。${adminEmails.length}件の管理者メールアドレスに送信しました。`,
+          adminEmails: adminEmails,
+          testData: {
+            agencyName: testAgencyData.name,
+            hasUserAccount: true,
+          },
+        });
+      } else {
+        res.json({
+          success: false,
+          message: "メール送信に失敗しました。サーバーログを確認してください。",
+          adminEmails: adminEmails,
+        });
+      }
+    } catch (error) {
+      console.error("代理店登録通知テストメール送信エラー:", error);
+      res.json({
+        success: false,
+        message: "エラーが発生しました: " + error.message,
+      });
+    }
+  }
+);
 
 // メール設定テスト（管理者のみ）
 router.post("/test-email", requireRole(["admin"]), async (req, res) => {
@@ -528,6 +592,32 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
         );
       });
     }
+
+    // 代理店登録完了後にメール通知を送信
+    const agencyData = {
+      id: agencyId,
+      name,
+      age,
+      address,
+      bank_info,
+      experience_years,
+      contract_date,
+      start_date,
+      product_features,
+      email: email || null, // ユーザーアカウントのメールアドレス
+    };
+
+    const adminUser = {
+      email: req.session.user.email,
+      id: req.session.user.id,
+    };
+
+    // 非同期でメール送信（エラーがあってもリダイレクトは継続）
+    sendAgencyRegistrationNotification(agencyData, adminUser, !!email).catch(
+      (error) => {
+        console.error("代理店登録通知メール送信エラー:", error);
+      }
+    );
 
     res.redirect("/agencies/list");
   }

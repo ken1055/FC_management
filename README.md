@@ -86,6 +86,69 @@ npm start
 - **Email**: Nodemailer
 - **UI Framework**: Bootstrap 5 + Bootstrap Icons
 
+## 🗄️ データベース永続化（重要）
+
+### 問題
+
+現在のシステムは SQLite を使用していますが、Railway などのクラウド環境では再デプロイのたびにデータが消えてしまいます。
+
+### 解決策
+
+#### 1. PostgreSQL への移行（推奨）
+
+**Railway 環境での設定:**
+
+1. Railway ダッシュボードを開く: `railway open`
+2. 「Add Service」→「Database」→「PostgreSQL」を選択
+3. PostgreSQL サービスが作成されると、自動的に`DATABASE_URL`環境変数が設定される
+4. アプリケーションを再デプロイ: `railway up`
+
+**手動で DATABASE_URL を設定する場合:**
+
+```bash
+# Railwayダッシュボードの環境変数設定で以下を追加
+DATABASE_URL=postgresql://username:password@host:port/database
+```
+
+#### 2. 永続ボリュームの使用（一時的解決策）
+
+現在のコードは以下の設定で永続ボリュームを使用します：
+
+- SQLite ファイルパス: `/app/data/agency.db`
+- ボリューム名: `agency-data`
+- マウントパス: `/app/data`
+
+**railway.toml 設定:**
+
+```toml
+[[deploy.volumes]]
+mountPath = "/app/data"
+name = "agency-data"
+```
+
+#### 3. データベース環境の確認
+
+アプリケーション起動時のログで使用されているデータベースを確認できます：
+
+- `PostgreSQL環境: 本番データベースを使用` → PostgreSQL 使用中
+- `ローカル環境: 通常のデータベース接続` → SQLite 使用中
+
+### データベース移行後の確認事項
+
+1. **データの永続化確認**
+
+   - 代理店、ユーザー、売上データの登録
+   - アプリケーション再デプロイ後のデータ保持確認
+
+2. **パフォーマンス向上**
+
+   - PostgreSQL による高速なクエリ実行
+   - 同時接続数の向上
+
+3. **バックアップ機能**
+   - PostgreSQL の自動バックアップ機能
+   - データ復旧機能の利用
+
 ## 📁 プロジェクト構造
 
 ```
@@ -196,4 +259,5 @@ npm start
 ## 📄 ライセンス
 
 MIT License
+
 # 最終更新: #午後

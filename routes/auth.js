@@ -2,19 +2,31 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 
-// パスワードハッシュ化関数
+// パスワードハッシュ化関数（後方互換性のため保持）
 function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-// 開発環境での簡易認証（本番では削除推奨）
+// 改善されたパスワード認証関数
 function verifyPassword(inputPassword, storedPassword) {
+  // bcryptハッシュかどうかを判定（bcryptハッシュは$2b$で始まる）
+  if (storedPassword.startsWith("$2b$") || storedPassword.startsWith("$2a$")) {
+    try {
+      return bcrypt.compareSync(inputPassword, storedPassword);
+    } catch (error) {
+      console.error("bcrypt認証エラー:", error);
+      return false;
+    }
+  }
+
   // プレーンテキストの場合（開発・デバッグ用）
   if (inputPassword === storedPassword) {
     return true;
   }
-  // ハッシュ化されたパスワードの場合
+
+  // SHA256ハッシュ化されたパスワードの場合（後方互換性）
   return hashPassword(inputPassword) === storedPassword;
 }
 
@@ -178,30 +190,38 @@ router.post("/register", (req, res) => {
     let agency_id = null;
     if (role === "agency") agency_id = null;
 
-    // 本番環境ではパスワードをハッシュ化
-    const hashedPassword =
-      process.env.NODE_ENV === "production" ? hashPassword(password) : password;
-
-    const dbInsert =
-      role === "agency"
-        ? "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)"
-        : "INSERT INTO users (email, password, role) VALUES (?, ?, ?)";
-    const params =
-      role === "agency"
-        ? [email, hashedPassword, role, agency_id]
-        : [email, hashedPassword, role];
-
-    db.run(dbInsert, params, function (err) {
+    // bcryptでパスワードをハッシュ化
+    bcrypt.hash(password, 10, (err, hashedPassword) => {
       if (err) {
-        console.error("Registration error:", err);
+        console.error("パスワードハッシュ化エラー:", err);
         return res.send(`
           <h1>登録エラー</h1>
-          <p>登録に失敗しました: ${err.message}</p>
+          <p>パスワードのハッシュ化に失敗しました</p>
           <a href="/auth/register">登録に戻る</a>
         `);
       }
-      console.log("User registered successfully");
-      res.redirect("/auth/login");
+
+      const dbInsert =
+        role === "agency"
+          ? "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)"
+          : "INSERT INTO users (email, password, role) VALUES (?, ?, ?)";
+      const params =
+        role === "agency"
+          ? [email, hashedPassword, role, agency_id]
+          : [email, hashedPassword, role];
+
+      db.run(dbInsert, params, function (err) {
+        if (err) {
+          console.error("Registration error:", err);
+          return res.send(`
+            <h1>登録エラー</h1>
+            <p>登録に失敗しました: ${err.message}</p>
+            <a href="/auth/register">登録に戻る</a>
+          `);
+        }
+        console.log("User registered successfully");
+        res.redirect("/auth/login");
+      });
     });
   } catch (error) {
     console.error("Registration process error:", error);

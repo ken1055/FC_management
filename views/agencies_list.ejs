@@ -78,9 +78,14 @@
 <div class="card shadow-sm p-4 mb-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">代理店一覧</h1>
-    <a href="/agencies/new" class="btn btn-success">
-      <i class="bi bi-person-plus"></i> 新規登録
-    </a>
+    <div>
+      <button type="button" class="btn btn-outline-info me-2" onclick="testRegistrationEmail()">
+        <i class="bi bi-envelope-check"></i> 登録通知テスト
+      </button>
+      <a href="/agencies/new" class="btn btn-success">
+        <i class="bi bi-person-plus"></i> 新規登録
+      </a>
+    </div>
   </div>
 
   <!-- 成功・エラーメッセージ -->
@@ -308,5 +313,83 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// 代理店登録通知メールテスト機能
+function testRegistrationEmail() {
+  const button = event.target;
+  const originalText = button.innerHTML;
+  
+  // ボタンを無効化してローディング表示
+  button.disabled = true;
+  button.innerHTML = '<i class="bi bi-hourglass-split"></i> 送信中...';
+  
+  fetch('/agencies/test-registration-email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+  .then(response => response.json())
+  .then(data => {
+    // ボタンを復元
+    button.disabled = false;
+    button.innerHTML = originalText;
+    
+    if (data.success) {
+      // 成功メッセージを表示
+      showAlert('success', `
+        <strong>テストメール送信成功!</strong><br>
+        ${data.message}<br>
+        <small>送信先: ${data.adminEmails.join(', ')}</small>
+      `);
+    } else {
+      // エラーメッセージを表示
+      showAlert('danger', `
+        <strong>テストメール送信失敗</strong><br>
+        ${data.message}
+      `);
+    }
+  })
+  .catch(error => {
+    // ボタンを復元
+    button.disabled = false;
+    button.innerHTML = originalText;
+    
+    console.error('Error:', error);
+    showAlert('danger', `
+      <strong>エラーが発生しました</strong><br>
+      ネットワークエラーまたはサーバーエラーです。
+    `);
+  });
+}
+
+// アラート表示機能
+function showAlert(type, message) {
+  // 既存のアラートを削除
+  const existingAlerts = document.querySelectorAll('.alert-test');
+  existingAlerts.forEach(alert => alert.remove());
+  
+  // 新しいアラートを作成
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show alert-test`;
+  alertDiv.innerHTML = `
+    <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  
+  // ページの先頭に挿入
+  const container = document.querySelector('.container');
+  const firstChild = container.firstElementChild;
+  container.insertBefore(alertDiv, firstChild);
+  
+  // 5秒後に自動で消去
+  setTimeout(() => {
+    if (alertDiv.parentNode) {
+      alertDiv.remove();
+    }
+  }, 5000);
+}
+</script>
   </body>
 </html> 

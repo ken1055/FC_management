@@ -4,9 +4,67 @@ const db = require("../db");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const iconv = require("iconv-lite");
 
 const uploadDir = path.join(__dirname, "../uploads/materials");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+// ファイル名のエンコーディング処理関数
+function sanitizeFilename(filename) {
+  // 日本語文字を含むファイル名を適切にエンコード
+  try {
+    let decoded = filename;
+
+    // 複数のエンコーディングを試行
+    const encodings = ["utf8", "latin1", "iso-8859-1", "cp1252"];
+
+    for (const encoding of encodings) {
+      try {
+        // Buffer.from でバイト配列に変換し、iconv-liteで適切にデコード
+        const buffer = Buffer.from(filename, encoding);
+        const utf8String = iconv.decode(buffer, "utf8");
+
+        // 日本語文字が含まれているかチェック
+        if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(utf8String)) {
+          decoded = utf8String;
+          break;
+        }
+      } catch (e) {
+        // このエンコーディングでは失敗、次を試行
+        continue;
+      }
+    }
+
+    // latin1からutf8への変換を試行（一般的なケース）
+    if (decoded === filename) {
+      try {
+        const buffer = Buffer.from(filename, "latin1");
+        decoded = buffer.toString("utf8");
+      } catch (e) {
+        console.warn("ファイル名エンコーディング変換失敗:", e.message);
+      }
+    }
+
+    // ファイル名に使用できない文字を置換
+    const sanitized = decoded
+      .replace(/[<>:"/\\|?*]/g, "_") // 不正文字を_に置換
+      .replace(/\s+/g, "_") // 連続する空白を_に置換
+      .replace(/\u0000/g, "") // NULL文字を削除
+      .substring(0, 200); // ファイル名の長さを制限
+
+    console.log("ファイル名変換:", {
+      original: filename,
+      decoded: decoded,
+      sanitized: sanitized,
+    });
+
+    return sanitized;
+  } catch (error) {
+    console.error("ファイル名エンコーディングエラー:", error);
+    // エラーの場合は元のファイル名を使用
+    return filename.replace(/[<>:"/\\|?*]/g, "_").substring(0, 200);
+  }
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -14,8 +72,21 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const filename = Date.now() + "-" + file.originalname;
+    // 元のファイル名を適切にエンコード
+    const originalName = sanitizeFilename(file.originalname);
+    const timestamp = Date.now();
+
+    // 拡張子を取得
+    const ext = path.extname(originalName);
+    const nameWithoutExt = path.basename(originalName, ext);
+
+    // タイムスタンプ + 元のファイル名 + 拡張子
+    const filename = `${timestamp}-${nameWithoutExt}${ext}`;
+
+    console.log("元のファイル名:", file.originalname);
+    console.log("エンコード後ファイル名:", originalName);
     console.log("生成されたファイル名:", filename);
+
     cb(null, filename);
   },
 });
@@ -153,12 +224,15 @@ router.post(
     const agency_id = req.params.agency_id;
     const description = req.body.description || "";
 
+    // 元のファイル名を適切にエンコード
+    const originalName = sanitizeFilename(req.file.originalname);
+
     console.log("データベースに保存開始...");
     db.run(
       "INSERT INTO materials (filename, originalname, mimetype, description, agency_id) VALUES (?, ?, ?, ?, ?)",
       [
         req.file.filename,
-        req.file.originalname,
+        originalName, // エンコード済みのファイル名を使用
         req.file.mimetype,
         description,
         agency_id,
@@ -172,7 +246,7 @@ router.post(
         console.log("ファイルアップロード成功:", {
           id: this.lastID,
           filename: req.file.filename,
-          originalname: req.file.originalname,
+          originalname: originalName, // エンコード済みのファイル名を表示
           agency_id: agency_id,
         });
 
