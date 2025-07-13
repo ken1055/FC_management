@@ -63,13 +63,16 @@ function fixUserIds(callback) {
 
       if (users.length === 0) return callback(null);
 
-      // データベースタイプを判定（DATABASE_URLが設定されていればPostgreSQL）
-      const isPostgres = !!process.env.DATABASE_URL;
+      // データベースタイプを判定
+      // SQLiteを明示的に指定した場合のみSQLite用処理を使用
+      const forceSQLite = process.env.FORCE_SQLITE === "true";
+      const isPostgres = !forceSQLite; // デフォルトでPostgreSQL用処理を使用
 
       console.log("ユーザーID修正 - データベースタイプ判定:", {
         DATABASE_URL: !!process.env.DATABASE_URL,
         RAILWAY_ENVIRONMENT_NAME: !!process.env.RAILWAY_ENVIRONMENT_NAME,
         NODE_ENV: process.env.NODE_ENV,
+        FORCE_SQLITE: process.env.FORCE_SQLITE,
         isPostgres: isPostgres,
       });
 
@@ -108,203 +111,153 @@ function fixUserIdsPostgres(users, callback) {
 
   console.log("ID修正が必要なユーザーを検出、修正処理を開始...");
 
-  // トランザクション開始
-  db.run("BEGIN", (err) => {
-    if (err) {
-      console.error("トランザクション開始エラー:", err);
-      return callback(err);
-    }
-
-    console.log("トランザクション開始");
-
-    // 各ユーザーのIDを順次修正
-    let completed = 0;
-    let hasError = false;
-
-    users.forEach((user, index) => {
-      const newId = index + 1;
-
-      if (user.id === newId) {
-        completed++;
-        if (completed === users.length && !hasError) {
-          completeTransaction();
-        }
-        return;
+  // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
+  db.run(
+    "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
+    (err) => {
+      if (err) {
+        console.error("一時テーブル作成エラー:", err);
+        return callback(err);
       }
 
-      console.log(`ユーザーID修正開始: ${user.id} → ${newId} (${user.email})`);
+      console.log("一時テーブル作成成功");
 
-      // 一時的に負のIDに変更して競合を回避
-      const tempId = -(user.id + 1000000); // 大きな負の値を使用
+      // 元のユーザーデータを削除
+      db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
+        if (err) {
+          console.error("ユーザーデータ削除エラー:", err);
+          return callback(err);
+        }
 
-      // Step 1: ユーザーを一時IDに変更
-      db.run(
-        "UPDATE users SET id = ? WHERE id = ?",
-        [tempId, user.id],
-        (err) => {
-          if (err) {
-            console.error("一時ID更新エラー:", err);
-            hasError = true;
-            return rollbackTransaction(err);
-          }
+        console.log("ユーザーデータ削除完了");
 
-          console.log(`ユーザーを一時ID ${tempId} に変更: ${user.email}`);
+        // 新しいIDで再挿入
+        let completed = 0;
+        let hasError = false;
 
-          // Step 2: 関連テーブルを一時IDに更新
-          updateRelatedTablesToTempId(user.id, tempId, (err) => {
-            if (err) {
-              hasError = true;
-              return rollbackTransaction(err);
-            }
+        users.forEach((user, index) => {
+          if (hasError) return;
 
-            // Step 3: ユーザーを最終IDに更新
-            db.run(
-              "UPDATE users SET id = ? WHERE id = ?",
-              [newId, tempId],
-              (err) => {
-                if (err) {
-                  console.error("最終ID更新エラー:", err);
-                  hasError = true;
-                  return rollbackTransaction(err);
-                }
+          const newId = index + 1;
+          console.log(`ユーザーID修正: ${user.id} → ${newId} (${user.email})`);
 
-                console.log(`ユーザーを最終ID ${newId} に変更: ${user.email}`);
+          db.run(
+            "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
+            [newId, user.id],
+            function (err) {
+              if (err) {
+                console.error("ユーザーID修正エラー:", err);
+                hasError = true;
+                return callback(err);
+              }
 
-                // Step 4: 関連テーブルを最終IDに更新
-                updateRelatedTablesToFinalId(tempId, newId, (err) => {
+              console.log(
+                `ユーザー ${user.email} のID修正完了: ${user.id} → ${newId}`
+              );
+
+              // 関連テーブルのadmin_idも更新
+              db.run(
+                "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_users WHERE id = ?)",
+                [newId, user.id],
+                (err) => {
                   if (err) {
+                    console.error("group_admin テーブル更新エラー:", err);
                     hasError = true;
-                    return rollbackTransaction(err);
+                    return callback(err);
                   }
+
+                  console.log(
+                    `group_admin テーブル更新完了: ${user.id} → ${newId}`
+                  );
 
                   completed++;
                   console.log(
-                    `ユーザーID修正完了: ${user.id} → ${newId} (${user.email})`
+                    `ユーザーID修正完了: ${user.id} → ${newId} (${user.email}) [${completed}/${users.length}]`
                   );
 
                   if (completed === users.length && !hasError) {
-                    completeTransaction();
+                    // 一時テーブルを削除
+                    db.run("DROP TABLE temp_users", (err) => {
+                      if (err) {
+                        console.error("一時テーブル削除エラー:", err);
+                      } else {
+                        console.log("一時テーブル削除完了");
+                      }
+
+                      // PostgreSQL用のシーケンスリセット（試行）
+                      resetPostgreSQLUserSequence(users.length, () => {
+                        console.log("ユーザーID修正完了（PostgreSQL）");
+                        callback(null);
+                      });
+                    });
                   }
-                });
-              }
-            );
-          });
-        }
-      );
-    });
+                }
+              );
+            }
+          );
+        });
+      });
+    }
+  );
 
-    // 関連テーブルを一時IDに更新する関数
-    function updateRelatedTablesToTempId(originalId, tempId, callback) {
-      const updates = [{ table: "group_admin", column: "admin_id" }];
+  // PostgreSQL用のシーケンスリセット関数
+  function resetPostgreSQLUserSequence(maxId, callback) {
+    console.log("PostgreSQLユーザーシーケンスリセット試行中...");
 
-      let updateCompleted = 0;
-      let updateError = null;
-
-      if (updates.length === 0) {
-        return callback(null);
-      }
-
-      updates.forEach(({ table, column }) => {
+    // 複数のシーケンスリセット方法を試行
+    const resetMethods = [
+      // 方法1: 動的シーケンス名取得
+      () => {
         db.run(
-          `UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`,
-          [tempId, originalId],
+          "SELECT setval((SELECT pg_get_serial_sequence('users', 'id')), ?, false)",
+          [maxId],
           (err) => {
             if (err) {
-              console.error(`${table}テーブルの一時ID更新エラー:`, err);
-              updateError = err;
+              console.log("ユーザーシーケンスリセット方法1失敗:", err.message);
+              tryMethod2();
             } else {
-              console.log(`${table}テーブルを一時ID ${tempId} に更新`);
-            }
-
-            updateCompleted++;
-            if (updateCompleted === updates.length) {
-              callback(updateError);
+              console.log(`ユーザーシーケンスリセット方法1成功: ${maxId}`);
+              callback();
             }
           }
         );
-      });
-    }
-
-    // 関連テーブルを最終IDに更新する関数
-    function updateRelatedTablesToFinalId(tempId, finalId, callback) {
-      const updates = [{ table: "group_admin", column: "admin_id" }];
-
-      let updateCompleted = 0;
-      let updateError = null;
-
-      if (updates.length === 0) {
-        return callback(null);
-      }
-
-      updates.forEach(({ table, column }) => {
-        db.run(
-          `UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`,
-          [finalId, tempId],
-          (err) => {
-            if (err) {
-              console.error(`${table}テーブルの最終ID更新エラー:`, err);
-              updateError = err;
-            } else {
-              console.log(`${table}テーブルを最終ID ${finalId} に更新`);
-            }
-
-            updateCompleted++;
-            if (updateCompleted === updates.length) {
-              callback(updateError);
-            }
-          }
-        );
-      });
-    }
-
-    // トランザクション完了
-    function completeTransaction() {
-      console.log("ユーザーID修正完了、シーケンスをリセット中...");
-
-      // PostgreSQLのシーケンスをリセット（動的にシーケンス名を取得）
-      db.run(
-        `
-        SELECT setval(
-          (SELECT pg_get_serial_sequence('users', 'id')), 
-          ?, 
-          false
-        )
-      `,
-        [users.length],
-        (err) => {
+      },
+      // 方法2: 固定シーケンス名
+      () => {
+        db.run("SELECT setval('users_id_seq', ?, false)", [maxId], (err) => {
           if (err) {
-            console.error("シーケンスリセットエラー:", err);
-            console.log("シーケンスリセットエラーを無視して処理を続行");
+            console.log("ユーザーシーケンスリセット方法2失敗:", err.message);
+            tryMethod3();
           } else {
-            console.log(`ユーザーシーケンスを${users.length}にリセット`);
+            console.log(`ユーザーシーケンスリセット方法2成功: ${maxId}`);
+            callback();
           }
-
-          // トランザクションをコミット
-          db.run("COMMIT", (err) => {
+        });
+      },
+      // 方法3: SQLiteのシーケンステーブル更新（互換性のため）
+      () => {
+        db.run(
+          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
+          [maxId],
+          (err) => {
             if (err) {
-              console.error("トランザクションコミットエラー:", err);
-              return rollbackTransaction(err);
+              console.log("ユーザーシーケンスリセット方法3失敗:", err.message);
+            } else {
+              console.log(`ユーザーシーケンスリセット方法3成功: ${maxId}`);
             }
+            // エラーがあってもcallbackを呼ぶ
+            callback();
+          }
+        );
+      },
+    ];
 
-            console.log("ユーザーID修正完了（PostgreSQL）");
-            callback(null);
-          });
-        }
-      );
-    }
+    const tryMethod1 = resetMethods[0];
+    const tryMethod2 = resetMethods[1];
+    const tryMethod3 = resetMethods[2];
 
-    // トランザクションロールバック
-    function rollbackTransaction(error) {
-      console.error("エラーが発生、トランザクションをロールバック:", error);
-
-      db.run("ROLLBACK", (rollbackErr) => {
-        if (rollbackErr) {
-          console.error("ロールバックエラー:", rollbackErr);
-        }
-        callback(error);
-      });
-    }
-  });
+    tryMethod1();
+  }
 }
 
 // SQLite用のID修正処理
@@ -315,42 +268,89 @@ function fixUserIdsSQLite(users, callback) {
   db.run(
     "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
     (err) => {
-      if (err) return callback(err);
+      if (err) {
+        console.error("一時テーブル作成エラー:", err);
+        return callback(err);
+      }
+
+      console.log("一時テーブル作成成功");
 
       // 元のユーザーデータを削除
       db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
-        if (err) return callback(err);
+        if (err) {
+          console.error("ユーザーデータ削除エラー:", err);
+          return callback(err);
+        }
+
+        console.log("ユーザーデータ削除完了");
 
         // 新しいIDで再挿入
         let completed = 0;
+        let hasError = false;
+
         users.forEach((user, index) => {
+          if (hasError) return;
+
           const newId = index + 1;
+          console.log(`ユーザーID修正: ${user.id} → ${newId} (${user.email})`);
+
           db.run(
             "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
             [newId, user.id],
-            (err) => {
-              if (err) console.error("ユーザーID修正エラー:", err);
+            function (err) {
+              if (err) {
+                console.error("ユーザーID修正エラー:", err);
+                hasError = true;
+                return callback(err);
+              }
+
+              console.log(
+                `ユーザー ${user.email} のID修正完了: ${user.id} → ${newId}`
+              );
 
               // 関連テーブルのadmin_idも更新
               db.run(
                 "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_users WHERE id = ?)",
                 [newId, user.id],
-                () => {
-                  completed++;
+                (err) => {
+                  if (err) {
+                    console.error("group_admin テーブル更新エラー:", err);
+                    hasError = true;
+                    return callback(err);
+                  }
+
                   console.log(
-                    `ユーザーID修正: ${user.id} → ${newId} (${user.email})`
+                    `group_admin テーブル更新完了: ${user.id} → ${newId}`
                   );
 
-                  if (completed === users.length) {
+                  completed++;
+                  console.log(
+                    `ユーザーID修正完了: ${user.id} → ${newId} (${user.email}) [${completed}/${users.length}]`
+                  );
+
+                  if (completed === users.length && !hasError) {
                     // 一時テーブルを削除
-                    db.run("DROP TABLE temp_users", () => {
+                    db.run("DROP TABLE temp_users", (err) => {
+                      if (err) {
+                        console.error("一時テーブル削除エラー:", err);
+                      } else {
+                        console.log("一時テーブル削除完了");
+                      }
+
                       // SQLite環境でのみシーケンステーブルをリセット
-                      const isPostgres = !!process.env.DATABASE_URL;
-                      if (!isPostgres) {
+                      const forceSQLite = process.env.FORCE_SQLITE === "true";
+                      if (forceSQLite) {
                         db.run(
                           "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
                           [users.length],
-                          () => {
+                          (err) => {
+                            if (err) {
+                              console.error("シーケンスリセットエラー:", err);
+                            } else {
+                              console.log(
+                                `ユーザーシーケンスを${users.length}にリセット`
+                              );
+                            }
                             console.log("ユーザーID修正完了（SQLite）");
                             callback(null);
                           }

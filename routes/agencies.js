@@ -236,13 +236,16 @@ function fixAgencyIds(callback) {
       return callback(null);
     }
 
-    // データベースタイプを判定（DATABASE_URLが設定されていればPostgreSQL）
-    const isPostgres = !!process.env.DATABASE_URL;
+    // データベースタイプを判定
+    // SQLiteを明示的に指定した場合のみSQLite用処理を使用
+    const forceSQLite = process.env.FORCE_SQLITE === "true";
+    const isPostgres = !forceSQLite; // デフォルトでPostgreSQL用処理を使用
 
     console.log("データベースタイプ判定結果:", {
       DATABASE_URL: !!process.env.DATABASE_URL,
       RAILWAY_ENVIRONMENT_NAME: !!process.env.RAILWAY_ENVIRONMENT_NAME,
       NODE_ENV: process.env.NODE_ENV,
+      FORCE_SQLITE: process.env.FORCE_SQLITE,
       isPostgres: isPostgres,
     });
 
@@ -282,212 +285,250 @@ function fixAgencyIdsPostgres(agencies, callback) {
 
   console.log("ID修正が必要な代理店を検出、修正処理を開始...");
 
-  // トランザクション開始
-  db.run("BEGIN", (err) => {
+  // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
+  db.run("CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies", (err) => {
     if (err) {
-      console.error("トランザクション開始エラー:", err);
+      console.error("一時テーブル作成エラー:", err);
       return callback(err);
     }
 
-    console.log("トランザクション開始成功");
+    console.log("一時テーブル作成成功");
 
-    // 各代理店のIDを順次修正
-    let completed = 0;
-    let hasError = false;
-
-    agencies.forEach((agency, index) => {
-      const newId = index + 1;
-
-      if (agency.id === newId) {
-        console.log(`代理店ID ${agency.id} は修正不要: ${agency.name}`);
-        completed++;
-        if (completed === agencies.length && !hasError) {
-          completeTransaction();
-        }
-        return;
+    // 元の代理店データを削除
+    db.run("DELETE FROM agencies", (err) => {
+      if (err) {
+        console.error("代理店データ削除エラー:", err);
+        return callback(err);
       }
 
-      console.log(`代理店ID修正開始: ${agency.id} → ${newId} (${agency.name})`);
+      console.log("代理店データ削除完了");
 
-      // 一時的に負のIDに変更して競合を回避
-      const tempId = -(agency.id + 1000000); // 大きな負の値を使用
+      // 新しいIDで再挿入
+      let completed = 0;
+      let hasError = false;
 
-      // Step 1: 代理店を一時IDに変更
-      db.run(
-        "UPDATE agencies SET id = ? WHERE id = ?",
-        [tempId, agency.id],
-        (err) => {
-          if (err) {
-            console.error("一時ID更新エラー:", err);
-            hasError = true;
-            return rollbackTransaction(err);
-          }
+      agencies.forEach((agency, index) => {
+        if (hasError) return;
 
-          console.log(`代理店を一時ID ${tempId} に変更: ${agency.name}`);
+        const newId = index + 1;
+        console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
-          // Step 2: 関連テーブルを一時IDに更新
-          updateRelatedTablesToTempId(agency.id, tempId, (err) => {
+        db.run(
+          "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+          [newId, agency.id],
+          function (err) {
             if (err) {
+              console.error("代理店ID修正エラー:", err);
               hasError = true;
-              return rollbackTransaction(err);
+              return callback(err);
             }
 
-            // Step 3: 代理店を最終IDに更新
-            db.run(
-              "UPDATE agencies SET id = ? WHERE id = ?",
-              [newId, tempId],
-              (err) => {
-                if (err) {
-                  console.error("最終ID更新エラー:", err);
+            console.log(
+              `代理店 ${agency.name} のID修正完了: ${agency.id} → ${newId}`
+            );
+
+            // 関連テーブルのagency_idも更新（順次処理）
+            updateRelatedTablesSequentiallyPostgres(
+              agency.id,
+              newId,
+              (updateErr) => {
+                if (updateErr) {
+                  console.error("関連テーブル更新エラー:", updateErr);
                   hasError = true;
-                  return rollbackTransaction(err);
+                  return callback(updateErr);
                 }
 
-                console.log(`代理店を最終ID ${newId} に変更: ${agency.name}`);
+                completed++;
+                console.log(
+                  `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
+                );
 
-                // Step 4: 関連テーブルを最終IDに更新
-                updateRelatedTablesToFinalId(tempId, newId, (err) => {
-                  if (err) {
-                    hasError = true;
-                    return rollbackTransaction(err);
-                  }
+                if (completed === agencies.length && !hasError) {
+                  // 一時テーブルを削除
+                  db.run("DROP TABLE temp_agencies", (err) => {
+                    if (err) {
+                      console.error("一時テーブル削除エラー:", err);
+                    } else {
+                      console.log("一時テーブル削除完了");
+                    }
 
-                  completed++;
-                  console.log(
-                    `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name})`
-                  );
-
-                  if (completed === agencies.length && !hasError) {
-                    completeTransaction();
-                  }
-                });
+                    // PostgreSQL用のシーケンスリセット（試行）
+                    resetPostgreSQLSequence(agencies.length, () => {
+                      console.log("=== 代理店ID修正完了（PostgreSQL） ===");
+                      callback(null);
+                    });
+                  });
+                }
               }
             );
-          });
-        }
-      );
+          }
+        );
+      });
     });
-
-    // 関連テーブルを一時IDに更新する関数
-    function updateRelatedTablesToTempId(originalId, tempId, callback) {
-      console.log(`関連テーブルを一時ID ${tempId} に更新中...`);
-      const updates = [
-        { table: "sales", column: "agency_id" },
-        { table: "materials", column: "agency_id" },
-        { table: "group_agency", column: "agency_id" },
-        { table: "agency_products", column: "agency_id" },
-        { table: "users", column: "agency_id" },
-        { table: "product_files", column: "agency_id" },
-      ];
-
-      let updateCompleted = 0;
-      let updateError = null;
-
-      updates.forEach(({ table, column }) => {
-        db.run(
-          `UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`,
-          [tempId, originalId],
-          (err) => {
-            if (err) {
-              console.error(`${table}テーブルの一時ID更新エラー:`, err);
-              updateError = err;
-            } else {
-              console.log(`${table}テーブルを一時ID ${tempId} に更新`);
-            }
-
-            updateCompleted++;
-            if (updateCompleted === updates.length) {
-              callback(updateError);
-            }
-          }
-        );
-      });
-    }
-
-    // 関連テーブルを最終IDに更新する関数
-    function updateRelatedTablesToFinalId(tempId, finalId, callback) {
-      console.log(`関連テーブルを最終ID ${finalId} に更新中...`);
-      const updates = [
-        { table: "sales", column: "agency_id" },
-        { table: "materials", column: "agency_id" },
-        { table: "group_agency", column: "agency_id" },
-        { table: "agency_products", column: "agency_id" },
-        { table: "users", column: "agency_id" },
-        { table: "product_files", column: "agency_id" },
-      ];
-
-      let updateCompleted = 0;
-      let updateError = null;
-
-      updates.forEach(({ table, column }) => {
-        db.run(
-          `UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`,
-          [finalId, tempId],
-          (err) => {
-            if (err) {
-              console.error(`${table}テーブルの最終ID更新エラー:`, err);
-              updateError = err;
-            } else {
-              console.log(`${table}テーブルを最終ID ${finalId} に更新`);
-            }
-
-            updateCompleted++;
-            if (updateCompleted === updates.length) {
-              callback(updateError);
-            }
-          }
-        );
-      });
-    }
-
-    // トランザクション完了
-    function completeTransaction() {
-      console.log("代理店ID修正完了、シーケンスをリセット中...");
-
-      // PostgreSQLのシーケンスをリセット（動的にシーケンス名を取得）
-      db.run(
-        `
-        SELECT setval(
-          (SELECT pg_get_serial_sequence('agencies', 'id')), 
-          ?, 
-          false
-        )
-      `,
-        [agencies.length],
-        (err) => {
-          if (err) {
-            console.error("シーケンスリセットエラー:", err);
-            console.log("シーケンスリセットエラーを無視して処理を続行");
-          } else {
-            console.log(`代理店シーケンスを${agencies.length}にリセット`);
-          }
-
-          // トランザクションをコミット
-          db.run("COMMIT", (err) => {
-            if (err) {
-              console.error("トランザクションコミットエラー:", err);
-              return rollbackTransaction(err);
-            }
-
-            console.log("=== 代理店ID修正完了（PostgreSQL） ===");
-            callback(null);
-          });
-        }
-      );
-    }
-
-    // トランザクションロールバック
-    function rollbackTransaction(error) {
-      console.error("エラーが発生、トランザクションをロールバック:", error);
-
-      db.run("ROLLBACK", (rollbackErr) => {
-        if (rollbackErr) {
-          console.error("ロールバックエラー:", rollbackErr);
-        }
-        callback(error);
-      });
-    }
   });
+
+  // 関連テーブルを順次更新する関数（PostgreSQL用）
+  function updateRelatedTablesSequentiallyPostgres(
+    originalId,
+    newId,
+    callback
+  ) {
+    console.log(`関連テーブル更新開始: ${originalId} → ${newId}`);
+
+    // 1. sales テーブル
+    db.run(
+      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+      [newId, originalId],
+      (err) => {
+        if (err) {
+          console.error("sales テーブル更新エラー:", err);
+          return callback(err);
+        }
+        console.log(`sales テーブル更新完了: ${originalId} → ${newId}`);
+
+        // 2. materials テーブル
+        db.run(
+          "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+          [newId, originalId],
+          (err) => {
+            if (err) {
+              console.error("materials テーブル更新エラー:", err);
+              return callback(err);
+            }
+            console.log(`materials テーブル更新完了: ${originalId} → ${newId}`);
+
+            // 3. group_agency テーブル
+            db.run(
+              "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+              [newId, originalId],
+              (err) => {
+                if (err) {
+                  console.error("group_agency テーブル更新エラー:", err);
+                  return callback(err);
+                }
+                console.log(
+                  `group_agency テーブル更新完了: ${originalId} → ${newId}`
+                );
+
+                // 4. agency_products テーブル
+                db.run(
+                  "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, originalId],
+                  (err) => {
+                    if (err) {
+                      console.error("agency_products テーブル更新エラー:", err);
+                      return callback(err);
+                    }
+                    console.log(
+                      `agency_products テーブル更新完了: ${originalId} → ${newId}`
+                    );
+
+                    // 5. users テーブル
+                    db.run(
+                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, originalId],
+                      (err) => {
+                        if (err) {
+                          console.error("users テーブル更新エラー:", err);
+                          return callback(err);
+                        }
+                        console.log(
+                          `users テーブル更新完了: ${originalId} → ${newId}`
+                        );
+
+                        // 6. product_files テーブル
+                        db.run(
+                          "UPDATE product_files SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                          [newId, originalId],
+                          (err) => {
+                            if (err) {
+                              console.error(
+                                "product_files テーブル更新エラー:",
+                                err
+                              );
+                              return callback(err);
+                            }
+                            console.log(
+                              `product_files テーブル更新完了: ${originalId} → ${newId}`
+                            );
+
+                            // 全ての関連テーブル更新完了
+                            console.log(
+                              `関連テーブル更新完了: ${originalId} → ${newId}`
+                            );
+                            callback(null);
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
+              }
+            );
+          }
+        );
+      }
+    );
+  }
+
+  // PostgreSQL用のシーケンスリセット関数
+  function resetPostgreSQLSequence(maxId, callback) {
+    console.log("PostgreSQLシーケンスリセット試行中...");
+
+    // 複数のシーケンスリセット方法を試行
+    const resetMethods = [
+      // 方法1: 動的シーケンス名取得
+      () => {
+        db.run(
+          "SELECT setval((SELECT pg_get_serial_sequence('agencies', 'id')), ?, false)",
+          [maxId],
+          (err) => {
+            if (err) {
+              console.log("シーケンスリセット方法1失敗:", err.message);
+              tryMethod2();
+            } else {
+              console.log(`シーケンスリセット方法1成功: ${maxId}`);
+              callback();
+            }
+          }
+        );
+      },
+      // 方法2: 固定シーケンス名
+      () => {
+        db.run("SELECT setval('agencies_id_seq', ?, false)", [maxId], (err) => {
+          if (err) {
+            console.log("シーケンスリセット方法2失敗:", err.message);
+            tryMethod3();
+          } else {
+            console.log(`シーケンスリセット方法2成功: ${maxId}`);
+            callback();
+          }
+        });
+      },
+      // 方法3: SQLiteのシーケンステーブル更新（互換性のため）
+      () => {
+        db.run(
+          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+          [maxId],
+          (err) => {
+            if (err) {
+              console.log("シーケンスリセット方法3失敗:", err.message);
+            } else {
+              console.log(`シーケンスリセット方法3成功: ${maxId}`);
+            }
+            // エラーがあってもcallbackを呼ぶ
+            callback();
+          }
+        );
+      },
+    ];
+
+    const tryMethod1 = resetMethods[0];
+    const tryMethod2 = resetMethods[1];
+    const tryMethod3 = resetMethods[2];
+
+    tryMethod1();
+  }
 }
 
 // SQLite用のID修正処理
@@ -514,16 +555,21 @@ function fixAgencyIdsSQLite(agencies, callback) {
 
       // 新しいIDで再挿入
       let completed = 0;
+      let hasError = false;
+
       agencies.forEach((agency, index) => {
+        if (hasError) return;
+
         const newId = index + 1;
         console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
         db.run(
           "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
           [newId, agency.id],
-          (err) => {
+          function (err) {
             if (err) {
               console.error("代理店ID修正エラー:", err);
+              hasError = true;
               return callback(err);
             }
 
@@ -531,146 +577,158 @@ function fixAgencyIdsSQLite(agencies, callback) {
               `代理店 ${agency.name} のID修正完了: ${agency.id} → ${newId}`
             );
 
-            // 関連テーブルのagency_idも更新
-            Promise.all([
-              new Promise((resolve) => {
-                db.run(
-                  "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                  [newId, agency.id],
-                  (err) => {
-                    if (err) console.error("sales テーブル更新エラー:", err);
-                    else
-                      console.log(
-                        `sales テーブル更新完了: ${agency.id} → ${newId}`
-                      );
-                    resolve();
-                  }
-                );
-              }),
-              new Promise((resolve) => {
-                db.run(
-                  "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                  [newId, agency.id],
-                  (err) => {
-                    if (err)
-                      console.error("materials テーブル更新エラー:", err);
-                    else
-                      console.log(
-                        `materials テーブル更新完了: ${agency.id} → ${newId}`
-                      );
-                    resolve();
-                  }
-                );
-              }),
-              new Promise((resolve) => {
-                db.run(
-                  "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                  [newId, agency.id],
-                  (err) => {
-                    if (err)
-                      console.error("group_agency テーブル更新エラー:", err);
-                    else
-                      console.log(
-                        `group_agency テーブル更新完了: ${agency.id} → ${newId}`
-                      );
-                    resolve();
-                  }
-                );
-              }),
-              new Promise((resolve) => {
-                db.run(
-                  "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                  [newId, agency.id],
-                  (err) => {
-                    if (err)
-                      console.error("agency_products テーブル更新エラー:", err);
-                    else
-                      console.log(
-                        `agency_products テーブル更新完了: ${agency.id} → ${newId}`
-                      );
-                    resolve();
-                  }
-                );
-              }),
-              new Promise((resolve) => {
-                db.run(
-                  "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                  [newId, agency.id],
-                  (err) => {
-                    if (err) console.error("users テーブル更新エラー:", err);
-                    else
-                      console.log(
-                        `users テーブル更新完了: ${agency.id} → ${newId}`
-                      );
-                    resolve();
-                  }
-                );
-              }),
-              new Promise((resolve) => {
-                db.run(
-                  "UPDATE product_files SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                  [newId, agency.id],
-                  (err) => {
-                    if (err)
-                      console.error("product_files テーブル更新エラー:", err);
-                    else
-                      console.log(
-                        `product_files テーブル更新完了: ${agency.id} → ${newId}`
-                      );
-                    resolve();
-                  }
-                );
-              }),
-            ])
-              .then(() => {
-                completed++;
-                console.log(
-                  `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
-                );
+            // 関連テーブルのagency_idも更新（順次処理）
+            updateRelatedTablesSequentially(agency.id, newId, (updateErr) => {
+              if (updateErr) {
+                console.error("関連テーブル更新エラー:", updateErr);
+                hasError = true;
+                return callback(updateErr);
+              }
 
-                if (completed === agencies.length) {
-                  // 一時テーブルを削除
-                  db.run("DROP TABLE temp_agencies", (err) => {
-                    if (err) {
-                      console.error("一時テーブル削除エラー:", err);
-                    } else {
-                      console.log("一時テーブル削除完了");
-                    }
+              completed++;
+              console.log(
+                `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
+              );
 
-                    // SQLite環境でのみシーケンステーブルをリセット
-                    const isPostgres = !!process.env.DATABASE_URL;
-                    if (!isPostgres) {
-                      db.run(
-                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
-                        [agencies.length],
-                        (err) => {
-                          if (err) {
-                            console.error("シーケンスリセットエラー:", err);
-                          } else {
-                            console.log(
-                              `代理店シーケンスを${agencies.length}にリセット`
-                            );
-                          }
-                          console.log("=== 代理店ID修正完了（SQLite） ===");
-                          callback(null);
+              if (completed === agencies.length && !hasError) {
+                // 一時テーブルを削除
+                db.run("DROP TABLE temp_agencies", (err) => {
+                  if (err) {
+                    console.error("一時テーブル削除エラー:", err);
+                  } else {
+                    console.log("一時テーブル削除完了");
+                  }
+
+                  // SQLite環境でのみシーケンステーブルをリセット
+                  const forceSQLite = process.env.FORCE_SQLITE === "true";
+                  if (forceSQLite) {
+                    db.run(
+                      "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+                      [agencies.length],
+                      (err) => {
+                        if (err) {
+                          console.error("シーケンスリセットエラー:", err);
+                        } else {
+                          console.log(
+                            `代理店シーケンスを${agencies.length}にリセット`
+                          );
                         }
-                      );
-                    } else {
-                      console.log("=== 代理店ID修正完了（SQLite） ===");
-                      callback(null);
-                    }
-                  });
-                }
-              })
-              .catch((promiseErr) => {
-                console.error("Promise.all エラー:", promiseErr);
-                callback(promiseErr);
-              });
+                        console.log("=== 代理店ID修正完了（SQLite） ===");
+                        callback(null);
+                      }
+                    );
+                  } else {
+                    console.log("=== 代理店ID修正完了（SQLite） ===");
+                    callback(null);
+                  }
+                });
+              }
+            });
           }
         );
       });
     });
   });
+
+  // 関連テーブルを順次更新する関数
+  function updateRelatedTablesSequentially(originalId, newId, callback) {
+    console.log(`関連テーブル更新開始: ${originalId} → ${newId}`);
+
+    // 1. sales テーブル
+    db.run(
+      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+      [newId, originalId],
+      (err) => {
+        if (err) {
+          console.error("sales テーブル更新エラー:", err);
+          return callback(err);
+        }
+        console.log(`sales テーブル更新完了: ${originalId} → ${newId}`);
+
+        // 2. materials テーブル
+        db.run(
+          "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+          [newId, originalId],
+          (err) => {
+            if (err) {
+              console.error("materials テーブル更新エラー:", err);
+              return callback(err);
+            }
+            console.log(`materials テーブル更新完了: ${originalId} → ${newId}`);
+
+            // 3. group_agency テーブル
+            db.run(
+              "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+              [newId, originalId],
+              (err) => {
+                if (err) {
+                  console.error("group_agency テーブル更新エラー:", err);
+                  return callback(err);
+                }
+                console.log(
+                  `group_agency テーブル更新完了: ${originalId} → ${newId}`
+                );
+
+                // 4. agency_products テーブル
+                db.run(
+                  "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, originalId],
+                  (err) => {
+                    if (err) {
+                      console.error("agency_products テーブル更新エラー:", err);
+                      return callback(err);
+                    }
+                    console.log(
+                      `agency_products テーブル更新完了: ${originalId} → ${newId}`
+                    );
+
+                    // 5. users テーブル
+                    db.run(
+                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      [newId, originalId],
+                      (err) => {
+                        if (err) {
+                          console.error("users テーブル更新エラー:", err);
+                          return callback(err);
+                        }
+                        console.log(
+                          `users テーブル更新完了: ${originalId} → ${newId}`
+                        );
+
+                        // 6. product_files テーブル
+                        db.run(
+                          "UPDATE product_files SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                          [newId, originalId],
+                          (err) => {
+                            if (err) {
+                              console.error(
+                                "product_files テーブル更新エラー:",
+                                err
+                              );
+                              return callback(err);
+                            }
+                            console.log(
+                              `product_files テーブル更新完了: ${originalId} → ${newId}`
+                            );
+
+                            // 全ての関連テーブル更新完了
+                            console.log(
+                              `関連テーブル更新完了: ${originalId} → ${newId}`
+                            );
+                            callback(null);
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
+              }
+            );
+          }
+        );
+      }
+    );
+  }
 }
 
 // 代理店一覧ページ
@@ -1747,3 +1805,5 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
 });
 
 module.exports = router;
+module.exports.checkAgencyIdIntegrity = checkAgencyIdIntegrity;
+module.exports.fixAgencyIds = fixAgencyIds;
