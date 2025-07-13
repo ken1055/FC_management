@@ -139,6 +139,34 @@
       </div>
     </form>
   </div>
+
+  <!-- 代理店名検索 -->
+  <div class="mb-3">
+    <form method="get" class="row g-2 align-items-center">
+      <div class="col-auto">
+        <label class="form-label">代理店名で検索:</label>
+      </div>
+      <div class="col-auto">
+        <input type="text" name="search" class="form-control" placeholder="代理店名を入力..." value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-success">
+          <i class="bi bi-search"></i> 検索
+        </button>
+      </div>
+      <% if (typeof searchQuery !== 'undefined' && searchQuery) { %>
+      <div class="col-auto">
+        <a href="/agencies/list" class="btn btn-outline-secondary">
+          <i class="bi bi-x-circle"></i> 検索解除
+        </a>
+      </div>
+      <% } %>
+      <!-- 既存のグループフィルタを保持 -->
+      <% if (selectedGroupId) { %>
+      <input type="hidden" name="group_id" value="<%= selectedGroupId %>">
+      <% } %>
+    </form>
+  </div>
   
   <!-- 代理店が存在しない場合の表示 -->
   <% if (agencies.length === 0) { %>

@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const bcrypt = require("bcrypt");
 const {
   sendProfileRegistrationNotification,
   sendProfileUpdateNotification,
@@ -196,13 +197,15 @@ function fixAgencyIds(callback) {
 // 代理店一覧ページ
 router.get("/list", requireRole(["admin"]), (req, res) => {
   const groupId = req.query.group_id;
+  const searchQuery = req.query.search;
 
   console.log("=== 代理店一覧ページアクセス ===");
   console.log("ユーザー:", req.session.user);
   console.log("グループID:", groupId);
+  console.log("検索クエリ:", searchQuery);
 
   // シンプルな代理店一覧表示（ID整合性チェックを無効化）
-  renderAgenciesList(req, res, groupId, {
+  renderAgenciesList(req, res, groupId, searchQuery, {
     isIntegrityOk: true,
     issues: [],
     totalAgencies: 0,
@@ -210,7 +213,14 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
 });
 
 // 代理店一覧画面の描画関数
-function renderAgenciesList(req, res, groupId, integrityInfo, message = null) {
+function renderAgenciesList(
+  req,
+  res,
+  groupId,
+  searchQuery,
+  integrityInfo,
+  message = null
+) {
   console.log("=== renderAgenciesList実行 ===");
   console.log("グループID:", groupId);
 
@@ -232,10 +242,27 @@ function renderAgenciesList(req, res, groupId, integrityInfo, message = null) {
       LEFT JOIN agency_products ap ON a.id = ap.agency_id
     `;
     let params = [];
+    let conditions = [];
 
     if (groupId) {
-      query += " WHERE ga.group_id = ?";
+      conditions.push("ga.group_id = ?");
       params.push(groupId);
+    }
+
+    if (searchQuery) {
+      conditions.push(
+        "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR a.product_features LIKE ?)"
+      );
+      params.push(
+        `%${searchQuery}%`,
+        `%${searchQuery}%`,
+        `%${searchQuery}%`,
+        `%${searchQuery}%`
+      );
+    }
+
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
     }
 
     query += " GROUP BY a.id ORDER BY a.id";
@@ -259,6 +286,7 @@ function renderAgenciesList(req, res, groupId, integrityInfo, message = null) {
           agencies,
           groups,
           selectedGroupId: groupId,
+          searchQuery: searchQuery,
           integrityInfo,
           autoFixMessage: message,
           session: req.session,
@@ -388,42 +416,121 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
     start_date,
     product_features,
     products,
+    email,
+    password,
+    password_confirm,
   } = req.body;
 
-  db.run(
-    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      name,
-      age,
-      address,
-      bank_info,
-      experience_years,
-      contract_date,
-      start_date,
-      product_features,
-    ],
-    function (err) {
-      if (err) return res.status(500).send("DBエラー");
+  // パスワード確認
+  if (email && password && password !== password_confirm) {
+    return res.status(400).send("パスワードが一致しません");
+  }
 
-      const agencyId = this.lastID;
+  // メールアドレスの重複チェック
+  if (email) {
+    db.get(
+      "SELECT id FROM users WHERE email = ?",
+      [email],
+      (err, existingUser) => {
+        if (err) return res.status(500).send("DBエラー");
+        if (existingUser) {
+          return res
+            .status(400)
+            .send("このメールアドレスは既に使用されています");
+        }
 
-      // 取り扱い商品を保存
-      if (products) {
-        const productList = Array.isArray(products) ? products : [products];
-        productList.forEach((product) => {
+        // 代理店とユーザーを作成
+        createAgencyWithUser();
+      }
+    );
+  } else {
+    // メールアドレスが指定されていない場合は代理店のみ作成
+    createAgencyOnly();
+  }
+
+  function createAgencyOnly() {
+    db.run(
+      "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        name,
+        age,
+        address,
+        bank_info,
+        experience_years,
+        contract_date,
+        start_date,
+        product_features,
+      ],
+      function (err) {
+        if (err) return res.status(500).send("DBエラー");
+
+        const agencyId = this.lastID;
+        saveProducts(agencyId);
+      }
+    );
+  }
+
+  function createAgencyWithUser() {
+    // パスワードをハッシュ化
+    bcrypt.hash(password, 10, (err, hashedPassword) => {
+      if (err) return res.status(500).send("パスワードハッシュ化エラー");
+
+      // 代理店を作成
+      db.run(
+        "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          name,
+          age,
+          address,
+          bank_info,
+          experience_years,
+          contract_date,
+          start_date,
+          product_features,
+        ],
+        function (err) {
+          if (err) return res.status(500).send("DBエラー");
+
+          const agencyId = this.lastID;
+
+          // ユーザーアカウントを作成
           db.run(
-            "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
-            [agencyId, product],
-            (err) => {
-              if (err) console.error("商品保存エラー:", err);
+            "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)",
+            [email, hashedPassword, "agency", agencyId],
+            function (err) {
+              if (err) {
+                console.error("ユーザー作成エラー:", err);
+                return res.status(500).send("ユーザーアカウント作成エラー");
+              }
+
+              console.log(
+                `代理店ユーザーアカウント作成: ${email} (agency_id: ${agencyId})`
+              );
+              saveProducts(agencyId);
             }
           );
-        });
-      }
+        }
+      );
+    });
+  }
 
-      res.redirect("/agencies/list");
+  function saveProducts(agencyId) {
+    // 取り扱い商品を保存
+    if (products) {
+      const productList = Array.isArray(products) ? products : [products];
+      productList.forEach((product) => {
+        db.run(
+          "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+          [agencyId, product],
+          (err) => {
+            if (err) console.error("商品保存エラー:", err);
+          }
+        );
+      });
     }
-  );
+
+    res.redirect("/agencies/list");
+  }
 });
 
 // 編集（フォームPOST対応）

@@ -99,6 +99,67 @@
             required
           />
         </div>
+
+        <% if (typeof session !== 'undefined' && session && session.user &&
+        session.user.role === 'admin' && !agency) { %>
+        <!-- 管理者による新規代理店作成時のみ表示 -->
+        <div class="card border-info mb-3">
+          <div class="card-header bg-info text-white">
+            <h6 class="mb-0">
+              <i class="bi bi-person-circle"></i> アカウント情報
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">
+                メールアドレス <span class="text-danger">*</span>
+              </label>
+              <input
+                type="email"
+                name="email"
+                class="form-control"
+                placeholder="agency@example.com"
+                required
+              />
+              <small class="form-text text-muted">
+                代理店ユーザーのログイン用メールアドレス
+              </small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">
+                パスワード <span class="text-danger">*</span>
+              </label>
+              <input
+                type="password"
+                name="password"
+                class="form-control"
+                placeholder="8文字以上のパスワード"
+                minlength="8"
+                required
+              />
+              <small class="form-text text-muted">
+                代理店ユーザーのログイン用パスワード（8文字以上）
+              </small>
+            </div>
+            <div class="mb-0">
+              <label class="form-label">
+                パスワード確認 <span class="text-danger">*</span>
+              </label>
+              <input
+                type="password"
+                name="password_confirm"
+                class="form-control"
+                placeholder="パスワードを再入力"
+                minlength="8"
+                required
+              />
+              <small class="form-text text-muted">
+                確認のため同じパスワードを入力してください
+              </small>
+            </div>
+          </div>
+        </div>
+        <% } %>
         <div class="mb-3">
           <label class="form-label">年齢（20歳以上、または選択入力）</label>
           <div class="row">
