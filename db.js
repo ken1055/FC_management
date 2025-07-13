@@ -50,7 +50,31 @@ try {
           : false,
     });
     isPostgres = true;
-    initializePostgresDatabase();
+
+    // PostgreSQL初期化を同期的に実行
+    (async () => {
+      try {
+        await initializePostgresDatabase();
+      } catch (error) {
+        console.error("PostgreSQL初期化失敗:", error);
+        // SQLiteにフォールバック
+        console.log("SQLiteにフォールバック中...");
+        isPostgres = false;
+        const dbPath = isRailway ? "/app/data/agency.db" : "./agency.db";
+
+        if (isRailway) {
+          const fs = require("fs");
+          const path = require("path");
+          const dbDir = path.dirname(dbPath);
+          if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+          }
+        }
+
+        db = new sqlite3.Database(dbPath);
+        initializeLocalDatabase();
+      }
+    })();
   } else if (isVercel) {
     // Vercel環境では常にメモリDBを使用（高速）
     console.log("Vercel環境: メモリDBを使用");
@@ -83,128 +107,124 @@ try {
   initializeInMemoryDatabase();
 }
 
-function initializePostgresDatabase() {
+async function initializePostgresDatabase() {
   console.log("PostgreSQL初期化中...");
   const startTime = Date.now();
 
   // PostgreSQL用のテーブル作成SQL（外部キー制約なし）
-  const createTables = async () => {
-    const tables = [
-      // 最初に参照されるテーブルを作成
-      `CREATE TABLE IF NOT EXISTS agencies (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        age INTEGER,
-        address TEXT,
-        bank_info TEXT,
-        experience_years INTEGER,
-        contract_date DATE,
-        start_date DATE,
-        product_features TEXT
-      )`,
-      `CREATE TABLE IF NOT EXISTS groups (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL
-      )`,
-      // 次に参照するテーブルを作成
-      `CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
-        agency_id INTEGER
-      )`,
-      `CREATE TABLE IF NOT EXISTS agency_products (
-        agency_id INTEGER,
-        product_name TEXT,
-        PRIMARY KEY (agency_id, product_name)
-      )`,
-      `CREATE TABLE IF NOT EXISTS product_files (
-        id SERIAL PRIMARY KEY,
-        agency_id INTEGER,
-        product_name TEXT,
-        file_path TEXT,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`,
-      `CREATE TABLE IF NOT EXISTS sales (
-        id SERIAL PRIMARY KEY,
-        agency_id INTEGER,
-        year INTEGER,
-        month INTEGER,
-        amount INTEGER
-      )`,
-      `CREATE TABLE IF NOT EXISTS group_agency (
-        group_id INTEGER,
-        agency_id INTEGER,
-        PRIMARY KEY (group_id, agency_id)
-      )`,
-      `CREATE TABLE IF NOT EXISTS group_admin (
-        group_id INTEGER,
-        admin_id INTEGER,
-        PRIMARY KEY (group_id, admin_id)
-      )`,
-      `CREATE TABLE IF NOT EXISTS materials (
-        id SERIAL PRIMARY KEY,
-        filename TEXT NOT NULL,
-        originalname TEXT NOT NULL,
-        mimetype TEXT NOT NULL,
-        description TEXT,
-        agency_id INTEGER,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`,
+  const tables = [
+    // 最初に参照されるテーブルを作成
+    `CREATE TABLE IF NOT EXISTS agencies (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      age INTEGER,
+      address TEXT,
+      bank_info TEXT,
+      experience_years INTEGER,
+      contract_date DATE,
+      start_date DATE,
+      product_features TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS groups (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL
+    )`,
+    // 次に参照するテーブルを作成
+    `CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
+      agency_id INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS agency_products (
+      agency_id INTEGER,
+      product_name TEXT,
+      PRIMARY KEY (agency_id, product_name)
+    )`,
+    `CREATE TABLE IF NOT EXISTS product_files (
+      id SERIAL PRIMARY KEY,
+      agency_id INTEGER,
+      product_name TEXT,
+      file_path TEXT,
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS sales (
+      id SERIAL PRIMARY KEY,
+      agency_id INTEGER,
+      year INTEGER,
+      month INTEGER,
+      amount INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS group_agency (
+      group_id INTEGER,
+      agency_id INTEGER,
+      PRIMARY KEY (group_id, agency_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS group_admin (
+      group_id INTEGER,
+      admin_id INTEGER,
+      PRIMARY KEY (group_id, admin_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS materials (
+      id SERIAL PRIMARY KEY,
+      filename TEXT NOT NULL,
+      originalname TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      description TEXT,
+      agency_id INTEGER,
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+  ];
+
+  try {
+    // テーブルを順番に作成
+    for (const sql of tables) {
+      console.log("テーブル作成中:", sql.substring(0, 50) + "...");
+      await db.query(sql);
+    }
+
+    // 外部キー制約を後で追加（エラーを無視）
+    const foreignKeys = [
+      `ALTER TABLE users ADD CONSTRAINT fk_users_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE agency_products ADD CONSTRAINT fk_agency_products_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE product_files ADD CONSTRAINT fk_product_files_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE sales ADD CONSTRAINT fk_sales_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
+      `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
+      `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_user FOREIGN KEY (admin_id) REFERENCES users(id)`,
+      `ALTER TABLE materials ADD CONSTRAINT fk_materials_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
     ];
 
-    try {
-      // テーブルを順番に作成
-      for (const sql of tables) {
-        console.log("テーブル作成中:", sql.substring(0, 50) + "...");
-        await db.query(sql);
-      }
-
-      // 外部キー制約を後で追加（エラーを無視）
-      const foreignKeys = [
-        `ALTER TABLE users ADD CONSTRAINT fk_users_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-        `ALTER TABLE agency_products ADD CONSTRAINT fk_agency_products_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-        `ALTER TABLE product_files ADD CONSTRAINT fk_product_files_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-        `ALTER TABLE sales ADD CONSTRAINT fk_sales_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-        `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
-        `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-        `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
-        `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_user FOREIGN KEY (admin_id) REFERENCES users(id)`,
-        `ALTER TABLE materials ADD CONSTRAINT fk_materials_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-      ];
-
-      for (const fkSql of foreignKeys) {
-        try {
-          await db.query(fkSql);
-        } catch (fkError) {
-          // 外部キー制約が既に存在する場合は無視
-          if (fkError.code !== "42710") {
-            console.log("外部キー制約スキップ:", fkError.message);
-          }
+    for (const fkSql of foreignKeys) {
+      try {
+        await db.query(fkSql);
+      } catch (fkError) {
+        // 外部キー制約が既に存在する場合は無視
+        if (fkError.code !== "42710") {
+          console.log("外部キー制約スキップ:", fkError.message);
         }
       }
-
-      // 管理者アカウントの作成
-      const adminPassword =
-        process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
-
-      await db.query(
-        `INSERT INTO users (email, password, role) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING`,
-        ["admin", adminPassword, "admin"]
-      );
-
-      console.log("管理者アカウント作成完了");
-      isInitialized = true;
-      const duration = Date.now() - startTime;
-      console.log(`PostgreSQL初期化完了: ${duration}ms`);
-    } catch (error) {
-      console.error("PostgreSQL初期化エラー:", error);
-      isInitialized = true; // エラーでも続行
     }
-  };
 
-  createTables();
+    // 管理者アカウントの作成
+    const adminPassword =
+      process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
+
+    await db.query(
+      `INSERT INTO users (email, password, role) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING`,
+      ["admin", adminPassword, "admin"]
+    );
+
+    console.log("管理者アカウント作成完了");
+    isInitialized = true;
+    const duration = Date.now() - startTime;
+    console.log(`PostgreSQL初期化完了: ${duration}ms`);
+  } catch (error) {
+    console.error("PostgreSQL初期化エラー:", error);
+    throw error; // エラーを再投げして上位でキャッチ
+  }
 }
 
 function initializeInMemoryDatabase() {
