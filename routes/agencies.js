@@ -219,23 +219,35 @@ function fixAgencyIds(callback) {
       return callback(null);
     }
 
-    // 常に強制的にID修正を実行
-    console.log("代理店が存在するため、強制的にID修正を実行します");
+    // 修正が必要かチェック
+    let needsFixing = false;
     agencies.forEach((agency, index) => {
       const expectedId = index + 1;
-      console.log(
-        `ID修正予定: ID=${agency.id} → 期待値=${expectedId} (${agency.name})`
-      );
+      if (agency.id !== expectedId) {
+        console.log(
+          `修正が必要: ID=${agency.id} → 期待値=${expectedId} (${agency.name})`
+        );
+        needsFixing = true;
+      }
     });
 
+    if (!needsFixing) {
+      console.log("ID修正は不要です（すべて正常）");
+      return callback(null);
+    }
+
     // データベースタイプを判定
-    // SQLiteを明示的に指定した場合のみSQLite用処理を使用
+    // 実際のデータベース接続を確認してタイプを決定
     const forceSQLite = process.env.FORCE_SQLITE === "true";
-    const isPostgres = !forceSQLite; // デフォルトでPostgreSQL用処理を使用
+    const hasPostgresUrl = !!process.env.DATABASE_URL;
+    const isRailway = !!process.env.RAILWAY_ENVIRONMENT_NAME;
+
+    // SQLiteを明示的に指定するか、PostgreSQL関連の環境変数がない場合はSQLite
+    const isPostgres = !forceSQLite && (hasPostgresUrl || isRailway);
 
     console.log("データベースタイプ判定結果:", {
-      DATABASE_URL: !!process.env.DATABASE_URL,
-      RAILWAY_ENVIRONMENT_NAME: !!process.env.RAILWAY_ENVIRONMENT_NAME,
+      DATABASE_URL: hasPostgresUrl,
+      RAILWAY_ENVIRONMENT_NAME: isRailway,
       NODE_ENV: process.env.NODE_ENV,
       FORCE_SQLITE: process.env.FORCE_SQLITE,
       isPostgres: isPostgres,
@@ -262,8 +274,8 @@ function fixAgencyIdsPostgres(agencies, callback) {
     return callback(null);
   }
 
-  // 常に強制的にID修正を実行
-  console.log("PostgreSQL環境で強制的にID修正を実行します");
+  // 修正が必要な代理店のみ処理
+  console.log("PostgreSQL環境でID修正を実行します");
 
   // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
   db.run("CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies", (err) => {
@@ -598,8 +610,8 @@ function fixAgencyIdsSQLite(agencies, callback) {
     return callback(null);
   }
 
-  // 常に強制的にID修正を実行
-  console.log("SQLite環境で強制的にID修正を実行します");
+  // 修正が必要な代理店のみ処理
+  console.log("SQLite環境でID修正を実行します");
 
   // 一時テーブルを作成
   db.run("CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies", (err) => {
@@ -818,34 +830,47 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
 
     console.log("代理店ID整合性チェック結果:", integrityInfo);
 
-    // 毎回強制的にID修正を実行
-    console.log("=== 代理店ID強制修正を実行 ===");
+    // 強制修正を無効化し、問題がある場合のみ修正を実行
+    if (integrityInfo.issues && integrityInfo.issues.length > 0) {
+      console.log("=== 代理店ID修正を実行（問題検出） ===");
 
-    fixAgencyIds((fixErr) => {
-      if (fixErr) {
-        console.error("=== 代理店ID強制修正エラー ===", fixErr);
-        // エラーがあっても画面表示は続行
-        renderAgenciesList(req, res, group_id, search, integrityInfo, message);
-      } else {
-        console.log("=== 代理店ID強制修正完了 ===");
-        // 修正完了後、再度整合性チェック
-        checkAgencyIdIntegrity((recheckErr, updatedIntegrityInfo) => {
-          const finalIntegrityInfo = recheckErr
-            ? integrityInfo
-            : updatedIntegrityInfo;
-          console.log("修正後の整合性チェック結果:", finalIntegrityInfo);
+      fixAgencyIds((fixErr) => {
+        if (fixErr) {
+          console.error("=== 代理店ID修正エラー ===", fixErr);
+          // エラーがあっても画面表示は続行
           renderAgenciesList(
             req,
             res,
             group_id,
             search,
-            finalIntegrityInfo,
-            message,
-            "代理店IDの連番を強制修正しました"
+            integrityInfo,
+            message
           );
-        });
-      }
-    });
+        } else {
+          console.log("=== 代理店ID修正完了 ===");
+          // 修正完了後、再度整合性チェック
+          checkAgencyIdIntegrity((recheckErr, updatedIntegrityInfo) => {
+            const finalIntegrityInfo = recheckErr
+              ? integrityInfo
+              : updatedIntegrityInfo;
+            console.log("修正後の整合性チェック結果:", finalIntegrityInfo);
+            renderAgenciesList(
+              req,
+              res,
+              group_id,
+              search,
+              finalIntegrityInfo,
+              message,
+              "代理店IDの連番を修正しました"
+            );
+          });
+        }
+      });
+    } else {
+      console.log("=== 代理店ID修正スキップ（問題なし） ===");
+      // 問題がない場合は修正をスキップして直接表示
+      renderAgenciesList(req, res, group_id, search, integrityInfo, message);
+    }
   });
 });
 
