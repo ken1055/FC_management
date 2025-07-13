@@ -79,6 +79,9 @@
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">代理店一覧</h1>
     <div>
+      <button type="button" class="btn btn-outline-warning me-2" onclick="cleanupOrphanedUsers()">
+        <i class="bi bi-trash3"></i> 孤立アカウント削除
+      </button>
       <button type="button" class="btn btn-outline-info me-2" onclick="testRegistrationEmail()">
         <i class="bi bi-envelope-check"></i> 登録通知テスト
       </button>
@@ -305,7 +308,8 @@
       </h6>
       <ul class="mb-0">
         <li><strong>関連データの削除:</strong> 代理店を削除すると、売上データ、商品資料、グループ所属情報、取り扱い商品情報もすべて削除されます。</li>
-        <li><strong>ユーザーアカウント:</strong> 代理店ユーザーアカウントとの紐付けも解除されますが、アカウント自体は削除されません。</li>
+        <li><strong>ユーザーアカウント:</strong> 代理店に関連するユーザーアカウントも完全に削除されます。</li>
+        <li><strong>孤立アカウントクリーンアップ:</strong> 削除された代理店に紐づいていた孤立したユーザーアカウントは、「孤立アカウント削除」ボタンで一括削除できます。</li>
         <li><strong>自動ID管理:</strong> 画面表示時にIDの連番をチェックし、問題があれば自動的に修正されます。</li>
       </ul>
     </div>
@@ -314,12 +318,36 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// 代理店登録通知メールテスト機能
+// 孤立したユーザーアカウントをクリーンアップ
+function cleanupOrphanedUsers() {
+  const button = event.target;
+  const originalText = button.innerHTML;
+  
+  // ユーザーに確認を求める
+  if (!confirm('孤立したユーザーアカウント（削除された代理店に紐づいていたアカウント）を削除しますか？\n\nこの操作は取り消せません。')) {
+    return;
+  }
+  
+  // ボタンを無効化
+  button.disabled = true;
+  button.innerHTML = '<i class="bi bi-hourglass-split"></i> 削除中...';
+  
+  // フォームを作成して送信
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/agencies/cleanup-orphaned-users';
+  form.style.display = 'none';
+  
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// 登録通知テストメール送信
 function testRegistrationEmail() {
   const button = event.target;
   const originalText = button.innerHTML;
   
-  // ボタンを無効化してローディング表示
+  // ボタンを無効化
   button.disabled = true;
   button.innerHTML = '<i class="bi bi-hourglass-split"></i> 送信中...';
   
@@ -327,7 +355,7 @@ function testRegistrationEmail() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-    },
+    }
   })
   .then(response => response.json())
   .then(data => {
@@ -336,14 +364,11 @@ function testRegistrationEmail() {
     button.innerHTML = originalText;
     
     if (data.success) {
-      // 成功メッセージを表示
       showAlert('success', `
-        <strong>テストメール送信成功!</strong><br>
-        ${data.message}<br>
-        <small>送信先: ${data.adminEmails.join(', ')}</small>
+        <strong>テストメール送信成功</strong><br>
+        ${data.message}
       `);
     } else {
-      // エラーメッセージを表示
       showAlert('danger', `
         <strong>テストメール送信失敗</strong><br>
         ${data.message}

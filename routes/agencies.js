@@ -260,19 +260,14 @@ function fixAgencyIds(callback) {
 
 // 代理店一覧ページ
 router.get("/list", requireRole(["admin"]), (req, res) => {
-  const groupId = req.query.group_id;
-  const searchQuery = req.query.search;
+  const { group_id, search, message } = req.query;
 
-  console.log("=== 代理店一覧ページアクセス ===");
-  console.log("ユーザー:", req.session.user);
-  console.log("グループID:", groupId);
-  console.log("検索クエリ:", searchQuery);
-
-  // シンプルな代理店一覧表示（ID整合性チェックを無効化）
-  renderAgenciesList(req, res, groupId, searchQuery, {
-    isIntegrityOk: true,
-    issues: [],
-    totalAgencies: 0,
+  // 代理店IDの整合性をチェック
+  checkAgencyIdIntegrity((integrityInfo) => {
+    // 孤立したユーザーアカウントをクリーンアップ
+    cleanupOrphanedUsers(() => {
+      renderAgenciesList(req, res, group_id, search, integrityInfo, message);
+    });
   });
 });
 
@@ -780,55 +775,75 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
 
           // 関連データを削除する関数（順次実行）
           const deleteRelatedData = (callback) => {
-            // 1. 売上データを削除
+            // 1. 関連するユーザーアカウントを最初に削除（重要）
+            console.log(
+              `代理店ID ${agencyId} に関連するユーザーアカウントを削除中...`
+            );
             db.run(
-              "DELETE FROM sales WHERE agency_id = ?",
+              "DELETE FROM users WHERE agency_id = ?",
               [agencyId],
-              (err) => {
-                if (err) console.error("売上データ削除エラー:", err);
+              function (err) {
+                if (err) {
+                  console.error("ユーザーアカウント削除エラー:", err);
+                } else {
+                  console.log(
+                    `代理店ID ${agencyId} のユーザーアカウントを削除しました (削除件数: ${this.changes})`
+                  );
 
-                // 2. 商品資料を削除
+                  // 削除されたユーザーの詳細をログに記録
+                  if (relatedUsers.length > 0) {
+                    relatedUsers.forEach((user) => {
+                      console.log(
+                        `削除されたユーザー: ID=${user.id}, Email=${user.email}`
+                      );
+                    });
+                  }
+                }
+
+                // 2. 売上データを削除
                 db.run(
-                  "DELETE FROM materials WHERE agency_id = ?",
+                  "DELETE FROM sales WHERE agency_id = ?",
                   [agencyId],
                   (err) => {
-                    if (err) console.error("資料削除エラー:", err);
+                    if (err) console.error("売上データ削除エラー:", err);
 
-                    // 3. グループ所属を削除
+                    // 3. 商品資料を削除
                     db.run(
-                      "DELETE FROM group_agency WHERE agency_id = ?",
+                      "DELETE FROM materials WHERE agency_id = ?",
                       [agencyId],
                       (err) => {
-                        if (err) console.error("グループ所属削除エラー:", err);
+                        if (err) console.error("資料削除エラー:", err);
 
-                        // 4. 取り扱い商品を削除
+                        // 4. グループ所属を削除
                         db.run(
-                          "DELETE FROM agency_products WHERE agency_id = ?",
+                          "DELETE FROM group_agency WHERE agency_id = ?",
                           [agencyId],
                           (err) => {
-                            if (err) console.error("商品削除エラー:", err);
+                            if (err)
+                              console.error("グループ所属削除エラー:", err);
 
-                            // 5. 関連するユーザーアカウントを完全に削除
-                            console.log(
-                              `代理店ID ${agencyId} に関連するユーザーアカウントを削除中...`
-                            );
+                            // 5. 取り扱い商品を削除
                             db.run(
-                              "DELETE FROM users WHERE agency_id = ?",
+                              "DELETE FROM agency_products WHERE agency_id = ?",
                               [agencyId],
                               (err) => {
-                                if (err) {
-                                  console.error(
-                                    "ユーザーアカウント削除エラー:",
-                                    err
-                                  );
-                                } else {
-                                  console.log(
-                                    `代理店ID ${agencyId} のユーザーアカウントを削除しました`
-                                  );
-                                }
+                                if (err) console.error("商品削除エラー:", err);
 
-                                // すべての関連データ削除完了
-                                callback();
+                                // 6. 製品ファイルを削除
+                                db.run(
+                                  "DELETE FROM product_files WHERE agency_id = ?",
+                                  [agencyId],
+                                  (err) => {
+                                    if (err)
+                                      console.error(
+                                        "製品ファイル削除エラー:",
+                                        err
+                                      );
+
+                                    // すべての関連データ削除完了
+                                    callback();
+                                  }
+                                );
                               }
                             );
                           }
@@ -855,12 +870,19 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
                   );
                 }
 
-                res.redirect(
-                  "/agencies/list?success=" +
-                    encodeURIComponent(
-                      `「${agency.name}」の代理店データを削除しました`
-                    )
+                console.log(
+                  `代理店「${agency.name}」(ID: ${agencyId}) を削除しました`
                 );
+
+                // 削除後に孤立したユーザーアカウントをチェック・削除
+                cleanupOrphanedUsers(() => {
+                  res.redirect(
+                    "/agencies/list?success=" +
+                      encodeURIComponent(
+                        `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                      )
+                  );
+                });
               }
             );
           });
@@ -869,6 +891,71 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
     }
   );
 });
+
+// 手動クリーンアップエンドポイント
+router.post("/cleanup-orphaned-users", requireRole(["admin"]), (req, res) => {
+  cleanupOrphanedUsers(() => {
+    res.redirect(
+      "/agencies/list?success=" +
+        encodeURIComponent(
+          "孤立したユーザーアカウントのクリーンアップが完了しました"
+        )
+    );
+  });
+});
+
+// 孤立したユーザーアカウントをクリーンアップする関数
+function cleanupOrphanedUsers(callback) {
+  console.log("孤立したユーザーアカウントのクリーンアップを開始...");
+
+  // 存在しないagency_idを持つユーザーを検索
+  db.all(
+    `SELECT u.id, u.email, u.agency_id 
+     FROM users u 
+     WHERE u.agency_id IS NOT NULL 
+     AND u.agency_id NOT IN (SELECT id FROM agencies)`,
+    [],
+    (err, orphanUsers) => {
+      if (err) {
+        console.error("孤立ユーザー検索エラー:", err);
+        return callback();
+      }
+
+      if (orphanUsers.length === 0) {
+        console.log("孤立したユーザーアカウントはありません");
+        return callback();
+      }
+
+      console.log(
+        `${orphanUsers.length}個の孤立したユーザーアカウントを発見:`,
+        orphanUsers
+      );
+
+      // 孤立したユーザーアカウントを削除
+      db.run(
+        `DELETE FROM users 
+         WHERE agency_id IS NOT NULL 
+         AND agency_id NOT IN (SELECT id FROM agencies)`,
+        [],
+        function (err) {
+          if (err) {
+            console.error("孤立ユーザー削除エラー:", err);
+          } else {
+            console.log(
+              `${this.changes}個の孤立したユーザーアカウントを削除しました`
+            );
+            orphanUsers.forEach((user) => {
+              console.log(
+                `削除: ID=${user.id}, Email=${user.email}, 存在しないAgency ID=${user.agency_id}`
+              );
+            });
+          }
+          callback();
+        }
+      );
+    }
+  );
+}
 
 // 代理店プロフィール表示
 router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
