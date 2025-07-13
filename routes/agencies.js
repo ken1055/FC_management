@@ -338,7 +338,13 @@ function renderAgenciesList(
       query += " WHERE " + conditions.join(" AND ");
     }
 
-    query += " GROUP BY a.id ORDER BY a.id";
+    // PostgreSQLでは、SELECTで選択するすべての非集約列をGROUP BYに含める必要がある
+    if (isPostgres) {
+      query +=
+        " GROUP BY a.id, a.name, a.age, a.address, a.bank_info, a.experience_years, a.contract_date, a.start_date, a.product_features, g.name ORDER BY a.id";
+    } else {
+      query += " GROUP BY a.id ORDER BY a.id";
+    }
 
     console.log("実行するクエリ:", query);
     console.log("パラメータ:", params);
