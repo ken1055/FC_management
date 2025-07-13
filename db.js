@@ -87,16 +87,10 @@ function initializePostgresDatabase() {
   console.log("PostgreSQL初期化中...");
   const startTime = Date.now();
 
-  // PostgreSQL用のテーブル作成SQL
+  // PostgreSQL用のテーブル作成SQL（外部キー制約なし）
   const createTables = async () => {
     const tables = [
-      `CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
-        agency_id INTEGER REFERENCES agencies(id)
-      )`,
+      // 最初に参照されるテーブルを作成
       `CREATE TABLE IF NOT EXISTS agencies (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
@@ -108,37 +102,45 @@ function initializePostgresDatabase() {
         start_date DATE,
         product_features TEXT
       )`,
+      `CREATE TABLE IF NOT EXISTS groups (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL
+      )`,
+      // 次に参照するテーブルを作成
+      `CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
+        agency_id INTEGER
+      )`,
       `CREATE TABLE IF NOT EXISTS agency_products (
-        agency_id INTEGER REFERENCES agencies(id),
+        agency_id INTEGER,
         product_name TEXT,
         PRIMARY KEY (agency_id, product_name)
       )`,
       `CREATE TABLE IF NOT EXISTS product_files (
         id SERIAL PRIMARY KEY,
-        agency_id INTEGER REFERENCES agencies(id),
+        agency_id INTEGER,
         product_name TEXT,
         file_path TEXT,
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE TABLE IF NOT EXISTS sales (
         id SERIAL PRIMARY KEY,
-        agency_id INTEGER REFERENCES agencies(id),
+        agency_id INTEGER,
         year INTEGER,
         month INTEGER,
         amount INTEGER
       )`,
-      `CREATE TABLE IF NOT EXISTS groups (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL
-      )`,
       `CREATE TABLE IF NOT EXISTS group_agency (
-        group_id INTEGER REFERENCES groups(id),
-        agency_id INTEGER REFERENCES agencies(id),
+        group_id INTEGER,
+        agency_id INTEGER,
         PRIMARY KEY (group_id, agency_id)
       )`,
       `CREATE TABLE IF NOT EXISTS group_admin (
-        group_id INTEGER REFERENCES groups(id),
-        admin_id INTEGER REFERENCES users(id),
+        group_id INTEGER,
+        admin_id INTEGER,
         PRIMARY KEY (group_id, admin_id)
       )`,
       `CREATE TABLE IF NOT EXISTS materials (
@@ -147,14 +149,40 @@ function initializePostgresDatabase() {
         originalname TEXT NOT NULL,
         mimetype TEXT NOT NULL,
         description TEXT,
-        agency_id INTEGER REFERENCES agencies(id),
+        agency_id INTEGER,
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`,
     ];
 
     try {
+      // テーブルを順番に作成
       for (const sql of tables) {
+        console.log("テーブル作成中:", sql.substring(0, 50) + "...");
         await db.query(sql);
+      }
+
+      // 外部キー制約を後で追加（エラーを無視）
+      const foreignKeys = [
+        `ALTER TABLE users ADD CONSTRAINT fk_users_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+        `ALTER TABLE agency_products ADD CONSTRAINT fk_agency_products_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+        `ALTER TABLE product_files ADD CONSTRAINT fk_product_files_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+        `ALTER TABLE sales ADD CONSTRAINT fk_sales_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+        `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
+        `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+        `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
+        `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_user FOREIGN KEY (admin_id) REFERENCES users(id)`,
+        `ALTER TABLE materials ADD CONSTRAINT fk_materials_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      ];
+
+      for (const fkSql of foreignKeys) {
+        try {
+          await db.query(fkSql);
+        } catch (fkError) {
+          // 外部キー制約が既に存在する場合は無視
+          if (fkError.code !== "42710") {
+            console.log("外部キー制約スキップ:", fkError.message);
+          }
+        }
       }
 
       // 管理者アカウントの作成
