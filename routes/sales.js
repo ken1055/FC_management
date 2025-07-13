@@ -43,12 +43,33 @@ router.get("/", (req, res) => {
 router.post("/", requireRole(["admin", "agency"]), (req, res) => {
   const { agency_id, year, month, amount } = req.body;
 
+  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+  const processedAgencyId =
+    agency_id && agency_id.toString().trim() !== ""
+      ? parseInt(agency_id)
+      : null;
+  const processedYear =
+    year && year.toString().trim() !== "" ? parseInt(year) : null;
+  const processedMonth =
+    month && month.toString().trim() !== "" ? parseInt(month) : null;
+  const processedAmount =
+    amount && amount.toString().trim() !== "" ? parseInt(amount) : null;
+
+  if (
+    !processedAgencyId ||
+    !processedYear ||
+    !processedMonth ||
+    processedAmount === null
+  ) {
+    return res.status(400).send("必須項目が不足しています");
+  }
+
   // 代理店は自分のagency_idのみ登録可能
   if (req.session.user.role === "agency") {
     if (!req.session.user.agency_id) {
       return res.status(400).send("代理店IDが設定されていません");
     }
-    if (req.session.user.agency_id !== Number(agency_id)) {
+    if (req.session.user.agency_id !== processedAgencyId) {
       return res.status(403).send("自分の売上のみ登録可能です");
     }
   }
@@ -56,7 +77,7 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
   // 重複チェック
   db.get(
     "SELECT id FROM sales WHERE agency_id = ? AND year = ? AND month = ?",
-    [agency_id, year, month],
+    [processedAgencyId, processedYear, processedMonth],
     (err, existing) => {
       if (err) return res.status(500).send("DBエラー");
       if (existing) {
@@ -65,7 +86,7 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
 
       db.run(
         "INSERT INTO sales (agency_id, year, month, amount) VALUES (?, ?, ?, ?)",
-        [agency_id, year, month, amount],
+        [processedAgencyId, processedYear, processedMonth, processedAmount],
         function (err) {
           if (err) return res.status(500).send("DBエラー");
           res.json({ id: this.lastID });

@@ -500,6 +500,17 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
     password_confirm,
   } = req.body;
 
+  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+  const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
+  const processedExperienceYears =
+    experience_years && experience_years.trim() !== ""
+      ? parseInt(experience_years)
+      : null;
+  const processedContractDate =
+    contract_date && contract_date.trim() !== "" ? contract_date : null;
+  const processedStartDate =
+    start_date && start_date.trim() !== "" ? start_date : null;
+
   // パスワード確認
   if (email && password && password !== password_confirm) {
     return res.status(400).send("パスワードが一致しません");
@@ -532,12 +543,12 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
       "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [
         name,
-        age,
+        processedAge,
         address,
         bank_info,
-        experience_years,
-        contract_date,
-        start_date,
+        processedExperienceYears,
+        processedContractDate,
+        processedStartDate,
         product_features,
       ],
       function (err) {
@@ -562,12 +573,12 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
         "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
           name,
-          age,
+          processedAge,
           address,
           bank_info,
-          experience_years,
-          contract_date,
-          start_date,
+          processedExperienceYears,
+          processedContractDate,
+          processedStartDate,
           product_features,
         ],
         function (err) {
@@ -673,16 +684,27 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     products,
   } = req.body;
 
+  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+  const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
+  const processedExperienceYears =
+    experience_years && experience_years.trim() !== ""
+      ? parseInt(experience_years)
+      : null;
+  const processedContractDate =
+    contract_date && contract_date.trim() !== "" ? contract_date : null;
+  const processedStartDate =
+    start_date && start_date.trim() !== "" ? start_date : null;
+
   db.run(
     "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=?, product_features=? WHERE id=?",
     [
       name,
-      age,
+      processedAge,
       address,
       bank_info,
-      experience_years,
-      contract_date,
-      start_date,
+      processedExperienceYears,
+      processedContractDate,
+      processedStartDate,
       product_features,
       req.params.id,
     ],
@@ -928,16 +950,27 @@ router.post(
       products,
     } = req.body;
 
+    // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+    const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
+    const processedExperienceYears =
+      experience_years && experience_years.trim() !== ""
+        ? parseInt(experience_years)
+        : null;
+    const processedContractDate =
+      contract_date && contract_date.trim() !== "" ? contract_date : null;
+    const processedStartDate =
+      start_date && start_date.trim() !== "" ? start_date : null;
+
     db.run(
       "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=?, product_features=? WHERE id=?",
       [
         name,
-        age,
+        processedAge,
         address,
         bank_info,
-        experience_years,
-        contract_date,
-        start_date,
+        processedExperienceYears,
+        processedContractDate,
+        processedStartDate,
         product_features,
         agencyId,
       ],
@@ -1027,16 +1060,27 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     products,
   } = req.body;
 
+  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+  const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
+  const processedExperienceYears =
+    experience_years && experience_years.trim() !== ""
+      ? parseInt(experience_years)
+      : null;
+  const processedContractDate =
+    contract_date && contract_date.trim() !== "" ? contract_date : null;
+  const processedStartDate =
+    start_date && start_date.trim() !== "" ? start_date : null;
+
   db.run(
     "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     [
       name,
-      age,
+      processedAge,
       address,
       bank_info,
-      experience_years,
-      contract_date,
-      start_date,
+      processedExperienceYears,
+      processedContractDate,
+      processedStartDate,
       product_features,
     ],
     function (err) {
