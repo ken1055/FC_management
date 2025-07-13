@@ -27,6 +27,8 @@
 
               <% if (typeof error !== 'undefined' && error) { %>
               <div class="alert alert-danger" role="alert"><%= error %></div>
+              <% } %> <% if (typeof message !== 'undefined' && message) { %>
+              <div class="alert alert-success" role="alert"><%= message %></div>
               <% } %>
 
               <form method="POST" action="/auth/login">

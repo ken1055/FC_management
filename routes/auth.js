@@ -35,6 +35,7 @@ router.get("/login", (req, res) => {
   try {
     res.render("login_standalone", {
       error: null,
+      message: req.query.message,
     });
   } catch (error) {
     console.error("Login page error:", error);
@@ -52,6 +53,11 @@ router.get("/login", (req, res) => {
       </head>
       <body>
         <h1>代理店管理システム - ログイン</h1>
+        ${
+          req.query.message
+            ? `<div style="color: green; margin: 10px 0;">${req.query.message}</div>`
+            : ""
+        }
         <form method="POST" action="/auth/login">
           <div class="form-group">
             <label>Email:</label><br>
@@ -226,7 +232,7 @@ router.post("/register", (req, res) => {
           return res.status(500).send(`ユーザー作成エラー: ${err.message}`);
         }
 
-        res.redirect("/login?message=" + encodeURIComponent("登録完了"));
+        res.redirect("/auth/login?message=" + encodeURIComponent("登録完了"));
       });
     });
   } catch (error) {
