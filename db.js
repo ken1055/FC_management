@@ -159,7 +159,8 @@ async function initializePostgresDatabase() {
     `CREATE TABLE IF NOT EXISTS group_agency (
       group_id INTEGER,
       agency_id INTEGER,
-      PRIMARY KEY (group_id, agency_id)
+      PRIMARY KEY (group_id, agency_id),
+      UNIQUE (group_id, agency_id)
     )`,
     `CREATE TABLE IF NOT EXISTS group_admin (
       group_id INTEGER,

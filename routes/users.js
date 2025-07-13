@@ -193,18 +193,34 @@ router.post("/", requireRole(["admin"]), (req, res) => {
           ? hashPassword(password)
           : password;
 
+      console.log("管理者アカウント作成:", { email, role: "admin" });
+
       db.run(
-        "INSERT INTO users (email, password, role) VALUES (?, ?, 'admin')",
+        "INSERT INTO users (email, password, role) VALUES (?, ?, ?)",
         [email, hashedPassword, "admin"],
         function (err) {
-          if (err)
+          if (err) {
+            console.error("管理者アカウント作成エラー:", err);
+
+            // PostgreSQL固有のエラーハンドリング
+            if (err.code === "23505" && err.constraint === "users_email_key") {
+              return res.render("users_form", {
+                user: null,
+                error: `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`,
+                session: req.session,
+                title: "新規管理者アカウント作成",
+              });
+            }
+
             return res.render("users_form", {
               user: null,
-              error:
-                "アカウント作成に失敗しました（メールアドレスの重複の可能性があります）",
+              error: `アカウント作成に失敗しました: ${err.message}`,
               session: req.session,
               title: "新規管理者アカウント作成",
             });
+          }
+
+          console.log("管理者アカウント作成成功:", email);
           res.redirect("/api/users/list");
         }
       );
