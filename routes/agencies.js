@@ -168,93 +168,259 @@ function checkAgencyIdIntegrity(callback) {
   });
 }
 
-// ID修正機能（代理店用・オンデマンド）
+// ID修正機能（代理店用・PostgreSQL対応）
 function fixAgencyIds(callback) {
+  console.log("代理店ID修正開始...");
+
   // 現在の代理店を取得（nameでソート）
   db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
     if (err) return callback(err);
 
     if (agencies.length === 0) return callback(null);
 
-    // 一時テーブルを作成
-    db.run(
-      "CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies",
-      (err) => {
-        if (err) return callback(err);
+    // データベースタイプを判定
+    const isPostgres =
+      process.env.DATABASE_URL &&
+      (process.env.RAILWAY_ENVIRONMENT_NAME ||
+        process.env.NODE_ENV === "production");
 
-        // 元の代理店データを削除
-        db.run("DELETE FROM agencies", (err) => {
-          if (err) return callback(err);
+    if (isPostgres) {
+      // PostgreSQL用の修正処理
+      fixAgencyIdsPostgres(agencies, callback);
+    } else {
+      // SQLite用の修正処理
+      fixAgencyIdsSQLite(agencies, callback);
+    }
+  });
+}
 
-          // 新しいIDで再挿入
-          let completed = 0;
-          agencies.forEach((agency, index) => {
-            const newId = index + 1;
+// PostgreSQL用のID修正処理
+function fixAgencyIdsPostgres(agencies, callback) {
+  console.log("PostgreSQL環境でのID修正を実行中...");
+
+  // 新しいIDマッピングを作成
+  const idMapping = {};
+  agencies.forEach((agency, index) => {
+    idMapping[agency.id] = index + 1;
+  });
+
+  // トランザクション開始
+  db.serialize(() => {
+    let completed = 0;
+    const totalOperations = agencies.length;
+
+    agencies.forEach((agency, index) => {
+      const newId = index + 1;
+      if (agency.id === newId) {
+        completed++;
+        if (completed === totalOperations) {
+          console.log("代理店ID修正完了（変更不要）");
+          callback(null);
+        }
+        return;
+      }
+
+      // 一時的に負のIDに変更して競合を回避
+      const tempId = -agency.id;
+
+      db.run(
+        "UPDATE agencies SET id = ? WHERE id = ?",
+        [tempId, agency.id],
+        (err) => {
+          if (err) {
+            console.error("一時ID更新エラー:", err);
+            return callback(err);
+          }
+
+          // 関連テーブルも一時IDに更新
+          Promise.all([
+            new Promise((resolve) => {
+              db.run(
+                "UPDATE sales SET agency_id = ? WHERE agency_id = ?",
+                [tempId, agency.id],
+                () => resolve()
+              );
+            }),
+            new Promise((resolve) => {
+              db.run(
+                "UPDATE materials SET agency_id = ? WHERE agency_id = ?",
+                [tempId, agency.id],
+                () => resolve()
+              );
+            }),
+            new Promise((resolve) => {
+              db.run(
+                "UPDATE group_agency SET agency_id = ? WHERE agency_id = ?",
+                [tempId, agency.id],
+                () => resolve()
+              );
+            }),
+            new Promise((resolve) => {
+              db.run(
+                "UPDATE agency_products SET agency_id = ? WHERE agency_id = ?",
+                [tempId, agency.id],
+                () => resolve()
+              );
+            }),
+            new Promise((resolve) => {
+              db.run(
+                "UPDATE users SET agency_id = ? WHERE agency_id = ?",
+                [tempId, agency.id],
+                () => resolve()
+              );
+            }),
+          ]).then(() => {
+            // 最終的なIDに更新
             db.run(
-              "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
-              [newId, agency.id],
+              "UPDATE agencies SET id = ? WHERE id = ?",
+              [newId, tempId],
               (err) => {
-                if (err) console.error("代理店ID修正エラー:", err);
+                if (err) {
+                  console.error("最終ID更新エラー:", err);
+                  return callback(err);
+                }
 
-                // 関連テーブルのagency_idも更新
+                // 関連テーブルを最終IDに更新
                 Promise.all([
                   new Promise((resolve) => {
                     db.run(
-                      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
+                      "UPDATE sales SET agency_id = ? WHERE agency_id = ?",
+                      [newId, tempId],
                       () => resolve()
                     );
                   }),
                   new Promise((resolve) => {
                     db.run(
-                      "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
+                      "UPDATE materials SET agency_id = ? WHERE agency_id = ?",
+                      [newId, tempId],
                       () => resolve()
                     );
                   }),
                   new Promise((resolve) => {
                     db.run(
-                      "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
+                      "UPDATE group_agency SET agency_id = ? WHERE agency_id = ?",
+                      [newId, tempId],
                       () => resolve()
                     );
                   }),
                   new Promise((resolve) => {
                     db.run(
-                      "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
+                      "UPDATE agency_products SET agency_id = ? WHERE agency_id = ?",
+                      [newId, tempId],
                       () => resolve()
                     );
                   }),
                   new Promise((resolve) => {
                     db.run(
-                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
-                      [newId, agency.id],
+                      "UPDATE users SET agency_id = ? WHERE agency_id = ?",
+                      [newId, tempId],
                       () => resolve()
                     );
                   }),
                 ]).then(() => {
                   completed++;
-                  if (completed === agencies.length) {
-                    // 一時テーブルを削除
-                    db.run("DROP TABLE temp_agencies", () => {
-                      // シーケンステーブルをリセット
-                      db.run(
-                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
-                        [agencies.length],
-                        () => {
-                          callback(null);
-                        }
-                      );
-                    });
+                  console.log(
+                    `代理店ID修正: ${agency.id} → ${newId} (${agency.name})`
+                  );
+
+                  if (completed === totalOperations) {
+                    console.log("代理店ID修正完了（PostgreSQL）");
+                    callback(null);
                   }
                 });
               }
             );
           });
-        });
-      }
-    );
+        }
+      );
+    });
+  });
+}
+
+// SQLite用のID修正処理
+function fixAgencyIdsSQLite(agencies, callback) {
+  console.log("SQLite環境でのID修正を実行中...");
+
+  // 一時テーブルを作成
+  db.run("CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies", (err) => {
+    if (err) return callback(err);
+
+    // 元の代理店データを削除
+    db.run("DELETE FROM agencies", (err) => {
+      if (err) return callback(err);
+
+      // 新しいIDで再挿入
+      let completed = 0;
+      agencies.forEach((agency, index) => {
+        const newId = index + 1;
+        db.run(
+          "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+          [newId, agency.id],
+          (err) => {
+            if (err) console.error("代理店ID修正エラー:", err);
+
+            // 関連テーブルのagency_idも更新
+            Promise.all([
+              new Promise((resolve) => {
+                db.run(
+                  "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, agency.id],
+                  () => resolve()
+                );
+              }),
+              new Promise((resolve) => {
+                db.run(
+                  "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, agency.id],
+                  () => resolve()
+                );
+              }),
+              new Promise((resolve) => {
+                db.run(
+                  "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, agency.id],
+                  () => resolve()
+                );
+              }),
+              new Promise((resolve) => {
+                db.run(
+                  "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, agency.id],
+                  () => resolve()
+                );
+              }),
+              new Promise((resolve) => {
+                db.run(
+                  "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  [newId, agency.id],
+                  () => resolve()
+                );
+              }),
+            ]).then(() => {
+              completed++;
+              console.log(
+                `代理店ID修正: ${agency.id} → ${newId} (${agency.name})`
+              );
+
+              if (completed === agencies.length) {
+                // 一時テーブルを削除
+                db.run("DROP TABLE temp_agencies", () => {
+                  // シーケンステーブルをリセット
+                  db.run(
+                    "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+                    [agencies.length],
+                    () => {
+                      console.log("代理店ID修正完了（SQLite）");
+                      callback(null);
+                    }
+                  );
+                });
+              }
+            });
+          }
+        );
+      });
+    });
   });
 }
 
@@ -274,10 +440,50 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
       };
     }
 
-    // 孤立したユーザーアカウントをクリーンアップ
-    cleanupOrphanedUsers(() => {
-      renderAgenciesList(req, res, group_id, search, integrityInfo, message);
-    });
+    // ID整合性に問題がある場合は自動修正
+    if (!integrityInfo.isIntegrityOk && integrityInfo.issues.length > 0) {
+      console.log("代理店ID整合性の問題を発見、自動修正を実行...");
+      fixAgencyIds((fixErr) => {
+        if (fixErr) {
+          console.error("代理店ID自動修正エラー:", fixErr);
+          // エラーがあっても画面表示は続行
+          cleanupOrphanedUsers(() => {
+            renderAgenciesList(
+              req,
+              res,
+              group_id,
+              search,
+              integrityInfo,
+              message
+            );
+          });
+        } else {
+          console.log("代理店ID自動修正完了");
+          // 修正完了後、再度整合性チェック
+          checkAgencyIdIntegrity((recheckErr, updatedIntegrityInfo) => {
+            const finalIntegrityInfo = recheckErr
+              ? integrityInfo
+              : updatedIntegrityInfo;
+            cleanupOrphanedUsers(() => {
+              renderAgenciesList(
+                req,
+                res,
+                group_id,
+                search,
+                finalIntegrityInfo,
+                message,
+                "代理店IDの連番を自動修正しました"
+              );
+            });
+          });
+        }
+      });
+    } else {
+      // 孤立したユーザーアカウントをクリーンアップ
+      cleanupOrphanedUsers(() => {
+        renderAgenciesList(req, res, group_id, search, integrityInfo, message);
+      });
+    }
   });
 });
 
@@ -288,7 +494,8 @@ function renderAgenciesList(
   groupId,
   searchQuery,
   integrityInfo,
-  message = null
+  message = null,
+  autoFixMessage = null
 ) {
   console.log("=== renderAgenciesList実行 ===");
   console.log("グループID:", groupId);
@@ -351,46 +558,24 @@ function renderAgenciesList(
       query += " GROUP BY a.id ORDER BY a.id";
     }
 
-    console.log("実行するクエリ:", query);
-    console.log("パラメータ:", params);
-
     db.all(query, params, (err, agencies) => {
       if (err) {
-        console.error("代理店取得エラー:", err);
+        console.error("代理店一覧取得エラー:", err);
         return res.status(500).send("DBエラー: " + err.message);
       }
 
-      console.log("取得した代理店数:", agencies.length);
+      console.log("代理店一覧取得完了:", agencies.length, "件");
 
-      // integrityInfoの安全性チェック
-      if (!integrityInfo) {
-        integrityInfo = {
-          totalAgencies: agencies.length,
-          issues: [],
-          isIntegrityOk: true,
-        };
-      } else {
-        // 代理店数を更新
-        integrityInfo.totalAgencies = agencies.length;
-      }
-
-      try {
-        res.render("agencies_list", {
-          agencies,
-          groups,
-          selectedGroupId: groupId,
-          searchQuery: searchQuery,
-          integrityInfo,
-          autoFixMessage: message,
-          success: req.query.success,
-          error: req.query.error,
-          session: req.session,
-          title: "代理店一覧",
-        });
-      } catch (renderError) {
-        console.error("レンダリングエラー:", renderError);
-        res.status(500).send("レンダリングエラー: " + renderError.message);
-      }
+      res.render("agencies_list", {
+        agencies,
+        groups,
+        selectedGroupId: groupId,
+        searchQuery,
+        session: req.session,
+        success: message,
+        integrityInfo,
+        autoFixMessage,
+      });
     });
   });
 }
@@ -934,12 +1119,56 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
 
                 // 削除後に孤立したユーザーアカウントをチェック・削除
                 cleanupOrphanedUsers(() => {
-                  res.redirect(
-                    "/agencies/list?success=" +
-                      encodeURIComponent(
-                        `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                      )
-                  );
+                  // 削除後にID整合性をチェックし、必要に応じて自動修正
+                  checkAgencyIdIntegrity((checkErr, integrityInfo) => {
+                    if (checkErr) {
+                      console.error(
+                        "削除後のID整合性チェックエラー:",
+                        checkErr
+                      );
+                      return res.redirect(
+                        "/agencies/list?success=" +
+                          encodeURIComponent(
+                            `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                          )
+                      );
+                    }
+
+                    if (
+                      !integrityInfo.isIntegrityOk &&
+                      integrityInfo.issues.length > 0
+                    ) {
+                      console.log(
+                        "削除後のID整合性問題を発見、自動修正を実行..."
+                      );
+                      fixAgencyIds((fixErr) => {
+                        if (fixErr) {
+                          console.error("削除後のID自動修正エラー:", fixErr);
+                          return res.redirect(
+                            "/agencies/list?success=" +
+                              encodeURIComponent(
+                                `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                              )
+                          );
+                        }
+
+                        console.log("削除後のID自動修正完了");
+                        res.redirect(
+                          "/agencies/list?success=" +
+                            encodeURIComponent(
+                              `「${agency.name}」の代理店データと関連するユーザーアカウントを削除し、IDの連番を自動修正しました`
+                            )
+                        );
+                      });
+                    } else {
+                      res.redirect(
+                        "/agencies/list?success=" +
+                          encodeURIComponent(
+                            `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                          )
+                      );
+                    }
+                  });
                 });
               }
             );

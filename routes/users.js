@@ -50,8 +50,10 @@ function checkUserIdIntegrity(callback) {
   );
 }
 
-// ID修正機能（オンデマンド）
+// ID修正機能（PostgreSQL対応）
 function fixUserIds(callback) {
+  console.log("ユーザーID修正開始...");
+
   // 現在のユーザーを取得（adminとagencyのみ、emailでソート）
   db.all(
     "SELECT id, email, role, agency_id FROM users WHERE role IN ('admin', 'agency') ORDER BY role, email",
@@ -61,48 +63,164 @@ function fixUserIds(callback) {
 
       if (users.length === 0) return callback(null);
 
-      // 一時テーブルを作成
+      // データベースタイプを判定
+      const isPostgres =
+        process.env.DATABASE_URL &&
+        (process.env.RAILWAY_ENVIRONMENT_NAME ||
+          process.env.NODE_ENV === "production");
+
+      if (isPostgres) {
+        // PostgreSQL用の修正処理
+        fixUserIdsPostgres(users, callback);
+      } else {
+        // SQLite用の修正処理
+        fixUserIdsSQLite(users, callback);
+      }
+    }
+  );
+}
+
+// PostgreSQL用のID修正処理
+function fixUserIdsPostgres(users, callback) {
+  console.log("PostgreSQL環境でのユーザーID修正を実行中...");
+
+  // 新しいIDマッピングを作成
+  const idMapping = {};
+  users.forEach((user, index) => {
+    idMapping[user.id] = index + 1;
+  });
+
+  // トランザクション開始
+  db.serialize(() => {
+    let completed = 0;
+    const totalOperations = users.length;
+
+    users.forEach((user, index) => {
+      const newId = index + 1;
+      if (user.id === newId) {
+        completed++;
+        if (completed === totalOperations) {
+          console.log("ユーザーID修正完了（変更不要）");
+          callback(null);
+        }
+        return;
+      }
+
+      // 一時的に負のIDに変更して競合を回避
+      const tempId = -user.id;
+
       db.run(
-        "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
+        "UPDATE users SET id = ? WHERE id = ?",
+        [tempId, user.id],
         (err) => {
-          if (err) return callback(err);
+          if (err) {
+            console.error("一時ID更新エラー:", err);
+            return callback(err);
+          }
 
-          // 元のユーザーデータを削除
-          db.run(
-            "DELETE FROM users WHERE role IN ('admin', 'agency')",
-            (err) => {
-              if (err) return callback(err);
+          // 関連テーブルも一時IDに更新
+          Promise.all([
+            new Promise((resolve) => {
+              db.run(
+                "UPDATE group_admin SET admin_id = ? WHERE admin_id = ?",
+                [tempId, user.id],
+                () => resolve()
+              );
+            }),
+          ]).then(() => {
+            // 最終的なIDに更新
+            db.run(
+              "UPDATE users SET id = ? WHERE id = ?",
+              [newId, tempId],
+              (err) => {
+                if (err) {
+                  console.error("最終ID更新エラー:", err);
+                  return callback(err);
+                }
 
-              // 新しいIDで再挿入
-              let completed = 0;
-              users.forEach((user, index) => {
-                const newId = index + 1;
-                db.run(
-                  "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
-                  [newId, user.id],
-                  (err) => {
-                    if (err) console.error("ID修正エラー:", err);
-                    completed++;
-                    if (completed === users.length) {
-                      // 一時テーブルを削除
-                      db.run("DROP TABLE temp_users", () => {
-                        // シーケンステーブルをリセット
-                        db.run(
-                          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
-                          [users.length],
-                          () => {
-                            callback(null);
-                          }
-                        );
-                      });
-                    }
+                // 関連テーブルを最終IDに更新
+                Promise.all([
+                  new Promise((resolve) => {
+                    db.run(
+                      "UPDATE group_admin SET admin_id = ? WHERE admin_id = ?",
+                      [newId, tempId],
+                      () => resolve()
+                    );
+                  }),
+                ]).then(() => {
+                  completed++;
+                  console.log(
+                    `ユーザーID修正: ${user.id} → ${newId} (${user.email})`
+                  );
+
+                  if (completed === totalOperations) {
+                    console.log("ユーザーID修正完了（PostgreSQL）");
+                    callback(null);
                   }
-                );
-              });
-            }
-          );
+                });
+              }
+            );
+          });
         }
       );
+    });
+  });
+}
+
+// SQLite用のID修正処理
+function fixUserIdsSQLite(users, callback) {
+  console.log("SQLite環境でのユーザーID修正を実行中...");
+
+  // 一時テーブルを作成
+  db.run(
+    "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
+    (err) => {
+      if (err) return callback(err);
+
+      // 元のユーザーデータを削除
+      db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
+        if (err) return callback(err);
+
+        // 新しいIDで再挿入
+        let completed = 0;
+        users.forEach((user, index) => {
+          const newId = index + 1;
+          db.run(
+            "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
+            [newId, user.id],
+            (err) => {
+              if (err) console.error("ユーザーID修正エラー:", err);
+
+              // 関連テーブルのadmin_idも更新
+              db.run(
+                "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_users WHERE id = ?)",
+                [newId, user.id],
+                () => {
+                  completed++;
+                  console.log(
+                    `ユーザーID修正: ${user.id} → ${newId} (${user.email})`
+                  );
+
+                  if (completed === users.length) {
+                    // 一時テーブルを削除
+                    db.run("DROP TABLE temp_users", () => {
+                      // シーケンステーブルをリセット
+                      db.run(
+                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
+                        [users.length],
+                        () => {
+                          console.log("ユーザーID修正完了（SQLite）");
+                          callback(null);
+                        }
+                      );
+                    });
+                  }
+                }
+              );
+            }
+          );
+        });
+      });
     }
   );
 }
@@ -112,7 +230,50 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
   console.log("=== ユーザー管理ページアクセス ===");
   console.log("ユーザー:", req.session.user);
 
-  // シンプルなユーザー一覧表示（ID整合性チェックを無効化）
+  // ユーザーIDの整合性をチェック
+  checkUserIdIntegrity((err, integrityInfo) => {
+    // エラーが発生した場合はデフォルト値を設定
+    if (err || !integrityInfo) {
+      console.error("ユーザーID整合性チェックエラー:", err);
+      integrityInfo = {
+        totalUsers: 0,
+        issues: [],
+        isIntegrityOk: true,
+      };
+    }
+
+    // ID整合性に問題がある場合は自動修正
+    if (!integrityInfo.isIntegrityOk && integrityInfo.issues.length > 0) {
+      console.log("ユーザーID整合性の問題を発見、自動修正を実行...");
+      fixUserIds((fixErr) => {
+        if (fixErr) {
+          console.error("ユーザーID自動修正エラー:", fixErr);
+          // エラーがあっても画面表示は続行
+          renderUsersList(req, res, integrityInfo);
+        } else {
+          console.log("ユーザーID自動修正完了");
+          // 修正完了後、再度整合性チェック
+          checkUserIdIntegrity((recheckErr, updatedIntegrityInfo) => {
+            const finalIntegrityInfo = recheckErr
+              ? integrityInfo
+              : updatedIntegrityInfo;
+            renderUsersList(
+              req,
+              res,
+              finalIntegrityInfo,
+              "ユーザーIDの連番を自動修正しました"
+            );
+          });
+        }
+      });
+    } else {
+      renderUsersList(req, res, integrityInfo);
+    }
+  });
+});
+
+// ユーザー一覧画面の描画関数
+function renderUsersList(req, res, integrityInfo, autoFixMessage = null) {
   db.all(
     "SELECT id, email, role FROM users WHERE role IN ('admin') ORDER BY id",
     [],
@@ -122,7 +283,7 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
         return res.status(500).send("DBエラー: " + err.message);
       }
 
-      console.log("取得したユーザー数:", users.length);
+      console.log("ユーザー一覧取得完了:", users.length, "件");
 
       // 管理者数を集計
       const admins = users.filter((u) => u.role === "admin");
@@ -135,12 +296,8 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
         res.render("users_list", {
           users,
           admins,
-          integrityInfo: {
-            isIntegrityOk: true,
-            issues: [],
-            totalUsers: users.length,
-          }, // ダミーデータ
-          autoFixMessage: null,
+          integrityInfo,
+          autoFixMessage,
           success: success,
           error: error,
           session: req.session,
@@ -152,7 +309,7 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
       }
     }
   );
-});
+}
 
 // 新規アカウント作成画面
 router.get("/new", requireRole(["admin"]), (req, res) => {
@@ -305,10 +462,46 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
       db.run("DELETE FROM users WHERE id = ?", [userId], function (err) {
         if (err) return res.status(500).send("削除エラー");
 
-        res.redirect(
-          "/api/users/list?success=" +
-            encodeURIComponent(`${user.email} のアカウントを削除しました`)
-        );
+        console.log(`ユーザー削除完了: ${user.email} (ID: ${userId})`);
+
+        // 削除後にID整合性をチェックし、必要に応じて自動修正
+        checkUserIdIntegrity((checkErr, integrityInfo) => {
+          if (checkErr) {
+            console.error("削除後のID整合性チェックエラー:", checkErr);
+            return res.redirect(
+              "/api/users/list?success=" +
+                encodeURIComponent(`${user.email} のアカウントを削除しました`)
+            );
+          }
+
+          if (!integrityInfo.isIntegrityOk && integrityInfo.issues.length > 0) {
+            console.log("削除後のID整合性問題を発見、自動修正を実行...");
+            fixUserIds((fixErr) => {
+              if (fixErr) {
+                console.error("削除後のID自動修正エラー:", fixErr);
+                return res.redirect(
+                  "/api/users/list?success=" +
+                    encodeURIComponent(
+                      `${user.email} のアカウントを削除しました`
+                    )
+                );
+              }
+
+              console.log("削除後のID自動修正完了");
+              res.redirect(
+                "/api/users/list?success=" +
+                  encodeURIComponent(
+                    `${user.email} のアカウントを削除し、IDの連番を自動修正しました`
+                  )
+              );
+            });
+          } else {
+            res.redirect(
+              "/api/users/list?success=" +
+                encodeURIComponent(`${user.email} のアカウントを削除しました`)
+            );
+          }
+        });
       });
     }
   );
