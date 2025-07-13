@@ -483,36 +483,14 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
       };
     }
 
-    // 強制修正を無効化し、問題がある場合のみ修正を実行
-    if (integrityInfo.issues && integrityInfo.issues.length > 0) {
-      console.log("=== ユーザーID修正を実行（問題検出） ===");
+    console.log("整合性チェック結果:", integrityInfo);
 
-      fixUserIds((fixErr) => {
-        if (fixErr) {
-          console.error("ユーザーID修正エラー:", fixErr);
-          // エラーがあっても画面表示は続行
-          renderUsersList(req, res, integrityInfo);
-        } else {
-          console.log("ユーザーID修正完了");
-          // 修正完了後、再度整合性チェック
-          checkUserIdIntegrity((recheckErr, updatedIntegrityInfo) => {
-            const finalIntegrityInfo = recheckErr
-              ? integrityInfo
-              : updatedIntegrityInfo;
-            renderUsersList(
-              req,
-              res,
-              finalIntegrityInfo,
-              "ユーザーIDの連番を修正しました"
-            );
-          });
-        }
-      });
-    } else {
-      console.log("=== ユーザーID修正スキップ（問題なし） ===");
-      // 問題がない場合は修正をスキップして直接表示
-      renderUsersList(req, res, integrityInfo);
-    }
+    // 管理者アカウントのID修正処理を無効化
+    console.log("=== 管理者アカウントID修正処理は無効化されています ===");
+    console.log("ID整合性の問題があっても自動修正は行いません");
+
+    // 整合性チェック結果を表示するが、修正は行わない
+    renderUsersList(req, res, integrityInfo);
   });
 });
 
@@ -728,45 +706,13 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
       if (err) return res.status(500).send("削除エラー");
 
       console.log(`管理者削除完了: ${admin.email} (ID: ${adminId})`);
+      console.log("=== 管理者削除後のID自動修正処理は無効化されています ===");
 
-      // 削除後にID整合性をチェックし、必要に応じて自動修正
-      checkUserIdIntegrity((checkErr, integrityInfo) => {
-        if (checkErr) {
-          console.error("削除後のID整合性チェックエラー:", checkErr);
-          return res.redirect(
-            "/api/users/list?success=" +
-              encodeURIComponent(`${admin.email} のアカウントを削除しました`)
-          );
-        }
-
-        if (!integrityInfo.isIntegrityOk && integrityInfo.issues.length > 0) {
-          console.log("削除後のID整合性問題を発見、自動修正を実行...");
-          fixUserIds((fixErr) => {
-            if (fixErr) {
-              console.error("削除後のID自動修正エラー:", fixErr);
-              return res.redirect(
-                "/api/users/list?success=" +
-                  encodeURIComponent(
-                    `${admin.email} のアカウントを削除しました`
-                  )
-              );
-            }
-
-            console.log("削除後のID自動修正完了");
-            res.redirect(
-              "/api/users/list?success=" +
-                encodeURIComponent(
-                  `${admin.email} のアカウントを削除し、IDの連番を自動修正しました`
-                )
-            );
-          });
-        } else {
-          res.redirect(
-            "/api/users/list?success=" +
-              encodeURIComponent(`${admin.email} のアカウントを削除しました`)
-          );
-        }
-      });
+      // ID修正処理を無効化し、削除完了メッセージのみ表示
+      res.redirect(
+        "/api/users/list?success=" +
+          encodeURIComponent(`${admin.email} のアカウントを削除しました`)
+      );
     });
   });
 });

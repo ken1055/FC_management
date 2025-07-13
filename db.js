@@ -658,61 +658,95 @@ function initializeLocalDatabase() {
     isInitialized = true;
     console.log("ローカルDB初期化完了");
 
-    // 既存のusersテーブルから管理者データを移行
-    console.log("既存の管理者データを移行中...");
-    db.all(
-      "SELECT id, email, password FROM users WHERE role = 'admin'",
-      [],
-      (err, existingAdmins) => {
+    // デフォルトの管理者アカウントを作成
+    const adminPassword =
+      process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
+
+    db.run(
+      "INSERT OR IGNORE INTO admins (email, password) VALUES (?, ?)",
+      ["admin", adminPassword],
+      (err) => {
         if (err) {
-          console.log("管理者データ移行エラー（新規DBの可能性）:", err.message);
-          return;
+          console.error("デフォルト管理者作成エラー:", err);
+        } else {
+          console.log("デフォルト管理者アカウント作成完了");
         }
 
-        if (existingAdmins && existingAdmins.length > 0) {
-          console.log(`${existingAdmins.length}件の管理者データを移行します`);
+        // 既存のusersテーブルから管理者データを移行
+        console.log("既存の管理者データを移行中...");
+        db.all(
+          "SELECT id, email, password FROM users WHERE role = 'admin'",
+          [],
+          (err, existingAdmins) => {
+            if (err) {
+              console.log(
+                "管理者データ移行エラー（新規DBの可能性）:",
+                err.message
+              );
+              return;
+            }
 
-          let migrationCompleted = 0;
-          existingAdmins.forEach((admin) => {
-            db.run(
-              "INSERT OR IGNORE INTO admins (email, password) VALUES (?, ?)",
-              [admin.email, admin.password],
-              function (err) {
-                if (err) {
-                  console.error(`管理者移行エラー ${admin.email}:`, err);
-                } else {
-                  console.log(`管理者移行完了: ${admin.email}`);
-                }
+            if (existingAdmins && existingAdmins.length > 0) {
+              console.log(
+                `${existingAdmins.length}件の管理者データを移行します`
+              );
 
-                migrationCompleted++;
-                if (migrationCompleted === existingAdmins.length) {
-                  // 移行後、usersテーブルから管理者データを削除
-                  db.run("DELETE FROM users WHERE role = 'admin'", (err) => {
+              let migrationCompleted = 0;
+              existingAdmins.forEach((admin) => {
+                db.run(
+                  "INSERT OR IGNORE INTO admins (email, password) VALUES (?, ?)",
+                  [admin.email, admin.password],
+                  function (err) {
                     if (err) {
-                      console.error(
-                        "usersテーブルから管理者データ削除エラー:",
-                        err
-                      );
+                      console.error(`管理者移行エラー ${admin.email}:`, err);
                     } else {
-                      console.log("usersテーブルから管理者データを削除完了");
+                      console.log(`管理者移行完了: ${admin.email}`);
                     }
 
-                    // usersテーブルからroleカラムを削除（SQLite）
-                    db.run("ALTER TABLE users DROP COLUMN role", (err) => {
-                      if (err) {
-                        console.log("roleカラム削除スキップ:", err.message);
-                      } else {
-                        console.log("usersテーブルからroleカラムを削除完了");
-                      }
-                    });
-                  });
-                }
-              }
-            );
-          });
-        } else {
-          console.log("移行する管理者データがありません");
-        }
+                    migrationCompleted++;
+                    if (migrationCompleted === existingAdmins.length) {
+                      // 移行後、usersテーブルから管理者データを削除
+                      db.run(
+                        "DELETE FROM users WHERE role = 'admin'",
+                        (err) => {
+                          if (err) {
+                            console.error(
+                              "usersテーブルから管理者データ削除エラー:",
+                              err
+                            );
+                          } else {
+                            console.log(
+                              "usersテーブルから管理者データを削除完了"
+                            );
+                          }
+
+                          // usersテーブルからroleカラムを削除（SQLite）
+                          db.run(
+                            "ALTER TABLE users DROP COLUMN role",
+                            (err) => {
+                              if (err) {
+                                console.log(
+                                  "roleカラム削除スキップ:",
+                                  err.message
+                                );
+                              } else {
+                                console.log(
+                                  "usersテーブルからroleカラムを削除完了"
+                                );
+                              }
+                            }
+                          );
+                        }
+                      );
+                    }
+                  }
+                );
+              });
+            } else {
+              console.log("移行する管理者データがありません");
+            }
+          }
+        );
       }
     );
   });
