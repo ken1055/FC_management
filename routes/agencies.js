@@ -484,47 +484,94 @@ function fixAgencyIdsPostgres(agencies, callback) {
   // PostgreSQL用のシーケンスリセット関数
   function resetPostgreSQLSequence(maxId, callback) {
     console.log("PostgreSQLシーケンスリセット試行中...");
+    console.log("設定する最大ID:", maxId);
 
     // 複数のシーケンスリセット方法を試行
     const resetMethods = [
-      // 方法1: 動的シーケンス名取得
+      // 方法1: 現在の最大IDを取得してシーケンスをリセット
       () => {
-        db.run(
-          "SELECT setval((SELECT pg_get_serial_sequence('agencies', 'id')), ?, false)",
-          [maxId],
-          (err) => {
+        db.get(
+          "SELECT COALESCE(MAX(id), 0) as max_id FROM agencies",
+          [],
+          (err, row) => {
             if (err) {
-              console.log("シーケンスリセット方法1失敗:", err.message);
+              console.log("最大ID取得失敗:", err.message);
               tryMethod2();
-            } else {
-              console.log(`シーケンスリセット方法1成功: ${maxId}`);
-              callback();
+              return;
             }
+
+            const currentMaxId = row.max_id;
+            console.log("現在の最大ID:", currentMaxId);
+
+            db.run(
+              "SELECT setval((SELECT pg_get_serial_sequence('agencies', 'id')), ?, true)",
+              [currentMaxId],
+              (err) => {
+                if (err) {
+                  console.log("シーケンスリセット方法1失敗:", err.message);
+                  tryMethod2();
+                } else {
+                  console.log(`シーケンスリセット方法1成功: ${currentMaxId}`);
+                  callback();
+                }
+              }
+            );
           }
         );
       },
-      // 方法2: 固定シーケンス名
+      // 方法2: 固定シーケンス名で最大IDを使用
       () => {
-        db.run("SELECT setval('agencies_id_seq', ?, false)", [maxId], (err) => {
+        db.get(
+          "SELECT COALESCE(MAX(id), 0) as max_id FROM agencies",
+          [],
+          (err, row) => {
+            if (err) {
+              console.log("最大ID取得失敗:", err.message);
+              tryMethod3();
+              return;
+            }
+
+            const currentMaxId = row.max_id;
+            console.log("現在の最大ID:", currentMaxId);
+
+            db.run(
+              "SELECT setval('agencies_id_seq', ?, true)",
+              [currentMaxId],
+              (err) => {
+                if (err) {
+                  console.log("シーケンスリセット方法2失敗:", err.message);
+                  tryMethod3();
+                } else {
+                  console.log(`シーケンスリセット方法2成功: ${currentMaxId}`);
+                  callback();
+                }
+              }
+            );
+          }
+        );
+      },
+      // 方法3: 指定されたmaxIdを使用
+      () => {
+        db.run("SELECT setval('agencies_id_seq', ?, true)", [maxId], (err) => {
           if (err) {
-            console.log("シーケンスリセット方法2失敗:", err.message);
-            tryMethod3();
+            console.log("シーケンスリセット方法3失敗:", err.message);
+            tryMethod4();
           } else {
-            console.log(`シーケンスリセット方法2成功: ${maxId}`);
+            console.log(`シーケンスリセット方法3成功: ${maxId}`);
             callback();
           }
         });
       },
-      // 方法3: SQLiteのシーケンステーブル更新（互換性のため）
+      // 方法4: SQLiteのシーケンステーブル更新（互換性のため）
       () => {
         db.run(
           "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
           [maxId],
           (err) => {
             if (err) {
-              console.log("シーケンスリセット方法3失敗:", err.message);
+              console.log("シーケンスリセット方法4失敗:", err.message);
             } else {
-              console.log(`シーケンスリセット方法3成功: ${maxId}`);
+              console.log(`シーケンスリセット方法4成功: ${maxId}`);
             }
             // エラーがあってもcallbackを呼ぶ
             callback();
@@ -536,6 +583,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
     const tryMethod1 = resetMethods[0];
     const tryMethod2 = resetMethods[1];
     const tryMethod3 = resetMethods[2];
+    const tryMethod4 = resetMethods[3];
 
     tryMethod1();
   }
