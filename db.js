@@ -343,7 +343,7 @@ function initializeInMemoryDatabase() {
         agency_id INTEGER,
         product_name TEXT,
         file_path TEXT,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
     `);
@@ -394,7 +394,7 @@ function initializeInMemoryDatabase() {
         mimetype TEXT NOT NULL,
         description TEXT,
         agency_id INTEGER,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
     `);
@@ -447,7 +447,7 @@ function initializeLocalDatabase() {
         agency_id INTEGER,
         product_name TEXT,
         file_path TEXT,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
     `);
@@ -493,7 +493,7 @@ function initializeLocalDatabase() {
         mimetype TEXT NOT NULL,
         description TEXT,
         agency_id INTEGER,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
     `);
