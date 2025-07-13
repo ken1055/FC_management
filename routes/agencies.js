@@ -1188,8 +1188,8 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
             // ユーザーアカウントを作成
             db.run(
-              "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)",
-              [email, hashedPassword, "agency", agencyId],
+              "INSERT INTO users (email, password, agency_id) VALUES (?, ?, ?)",
+              [email, hashedPassword, agencyId],
               function (err) {
                 if (err) {
                   console.error("ユーザー作成エラー:", err);

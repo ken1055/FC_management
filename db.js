@@ -129,12 +129,18 @@ async function initializePostgresDatabase() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL
     )`,
-    // 次に参照するテーブルを作成
+    // 管理者アカウント専用テーブル
+    `CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // 代理店アカウント専用テーブル（roleフィールドを削除）
     `CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
       agency_id INTEGER
     )`,
     `CREATE TABLE IF NOT EXISTS agency_products (
@@ -194,7 +200,7 @@ async function initializePostgresDatabase() {
       `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
       `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
       `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
-      `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_user FOREIGN KEY (admin_id) REFERENCES users(id)`,
+      `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_admin FOREIGN KEY (admin_id) REFERENCES admins(id)`,
       `ALTER TABLE materials ADD CONSTRAINT fk_materials_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
     ];
 
@@ -214,9 +220,51 @@ async function initializePostgresDatabase() {
       process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
 
     await db.query(
-      `INSERT INTO users (email, password, role) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING`,
-      ["admin", adminPassword, "admin"]
+      `INSERT INTO admins (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`,
+      ["admin", adminPassword]
     );
+
+    // 既存のusersテーブルから管理者データを移行
+    console.log("既存の管理者データを移行中...");
+    try {
+      // 既存のusersテーブルから管理者を取得
+      const existingAdmins = await db.query(
+        "SELECT id, email, password FROM users WHERE role = 'admin'"
+      );
+
+      if (existingAdmins.rows && existingAdmins.rows.length > 0) {
+        console.log(
+          `${existingAdmins.rows.length}件の管理者データを移行します`
+        );
+
+        for (const admin of existingAdmins.rows) {
+          await db.query(
+            "INSERT INTO admins (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING",
+            [admin.email, admin.password]
+          );
+          console.log(`管理者移行完了: ${admin.email}`);
+        }
+
+        // 移行後、usersテーブルから管理者データを削除
+        await db.query("DELETE FROM users WHERE role = 'admin'");
+        console.log("usersテーブルから管理者データを削除完了");
+      } else {
+        console.log("移行する管理者データがありません");
+      }
+    } catch (migrationError) {
+      console.log(
+        "管理者データ移行エラー（新規DBの可能性）:",
+        migrationError.message
+      );
+    }
+
+    // usersテーブルからroleカラムを削除（PostgreSQL）
+    try {
+      await db.query("ALTER TABLE users DROP COLUMN IF EXISTS role");
+      console.log("usersテーブルからroleカラムを削除完了");
+    } catch (alterError) {
+      console.log("roleカラム削除スキップ:", alterError.message);
+    }
 
     console.log("管理者アカウント作成完了");
     isInitialized = true;
@@ -238,11 +286,16 @@ function initializeInMemoryDatabase() {
 
     // 最重要テーブルのみ作成
     const essentialTables = [
+      `CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
       `CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
         agency_id INTEGER
       )`,
       `CREATE TABLE IF NOT EXISTS agencies (
@@ -280,19 +333,101 @@ function initializeInMemoryDatabase() {
         // PostgreSQL互換のINSERT文を使用
         const isPostgres = !!process.env.DATABASE_URL;
         const insertQuery = isPostgres
-          ? "INSERT INTO users (email, password, role) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING"
-          : "INSERT OR IGNORE INTO users (email, password, role) VALUES (?, ?, ?)";
+          ? "INSERT INTO admins (email, password) VALUES (?, ?) ON CONFLICT (email) DO NOTHING"
+          : "INSERT OR IGNORE INTO admins (email, password) VALUES (?, ?)";
 
-        db.run(insertQuery, ["admin", adminPassword, "admin"], (err) => {
+        db.run(insertQuery, ["admin", adminPassword], (err) => {
           if (err) {
             console.error("管理者作成エラー:", err);
           } else {
             console.log("管理者アカウント作成完了");
           }
 
-          isInitialized = true;
-          const duration = Date.now() - startTime;
-          console.log(`高速初期化完了: ${duration}ms`);
+          // 既存のusersテーブルから管理者データを移行
+          console.log("既存の管理者データを移行中...");
+          db.all(
+            "SELECT id, email, password FROM users WHERE role = 'admin'",
+            [],
+            (err, existingAdmins) => {
+              if (err) {
+                console.log(
+                  "管理者データ移行エラー（新規DBの可能性）:",
+                  err.message
+                );
+                isInitialized = true;
+                const duration = Date.now() - startTime;
+                console.log(`高速初期化完了: ${duration}ms`);
+                return;
+              }
+
+              if (existingAdmins && existingAdmins.length > 0) {
+                console.log(
+                  `${existingAdmins.length}件の管理者データを移行します`
+                );
+
+                let migrationCompleted = 0;
+                existingAdmins.forEach((admin) => {
+                  db.run(
+                    "INSERT OR IGNORE INTO admins (email, password) VALUES (?, ?)",
+                    [admin.email, admin.password],
+                    function (err) {
+                      if (err) {
+                        console.error(`管理者移行エラー ${admin.email}:`, err);
+                      } else {
+                        console.log(`管理者移行完了: ${admin.email}`);
+                      }
+
+                      migrationCompleted++;
+                      if (migrationCompleted === existingAdmins.length) {
+                        // 移行後、usersテーブルから管理者データを削除
+                        db.run(
+                          "DELETE FROM users WHERE role = 'admin'",
+                          (err) => {
+                            if (err) {
+                              console.error(
+                                "usersテーブルから管理者データ削除エラー:",
+                                err
+                              );
+                            } else {
+                              console.log(
+                                "usersテーブルから管理者データを削除完了"
+                              );
+                            }
+
+                            // usersテーブルからroleカラムを削除（SQLite）
+                            db.run(
+                              "ALTER TABLE users DROP COLUMN role",
+                              (err) => {
+                                if (err) {
+                                  console.log(
+                                    "roleカラム削除スキップ:",
+                                    err.message
+                                  );
+                                } else {
+                                  console.log(
+                                    "usersテーブルからroleカラムを削除完了"
+                                  );
+                                }
+
+                                isInitialized = true;
+                                const duration = Date.now() - startTime;
+                                console.log(`高速初期化完了: ${duration}ms`);
+                              }
+                            );
+                          }
+                        );
+                      }
+                    }
+                  );
+                });
+              } else {
+                console.log("移行する管理者データがありません");
+                isInitialized = true;
+                const duration = Date.now() - startTime;
+                console.log(`高速初期化完了: ${duration}ms`);
+              }
+            }
+          );
         });
       })
       .catch((err) => {
@@ -305,13 +440,22 @@ function initializeInMemoryDatabase() {
 
   // 通常の初期化（全テーブル）
   db.serialize(() => {
-    // テーブル作成
+    // 管理者アカウント専用テーブル
+    db.run(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 代理店アカウント専用テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
         agency_id INTEGER,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
@@ -385,7 +529,7 @@ function initializeInMemoryDatabase() {
         admin_id INTEGER,
         PRIMARY KEY (group_id, admin_id),
         FOREIGN KEY (group_id) REFERENCES groups(id),
-        FOREIGN KEY (admin_id) REFERENCES users(id)
+        FOREIGN KEY (admin_id) REFERENCES admins(id)
       )
     `);
 
@@ -404,8 +548,7 @@ function initializeInMemoryDatabase() {
 
     // 初期化完了
     isInitialized = true;
-    const duration = Date.now() - startTime;
-    console.log(`メモリDB初期化完了: ${duration}ms`);
+    console.log("メモリDB初期化完了");
   });
 }
 
@@ -413,12 +556,22 @@ function initializeLocalDatabase() {
   console.log("ローカルDB初期化中...");
 
   db.serialize(() => {
+    // 管理者アカウント専用テーブル
+    db.run(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 代理店アカウント専用テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        role TEXT CHECK(role IN ('admin', 'agency')) NOT NULL,
         agency_id INTEGER,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
@@ -485,7 +638,7 @@ function initializeLocalDatabase() {
         admin_id INTEGER,
         PRIMARY KEY (group_id, admin_id),
         FOREIGN KEY (group_id) REFERENCES groups(id),
-        FOREIGN KEY (admin_id) REFERENCES users(id)
+        FOREIGN KEY (admin_id) REFERENCES admins(id)
       )
     `);
     db.run(`
@@ -504,6 +657,64 @@ function initializeLocalDatabase() {
     // 初期化完了
     isInitialized = true;
     console.log("ローカルDB初期化完了");
+
+    // 既存のusersテーブルから管理者データを移行
+    console.log("既存の管理者データを移行中...");
+    db.all(
+      "SELECT id, email, password FROM users WHERE role = 'admin'",
+      [],
+      (err, existingAdmins) => {
+        if (err) {
+          console.log("管理者データ移行エラー（新規DBの可能性）:", err.message);
+          return;
+        }
+
+        if (existingAdmins && existingAdmins.length > 0) {
+          console.log(`${existingAdmins.length}件の管理者データを移行します`);
+
+          let migrationCompleted = 0;
+          existingAdmins.forEach((admin) => {
+            db.run(
+              "INSERT OR IGNORE INTO admins (email, password) VALUES (?, ?)",
+              [admin.email, admin.password],
+              function (err) {
+                if (err) {
+                  console.error(`管理者移行エラー ${admin.email}:`, err);
+                } else {
+                  console.log(`管理者移行完了: ${admin.email}`);
+                }
+
+                migrationCompleted++;
+                if (migrationCompleted === existingAdmins.length) {
+                  // 移行後、usersテーブルから管理者データを削除
+                  db.run("DELETE FROM users WHERE role = 'admin'", (err) => {
+                    if (err) {
+                      console.error(
+                        "usersテーブルから管理者データ削除エラー:",
+                        err
+                      );
+                    } else {
+                      console.log("usersテーブルから管理者データを削除完了");
+                    }
+
+                    // usersテーブルからroleカラムを削除（SQLite）
+                    db.run("ALTER TABLE users DROP COLUMN role", (err) => {
+                      if (err) {
+                        console.log("roleカラム削除スキップ:", err.message);
+                      } else {
+                        console.log("usersテーブルからroleカラムを削除完了");
+                      }
+                    });
+                  });
+                }
+              }
+            );
+          });
+        } else {
+          console.log("移行する管理者データがありません");
+        }
+      }
+    );
   });
 }
 

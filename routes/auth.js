@@ -93,14 +93,10 @@ router.post("/login", (req, res) => {
   }
 
   try {
-    db.get("SELECT * FROM users WHERE email=?", [email], (err, user) => {
-      console.log("DB query result:", {
-        err,
-        user: user ? { id: user.id, email: user.email, role: user.role } : null,
-      });
-
+    // まず管理者テーブルから検索
+    db.get("SELECT * FROM admins WHERE email=?", [email], (err, admin) => {
       if (err) {
-        console.error("Database error:", err);
+        console.error("Database error (admins):", err);
         return res.send(`
             <h1>データベースエラー</h1>
             <p>エラー: ${err.message}</p>
@@ -108,28 +104,61 @@ router.post("/login", (req, res) => {
           `);
       }
 
-      if (user && verifyPassword(password, user.password)) {
-        console.log("User found, creating session");
+      if (admin && verifyPassword(password, admin.password)) {
+        console.log("Admin found, creating session");
         req.session.user = {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          agency_id: user.agency_id,
+          id: admin.id,
+          email: admin.email,
+          role: "admin",
+          agency_id: null,
         };
 
-        console.log("Session created:", req.session.user);
+        console.log("Admin session created:", req.session.user);
         console.log("Redirecting to /");
 
-        // 権限に応じてリダイレクト
         return res.redirect("/");
-      } else {
-        console.log("Invalid credentials");
-        return res.send(`
-            <h1>ログインエラー</h1>
-            <p>メールアドレスまたはパスワードが違います</p>
-            <a href="/auth/login">ログインに戻る</a>
-          `);
       }
+
+      // 管理者が見つからない場合、代理店テーブルから検索
+      db.get("SELECT * FROM users WHERE email=?", [email], (err, user) => {
+        console.log("DB query result (users):", {
+          err,
+          user: user
+            ? { id: user.id, email: user.email, agency_id: user.agency_id }
+            : null,
+        });
+
+        if (err) {
+          console.error("Database error (users):", err);
+          return res.send(`
+              <h1>データベースエラー</h1>
+              <p>エラー: ${err.message}</p>
+              <a href="/auth/login">ログインに戻る</a>
+            `);
+        }
+
+        if (user && verifyPassword(password, user.password)) {
+          console.log("User found, creating session");
+          req.session.user = {
+            id: user.id,
+            email: user.email,
+            role: "agency",
+            agency_id: user.agency_id,
+          };
+
+          console.log("User session created:", req.session.user);
+          console.log("Redirecting to /");
+
+          return res.redirect("/");
+        } else {
+          console.log("Invalid credentials");
+          return res.send(`
+              <h1>ログインエラー</h1>
+              <p>メールアドレスまたはパスワードが違います</p>
+              <a href="/auth/login">ログインに戻る</a>
+            `);
+        }
+      });
     });
   } catch (error) {
     console.error("Login process error:", error);
@@ -209,19 +238,21 @@ router.post("/register", (req, res) => {
 
       const dbInsert =
         role === "agency"
-          ? "INSERT INTO users (email, password, role, agency_id) VALUES (?, ?, ?, ?)"
-          : "INSERT INTO users (email, password, role) VALUES (?, ?, ?)";
+          ? "INSERT INTO users (email, password, agency_id) VALUES (?, ?, ?)"
+          : "INSERT INTO admins (email, password) VALUES (?, ?)";
       const params =
         role === "agency"
-          ? [email, hashedPassword, role, agency_id]
-          : [email, hashedPassword, role];
+          ? [email, hashedPassword, agency_id]
+          : [email, hashedPassword];
 
       db.run(dbInsert, params, function (err) {
         if (err) {
           console.error("ユーザー作成エラー:", err);
 
           // PostgreSQL固有のエラーハンドリング
-          if (err.code === "23505" && err.constraint === "users_email_key") {
+          const constraint =
+            role === "agency" ? "users_email_key" : "admins_email_key";
+          if (err.code === "23505" && err.constraint === constraint) {
             return res
               .status(400)
               .send(
@@ -266,25 +297,95 @@ router.post("/promote", (req, res) => {
   console.log("Promotion attempt:", req.body);
   const { promotion_pass, role } = req.body;
 
+  // 代理店ユーザーのみ昇格可能
+  if (req.session.user.role !== "agency") {
+    return res.send(`
+      <h1>昇格エラー</h1>
+      <p>代理店ユーザーのみ管理者に昇格できます</p>
+      <a href="/auth/promote">昇格申請に戻る</a>
+    `);
+  }
+
   try {
     if (
       role === "admin" &&
       promotion_pass === process.env.ADMIN_PROMOTION_PASS
     ) {
-      db.run(
-        "UPDATE users SET role=? WHERE id=?",
-        [role, req.session.user.id],
-        function (err) {
+      // 現在の代理店ユーザー情報を取得
+      db.get(
+        "SELECT * FROM users WHERE id = ?",
+        [req.session.user.id],
+        (err, user) => {
           if (err) {
-            console.error("Promotion error:", err);
+            console.error("User lookup error:", err);
             return res.send(`
               <h1>昇格エラー</h1>
-              <p>昇格に失敗しました: ${err.message}</p>
+              <p>ユーザー情報の取得に失敗しました: ${err.message}</p>
               <a href="/auth/promote">昇格申請に戻る</a>
             `);
           }
-          req.session.user.role = role;
-          res.redirect("/");
+
+          if (!user) {
+            return res.send(`
+              <h1>昇格エラー</h1>
+              <p>ユーザーが見つかりません</p>
+              <a href="/auth/promote">昇格申請に戻る</a>
+            `);
+          }
+
+          // 管理者テーブルに新しいレコードを挿入
+          db.run(
+            "INSERT INTO admins (email, password) VALUES (?, ?)",
+            [user.email, user.password],
+            function (err) {
+              if (err) {
+                console.error("Admin creation error:", err);
+                return res.send(`
+                  <h1>昇格エラー</h1>
+                  <p>管理者アカウントの作成に失敗しました: ${err.message}</p>
+                  <a href="/auth/promote">昇格申請に戻る</a>
+                `);
+              }
+
+              const newAdminId = this.lastID;
+              console.log(`新しい管理者ID: ${newAdminId}`);
+
+              // 代理店ユーザーテーブルから削除
+              db.run(
+                "DELETE FROM users WHERE id = ?",
+                [req.session.user.id],
+                function (err) {
+                  if (err) {
+                    console.error("User deletion error:", err);
+                    // 作成した管理者レコードを削除（ロールバック）
+                    db.run("DELETE FROM admins WHERE id = ?", [newAdminId]);
+                    return res.send(`
+                      <h1>昇格エラー</h1>
+                      <p>代理店アカウントの削除に失敗しました: ${err.message}</p>
+                      <a href="/auth/promote">昇格申請に戻る</a>
+                    `);
+                  }
+
+                  console.log(
+                    `代理店ユーザーID ${req.session.user.id} を削除完了`
+                  );
+
+                  // セッションを更新
+                  req.session.user = {
+                    id: newAdminId,
+                    email: user.email,
+                    role: "admin",
+                    agency_id: null,
+                  };
+
+                  console.log("昇格完了:", req.session.user);
+                  res.redirect(
+                    "/?message=" + encodeURIComponent("管理者に昇格しました")
+                  );
+                }
+              );
+            }
+          );
         }
       );
     } else {
