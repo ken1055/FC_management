@@ -9,10 +9,48 @@ const uploadDir = path.join(__dirname, "../uploads/materials");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
+  destination: (req, file, cb) => {
+    console.log("アップロード先ディレクトリ:", uploadDir);
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const filename = Date.now() + "-" + file.originalname;
+    console.log("生成されたファイル名:", filename);
+    cb(null, filename);
+  },
 });
-const upload = multer({ storage });
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB制限
+  },
+  fileFilter: (req, file, cb) => {
+    console.log("ファイルフィルタ:", file);
+    // 許可されたファイル形式
+    const allowedTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      console.error("許可されていないファイル形式:", file.mimetype);
+      cb(new Error("許可されていないファイル形式です"), false);
+    }
+  },
+});
 
 function requireRole(roles) {
   return (req, res, next) => {
@@ -84,12 +122,38 @@ router.get("/", requireRole(["admin"]), (req, res) => {
 router.post(
   "/upload/:agency_id",
   requireRole(["admin"]),
-  upload.single("file"),
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        console.error("Multerエラー:", err);
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res
+            .status(400)
+            .send("ファイルサイズが大きすぎます（最大50MB）");
+        }
+        return res
+          .status(400)
+          .send("ファイルアップロードエラー: " + err.message);
+      }
+      next();
+    });
+  },
   (req, res) => {
-    if (!req.file) return res.status(400).send("ファイルがありません");
+    console.log("=== ファイルアップロード開始 ===");
+    console.log("ユーザー:", req.session.user);
+    console.log("代理店ID:", req.params.agency_id);
+    console.log("ファイル情報:", req.file);
+    console.log("説明:", req.body.description);
+
+    if (!req.file) {
+      console.error("ファイルが選択されていません");
+      return res.status(400).send("ファイルがありません");
+    }
+
     const agency_id = req.params.agency_id;
     const description = req.body.description || "";
 
+    console.log("データベースに保存開始...");
     db.run(
       "INSERT INTO materials (filename, originalname, mimetype, description, agency_id) VALUES (?, ?, ?, ?, ?)",
       [
@@ -100,7 +164,18 @@ router.post(
         agency_id,
       ],
       function (err) {
-        if (err) return res.status(500).send("DBエラー");
+        if (err) {
+          console.error("データベース保存エラー:", err);
+          return res.status(500).send("DBエラー: " + err.message);
+        }
+
+        console.log("ファイルアップロード成功:", {
+          id: this.lastID,
+          filename: req.file.filename,
+          originalname: req.file.originalname,
+          agency_id: agency_id,
+        });
+
         res.redirect(`/materials/${agency_id}`);
       }
     );
