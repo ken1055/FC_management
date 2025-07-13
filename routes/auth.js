@@ -212,15 +212,21 @@ router.post("/register", (req, res) => {
 
       db.run(dbInsert, params, function (err) {
         if (err) {
-          console.error("Registration error:", err);
-          return res.send(`
-            <h1>登録エラー</h1>
-            <p>登録に失敗しました: ${err.message}</p>
-            <a href="/auth/register">登録に戻る</a>
-          `);
+          console.error("ユーザー作成エラー:", err);
+
+          // PostgreSQL固有のエラーハンドリング
+          if (err.code === "23505" && err.constraint === "users_email_key") {
+            return res
+              .status(400)
+              .send(
+                `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
+              );
+          }
+
+          return res.status(500).send(`ユーザー作成エラー: ${err.message}`);
         }
-        console.log("User registered successfully");
-        res.redirect("/auth/login");
+
+        res.redirect("/login?message=" + encodeURIComponent("登録完了"));
       });
     });
   } catch (error) {

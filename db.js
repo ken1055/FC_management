@@ -276,21 +276,26 @@ function initializeInMemoryDatabase() {
             ? hashPassword("admin")
             : "admin";
 
-        db.run(
-          `INSERT OR IGNORE INTO users (email, password, role) VALUES ('admin', ?, 'admin')`,
-          [adminPassword],
-          (err) => {
-            if (err) {
-              console.error("管理者作成エラー:", err);
-            } else {
-              console.log("管理者アカウント作成完了");
-            }
+        // PostgreSQL互換のINSERT文を使用
+        const isPostgres =
+          process.env.DATABASE_URL &&
+          (process.env.RAILWAY_ENVIRONMENT_NAME ||
+            process.env.NODE_ENV === "production");
+        const insertQuery = isPostgres
+          ? "INSERT INTO users (email, password, role) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING"
+          : "INSERT OR IGNORE INTO users (email, password, role) VALUES (?, ?, ?)";
 
-            isInitialized = true;
-            const duration = Date.now() - startTime;
-            console.log(`高速初期化完了: ${duration}ms`);
+        db.run(insertQuery, ["admin", adminPassword, "admin"], (err) => {
+          if (err) {
+            console.error("管理者作成エラー:", err);
+          } else {
+            console.log("管理者アカウント作成完了");
           }
-        );
+
+          isInitialized = true;
+          const duration = Date.now() - startTime;
+          console.log(`高速初期化完了: ${duration}ms`);
+        });
       })
       .catch((err) => {
         console.error("高速初期化エラー:", err);

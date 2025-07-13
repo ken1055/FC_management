@@ -186,14 +186,19 @@ router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
     return res.redirect(`/groups/manage/${groupId}`);
   }
 
-  db.run(
-    "INSERT OR IGNORE INTO group_agency (group_id, agency_id) VALUES (?, ?)",
-    [groupId, agency_id],
-    function (err) {
-      if (err) return res.status(500).send("DBエラー");
-      res.redirect(`/groups/manage/${groupId}`);
-    }
-  );
+  // PostgreSQL互換のINSERT文を使用
+  const isPostgres =
+    process.env.DATABASE_URL &&
+    (process.env.RAILWAY_ENVIRONMENT_NAME ||
+      process.env.NODE_ENV === "production");
+  const insertQuery = isPostgres
+    ? "INSERT INTO group_agency (group_id, agency_id) VALUES (?, ?) ON CONFLICT (group_id, agency_id) DO NOTHING"
+    : "INSERT OR IGNORE INTO group_agency (group_id, agency_id) VALUES (?, ?)";
+
+  db.run(insertQuery, [groupId, agency_id], function (err) {
+    if (err) return res.status(500).send("DBエラー");
+    res.redirect(`/groups/manage/${groupId}`);
+  });
 });
 
 // 代理店をグループから削除

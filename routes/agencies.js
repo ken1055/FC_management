@@ -541,7 +541,10 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
         product_features,
       ],
       function (err) {
-        if (err) return res.status(500).send("DBエラー");
+        if (err) {
+          console.error("代理店作成エラー:", err);
+          return res.status(500).send(`代理店作成エラー: ${err.message}`);
+        }
 
         const agencyId = this.lastID;
         saveProducts(agencyId);
@@ -568,7 +571,10 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
           product_features,
         ],
         function (err) {
-          if (err) return res.status(500).send("DBエラー");
+          if (err) {
+            console.error("代理店作成エラー:", err);
+            return res.status(500).send(`代理店作成エラー: ${err.message}`);
+          }
 
           const agencyId = this.lastID;
 
@@ -579,7 +585,22 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
             function (err) {
               if (err) {
                 console.error("ユーザー作成エラー:", err);
-                return res.status(500).send("ユーザーアカウント作成エラー");
+
+                // PostgreSQL固有のエラーハンドリング
+                if (
+                  err.code === "23505" &&
+                  err.constraint === "users_email_key"
+                ) {
+                  return res
+                    .status(400)
+                    .send(
+                      `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
+                    );
+                }
+
+                return res
+                  .status(500)
+                  .send(`ユーザーアカウント作成エラー: ${err.message}`);
               }
 
               console.log(

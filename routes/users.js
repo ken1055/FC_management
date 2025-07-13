@@ -240,22 +240,22 @@ router.post("/create", requireRole(["admin"]), (req, res) => {
     function (err) {
       if (err) {
         console.error("ユーザー作成エラー:", err);
-        if (err.code === "SQLITE_CONSTRAINT") {
-          return res.status(400).json({
-            success: false,
-            message: "このメールアドレスは既に使用されています",
-          });
+
+        // PostgreSQL固有のエラーハンドリング
+        if (err.code === "23505" && err.constraint === "users_email_key") {
+          return res
+            .status(400)
+            .send(
+              `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
+            );
         }
-        return res.status(500).json({
-          success: false,
-          message: "ユーザー作成に失敗しました",
-        });
+
+        return res.status(500).send(`ユーザー作成エラー: ${err.message}`);
       }
 
-      // 作成成功（ID修正処理を無効化）
       res.json({
         success: true,
-        message: `ユーザー「${email}」を作成しました`,
+        message: "ユーザーが正常に作成されました",
         userId: this.lastID,
       });
     }
