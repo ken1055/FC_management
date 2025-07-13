@@ -559,16 +559,31 @@ const dbWrapper = {
         try {
           let convertedSql = convertSqlToPostgres(sql);
 
-          // INSERT文の場合はRETURNING idを追加
+          // INSERT文の場合はRETURNING idを追加（idカラムが存在するテーブルのみ）
           if (convertedSql.toLowerCase().includes("insert into")) {
-            convertedSql += " RETURNING id";
+            // idカラムが存在しないテーブルのリスト
+            const tablesWithoutId = [
+              "group_agency",
+              "group_admin",
+              "agency_products",
+            ];
+
+            // テーブル名を抽出
+            const tableMatch = convertedSql.match(/insert\s+into\s+(\w+)/i);
+            const tableName = tableMatch ? tableMatch[1] : "";
+
+            // idカラムが存在するテーブルのみRETURNING idを追加
+            if (!tablesWithoutId.includes(tableName)) {
+              convertedSql += " RETURNING id";
+            }
           }
 
           const result = await db.query(convertedSql, params);
 
           // SQLiteのthis.lastIDを模倣
           const mockThis = {
-            lastID: result.rows[0] ? result.rows[0].id : null,
+            lastID:
+              result.rows[0] && result.rows[0].id ? result.rows[0].id : null,
             changes: result.rowCount,
           };
           callback.call(mockThis, null);
