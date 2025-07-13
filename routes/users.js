@@ -18,10 +18,10 @@ function requireRole(roles) {
   };
 }
 
-// ID整合性チェック機能
+// ID整合性チェック機能（管理者のみ）
 function checkUserIdIntegrity(callback) {
   db.all(
-    "SELECT id, email, role, agency_id FROM users WHERE role IN ('admin', 'agency') ORDER BY role, email",
+    "SELECT id, email, role, agency_id FROM users WHERE role = 'admin' ORDER BY email",
     [],
     (err, users) => {
       if (err) return callback(err, null);
@@ -50,13 +50,13 @@ function checkUserIdIntegrity(callback) {
   );
 }
 
-// ID修正機能（PostgreSQL対応）
+// ID修正機能（PostgreSQL対応・管理者のみ）
 function fixUserIds(callback) {
   console.log("ユーザーID修正開始...");
 
-  // 現在のユーザーを取得（adminとagencyのみ、emailでソート）
+  // 現在のユーザーを取得（adminのみ、emailでソート）
   db.all(
-    "SELECT id, email, role, agency_id FROM users WHERE role IN ('admin', 'agency') ORDER BY role, email",
+    "SELECT id, email, role, agency_id FROM users WHERE role = 'admin' ORDER BY email",
     [],
     (err, users) => {
       if (err) return callback(err);
@@ -112,7 +112,7 @@ function fixUserIds(callback) {
   );
 }
 
-// PostgreSQL用のID修正処理
+// PostgreSQL用のID修正処理（管理者のみ）
 function fixUserIdsPostgres(users, callback) {
   console.log("PostgreSQL環境でのユーザーID修正を実行中...");
 
@@ -126,7 +126,7 @@ function fixUserIdsPostgres(users, callback) {
 
   // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
   db.run(
-    "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
+    "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role = 'admin'",
     (err) => {
       if (err) {
         console.error("一時テーブル作成エラー:", err);
@@ -145,8 +145,8 @@ function fixUserIdsPostgres(users, callback) {
           console.log("外部キー制約無効化完了");
         }
 
-        // 元のユーザーデータを削除
-        db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
+        // 元のユーザーデータを削除（管理者のみ）
+        db.run("DELETE FROM users WHERE role = 'admin'", (err) => {
           if (err) {
             console.error("ユーザーデータ削除エラー:", err);
             // 制約を再有効化してからエラーを返す
@@ -363,7 +363,7 @@ function fixUserIdsPostgres(users, callback) {
   }
 }
 
-// SQLite用のID修正処理
+// SQLite用のID修正処理（管理者のみ）
 function fixUserIdsSQLite(users, callback) {
   console.log("SQLite環境でのユーザーID修正を実行中...");
 
@@ -377,7 +377,7 @@ function fixUserIdsSQLite(users, callback) {
 
   // 一時テーブルを作成
   db.run(
-    "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
+    "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role = 'admin'",
     (err) => {
       if (err) {
         console.error("一時テーブル作成エラー:", err);
@@ -386,8 +386,8 @@ function fixUserIdsSQLite(users, callback) {
 
       console.log("一時テーブル作成成功");
 
-      // 元のユーザーデータを削除
-      db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
+      // 元のユーザーデータを削除（管理者のみ）
+      db.run("DELETE FROM users WHERE role = 'admin'", (err) => {
         if (err) {
           console.error("ユーザーデータ削除エラー:", err);
           return callback(err);
