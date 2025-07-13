@@ -197,49 +197,29 @@ function fixAgencyIds(callback) {
 router.get("/list", requireRole(["admin"]), (req, res) => {
   const groupId = req.query.group_id;
 
-  // ID整合性をチェック
-  checkAgencyIdIntegrity((err, integrityInfo) => {
-    if (err) return res.status(500).send("DBエラー");
+  console.log("=== 代理店一覧ページアクセス ===");
+  console.log("ユーザー:", req.session.user);
+  console.log("グループID:", groupId);
 
-    // ID整合性に問題がある場合、自動的に修正
-    if (!integrityInfo.isIntegrityOk) {
-      fixAgencyIds((fixErr) => {
-        if (fixErr) {
-          console.error("自動代理店ID修正エラー:", fixErr);
-          // エラーがあっても画面は表示
-          return renderAgenciesList(
-            req,
-            res,
-            groupId,
-            integrityInfo,
-            "自動代理店ID修正でエラーが発生しました"
-          );
-        }
-
-        // 修正後に再度チェックして画面表示
-        checkAgencyIdIntegrity((recheckErr, newIntegrityInfo) => {
-          if (recheckErr) return res.status(500).send("DBエラー");
-          return renderAgenciesList(
-            req,
-            res,
-            groupId,
-            newIntegrityInfo,
-            "代理店IDを自動的に連番に修正しました"
-          );
-        });
-      });
-    } else {
-      // 問題がない場合は通常表示
-      return renderAgenciesList(req, res, groupId, integrityInfo);
-    }
+  // シンプルな代理店一覧表示（ID整合性チェックを無効化）
+  renderAgenciesList(req, res, groupId, {
+    isIntegrityOk: true,
+    issues: [],
+    totalAgencies: 0,
   });
 });
 
 // 代理店一覧画面の描画関数
 function renderAgenciesList(req, res, groupId, integrityInfo, message = null) {
+  console.log("=== renderAgenciesList実行 ===");
+  console.log("グループID:", groupId);
+
   // グループ一覧を取得
   db.all("SELECT * FROM groups", [], (err, groups) => {
-    if (err) return res.status(500).send("DBエラー");
+    if (err) {
+      console.error("グループ取得エラー:", err);
+      return res.status(500).send("DBエラー: " + err.message);
+    }
 
     let query = `
       SELECT 
@@ -260,17 +240,34 @@ function renderAgenciesList(req, res, groupId, integrityInfo, message = null) {
 
     query += " GROUP BY a.id ORDER BY a.id";
 
+    console.log("実行するクエリ:", query);
+    console.log("パラメータ:", params);
+
     db.all(query, params, (err, agencies) => {
-      if (err) return res.status(500).send("DBエラー");
-      res.render("agencies_list", {
-        agencies,
-        groups,
-        selectedGroupId: groupId,
-        integrityInfo,
-        autoFixMessage: message,
-        session: req.session,
-        title: "代理店一覧",
-      });
+      if (err) {
+        console.error("代理店取得エラー:", err);
+        return res.status(500).send("DBエラー: " + err.message);
+      }
+
+      console.log("取得した代理店数:", agencies.length);
+
+      // 代理店数を更新
+      integrityInfo.totalAgencies = agencies.length;
+
+      try {
+        res.render("agencies_list", {
+          agencies,
+          groups,
+          selectedGroupId: groupId,
+          integrityInfo,
+          autoFixMessage: message,
+          session: req.session,
+          title: "代理店一覧",
+        });
+      } catch (renderError) {
+        console.error("レンダリングエラー:", renderError);
+        res.status(500).send("レンダリングエラー: " + renderError.message);
+      }
     });
   });
 }
