@@ -263,7 +263,17 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
   const { group_id, search, message } = req.query;
 
   // 代理店IDの整合性をチェック
-  checkAgencyIdIntegrity((integrityInfo) => {
+  checkAgencyIdIntegrity((err, integrityInfo) => {
+    // エラーが発生した場合はデフォルト値を設定
+    if (err || !integrityInfo) {
+      console.error("代理店ID整合性チェックエラー:", err);
+      integrityInfo = {
+        totalAgencies: 0,
+        issues: [],
+        isIntegrityOk: true,
+      };
+    }
+
     // 孤立したユーザーアカウントをクリーンアップ
     cleanupOrphanedUsers(() => {
       renderAgenciesList(req, res, group_id, search, integrityInfo, message);
@@ -352,8 +362,17 @@ function renderAgenciesList(
 
       console.log("取得した代理店数:", agencies.length);
 
-      // 代理店数を更新
-      integrityInfo.totalAgencies = agencies.length;
+      // integrityInfoの安全性チェック
+      if (!integrityInfo) {
+        integrityInfo = {
+          totalAgencies: agencies.length,
+          issues: [],
+          isIntegrityOk: true,
+        };
+      } else {
+        // 代理店数を更新
+        integrityInfo.totalAgencies = agencies.length;
+      }
 
       try {
         res.render("agencies_list", {
