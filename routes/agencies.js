@@ -274,75 +274,105 @@ function fixAgencyIdsPostgres(agencies, callback) {
 
     console.log("一時テーブル作成成功");
 
-    // 元の代理店データを削除
-    db.run("DELETE FROM agencies", (err) => {
+    // PostgreSQL用: 外部キー制約を一時的に無効化
+    console.log("PostgreSQL: 外部キー制約を一時的に無効化中...");
+    db.run("SET session_replication_role = replica;", (err) => {
       if (err) {
-        console.error("代理店データ削除エラー:", err);
-        return callback(err);
+        console.error("外部キー制約無効化エラー:", err);
+        // エラーでも続行（SQLiteとの互換性のため）
+      } else {
+        console.log("外部キー制約無効化完了");
       }
 
-      console.log("代理店データ削除完了");
+      // 元の代理店データを削除
+      db.run("DELETE FROM agencies", (err) => {
+        if (err) {
+          console.error("代理店データ削除エラー:", err);
+          // 制約を再有効化してからエラーを返す
+          db.run("SET session_replication_role = DEFAULT;", () => {
+            return callback(err);
+          });
+          return;
+        }
 
-      // 新しいIDで再挿入
-      let completed = 0;
-      let hasError = false;
+        console.log("代理店データ削除完了");
 
-      agencies.forEach((agency, index) => {
-        if (hasError) return;
+        // 新しいIDで再挿入
+        let completed = 0;
+        let hasError = false;
 
-        const newId = index + 1;
-        console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
+        agencies.forEach((agency, index) => {
+          if (hasError) return;
 
-        db.run(
-          "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
-          [newId, agency.id],
-          function (err) {
-            if (err) {
-              console.error("代理店ID修正エラー:", err);
-              hasError = true;
-              return callback(err);
-            }
+          const newId = index + 1;
+          console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
-            console.log(
-              `代理店 ${agency.name} のID修正完了: ${agency.id} → ${newId}`
-            );
-
-            // 関連テーブルのagency_idも更新（順次処理）
-            updateRelatedTablesSequentiallyPostgres(
-              agency.id,
-              newId,
-              (updateErr) => {
-                if (updateErr) {
-                  console.error("関連テーブル更新エラー:", updateErr);
-                  hasError = true;
-                  return callback(updateErr);
-                }
-
-                completed++;
-                console.log(
-                  `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
-                );
-
-                if (completed === agencies.length && !hasError) {
-                  // 一時テーブルを削除
-                  db.run("DROP TABLE temp_agencies", (err) => {
-                    if (err) {
-                      console.error("一時テーブル削除エラー:", err);
-                    } else {
-                      console.log("一時テーブル削除完了");
-                    }
-
-                    // PostgreSQL用のシーケンスリセット（試行）
-                    resetPostgreSQLSequence(agencies.length, () => {
-                      console.log("=== 代理店ID修正完了（PostgreSQL） ===");
-                      callback(null);
-                    });
-                  });
-                }
+          db.run(
+            "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+            [newId, agency.id],
+            function (err) {
+              if (err) {
+                console.error("代理店ID修正エラー:", err);
+                hasError = true;
+                return callback(err);
               }
-            );
-          }
-        );
+
+              console.log(
+                `代理店 ${agency.name} のID修正完了: ${agency.id} → ${newId}`
+              );
+
+              // 関連テーブルのagency_idも更新（順次処理）
+              updateRelatedTablesSequentiallyPostgres(
+                agency.id,
+                newId,
+                (updateErr) => {
+                  if (updateErr) {
+                    console.error("関連テーブル更新エラー:", updateErr);
+                    hasError = true;
+                    return callback(updateErr);
+                  }
+
+                  completed++;
+                  console.log(
+                    `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
+                  );
+
+                  if (completed === agencies.length && !hasError) {
+                    // 一時テーブルを削除
+                    db.run("DROP TABLE temp_agencies", (err) => {
+                      if (err) {
+                        console.error("一時テーブル削除エラー:", err);
+                      } else {
+                        console.log("一時テーブル削除完了");
+                      }
+
+                      // PostgreSQL用: 外部キー制約を再有効化
+                      console.log("PostgreSQL: 外部キー制約を再有効化中...");
+                      db.run(
+                        "SET session_replication_role = DEFAULT;",
+                        (err) => {
+                          if (err) {
+                            console.error("外部キー制約再有効化エラー:", err);
+                          } else {
+                            console.log("外部キー制約再有効化完了");
+                          }
+
+                          // PostgreSQL用のシーケンスリセット（試行）
+                          resetPostgreSQLSequence(agencies.length, () => {
+                            console.log(
+                              "=== 代理店ID修正完了（PostgreSQL） ==="
+                            );
+                            callback(null);
+                          });
+                        }
+                      );
+                    });
+                  }
+                }
+              );
+            }
+          );
+        });
       });
     });
   });

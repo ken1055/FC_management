@@ -123,79 +123,111 @@ function fixUserIdsPostgres(users, callback) {
 
       console.log("一時テーブル作成成功");
 
-      // 元のユーザーデータを削除
-      db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
+      // PostgreSQL用: 外部キー制約を一時的に無効化
+      console.log("PostgreSQL: ユーザー用外部キー制約を一時的に無効化中...");
+      db.run("SET session_replication_role = replica;", (err) => {
         if (err) {
-          console.error("ユーザーデータ削除エラー:", err);
-          return callback(err);
+          console.error("外部キー制約無効化エラー:", err);
+          // エラーでも続行（SQLiteとの互換性のため）
+        } else {
+          console.log("外部キー制約無効化完了");
         }
 
-        console.log("ユーザーデータ削除完了");
+        // 元のユーザーデータを削除
+        db.run("DELETE FROM users WHERE role IN ('admin', 'agency')", (err) => {
+          if (err) {
+            console.error("ユーザーデータ削除エラー:", err);
+            // 制約を再有効化してからエラーを返す
+            db.run("SET session_replication_role = DEFAULT;", () => {
+              return callback(err);
+            });
+            return;
+          }
 
-        // 新しいIDで再挿入
-        let completed = 0;
-        let hasError = false;
+          console.log("ユーザーデータ削除完了");
 
-        users.forEach((user, index) => {
-          if (hasError) return;
+          // 新しいIDで再挿入
+          let completed = 0;
+          let hasError = false;
 
-          const newId = index + 1;
-          console.log(`ユーザーID修正: ${user.id} → ${newId} (${user.email})`);
+          users.forEach((user, index) => {
+            if (hasError) return;
 
-          db.run(
-            "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
-            [newId, user.id],
-            function (err) {
-              if (err) {
-                console.error("ユーザーID修正エラー:", err);
-                hasError = true;
-                return callback(err);
-              }
+            const newId = index + 1;
+            console.log(
+              `ユーザーID修正: ${user.id} → ${newId} (${user.email})`
+            );
 
-              console.log(
-                `ユーザー ${user.email} のID修正完了: ${user.id} → ${newId}`
-              );
-
-              // 関連テーブルのadmin_idも更新
-              db.run(
-                "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_users WHERE id = ?)",
-                [newId, user.id],
-                (err) => {
-                  if (err) {
-                    console.error("group_admin テーブル更新エラー:", err);
-                    hasError = true;
-                    return callback(err);
-                  }
-
-                  console.log(
-                    `group_admin テーブル更新完了: ${user.id} → ${newId}`
-                  );
-
-                  completed++;
-                  console.log(
-                    `ユーザーID修正完了: ${user.id} → ${newId} (${user.email}) [${completed}/${users.length}]`
-                  );
-
-                  if (completed === users.length && !hasError) {
-                    // 一時テーブルを削除
-                    db.run("DROP TABLE temp_users", (err) => {
-                      if (err) {
-                        console.error("一時テーブル削除エラー:", err);
-                      } else {
-                        console.log("一時テーブル削除完了");
-                      }
-
-                      // PostgreSQL用のシーケンスリセット（試行）
-                      resetPostgreSQLUserSequence(users.length, () => {
-                        console.log("ユーザーID修正完了（PostgreSQL）");
-                        callback(null);
-                      });
-                    });
-                  }
+            db.run(
+              "INSERT INTO users (id, email, password, role, agency_id) SELECT ?, email, password, role, agency_id FROM temp_users WHERE id = ?",
+              [newId, user.id],
+              function (err) {
+                if (err) {
+                  console.error("ユーザーID修正エラー:", err);
+                  hasError = true;
+                  return callback(err);
                 }
-              );
-            }
-          );
+
+                console.log(
+                  `ユーザー ${user.email} のID修正完了: ${user.id} → ${newId}`
+                );
+
+                // 関連テーブルのadmin_idも更新
+                db.run(
+                  "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_users WHERE id = ?)",
+                  [newId, user.id],
+                  (err) => {
+                    if (err) {
+                      console.error("group_admin テーブル更新エラー:", err);
+                      hasError = true;
+                      return callback(err);
+                    }
+
+                    console.log(
+                      `group_admin テーブル更新完了: ${user.id} → ${newId}`
+                    );
+
+                    completed++;
+                    console.log(
+                      `ユーザーID修正完了: ${user.id} → ${newId} (${user.email}) [${completed}/${users.length}]`
+                    );
+
+                    if (completed === users.length && !hasError) {
+                      // 一時テーブルを削除
+                      db.run("DROP TABLE temp_users", (err) => {
+                        if (err) {
+                          console.error("一時テーブル削除エラー:", err);
+                        } else {
+                          console.log("一時テーブル削除完了");
+                        }
+
+                        // PostgreSQL用: 外部キー制約を再有効化
+                        console.log(
+                          "PostgreSQL: ユーザー用外部キー制約を再有効化中..."
+                        );
+                        db.run(
+                          "SET session_replication_role = DEFAULT;",
+                          (err) => {
+                            if (err) {
+                              console.error("外部キー制約再有効化エラー:", err);
+                            } else {
+                              console.log("外部キー制約再有効化完了");
+                            }
+
+                            // PostgreSQL用のシーケンスリセット（試行）
+                            resetPostgreSQLUserSequence(users.length, () => {
+                              console.log("ユーザーID修正完了（PostgreSQL）");
+                              callback(null);
+                            });
+                          }
+                        );
+                      });
+                    }
+                  }
+                );
+              }
+            );
+          });
         });
       });
     }
