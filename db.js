@@ -278,10 +278,7 @@ function initializeInMemoryDatabase() {
             : "admin";
 
         // PostgreSQL互換のINSERT文を使用
-        const isPostgres =
-          process.env.DATABASE_URL &&
-          (process.env.RAILWAY_ENVIRONMENT_NAME ||
-            process.env.NODE_ENV === "production");
+        const isPostgres = !!process.env.DATABASE_URL;
         const insertQuery = isPostgres
           ? "INSERT INTO users (email, password, role) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING"
           : "INSERT OR IGNORE INTO users (email, password, role) VALUES (?, ?, ?)";

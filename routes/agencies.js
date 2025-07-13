@@ -517,15 +517,21 @@ function fixAgencyIdsSQLite(agencies, callback) {
               if (completed === agencies.length) {
                 // 一時テーブルを削除
                 db.run("DROP TABLE temp_agencies", () => {
-                  // シーケンステーブルをリセット
-                  db.run(
-                    "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
-                    [agencies.length],
-                    () => {
-                      console.log("代理店ID修正完了（SQLite）");
-                      callback(null);
-                    }
-                  );
+                  // SQLite環境でのみシーケンステーブルをリセット
+                  const isPostgres = !!process.env.DATABASE_URL;
+                  if (!isPostgres) {
+                    db.run(
+                      "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+                      [agencies.length],
+                      () => {
+                        console.log("代理店ID修正完了（SQLite）");
+                        callback(null);
+                      }
+                    );
+                  } else {
+                    console.log("代理店ID修正完了（SQLite）");
+                    callback(null);
+                  }
                 });
               }
             });

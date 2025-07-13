@@ -344,15 +344,21 @@ function fixUserIdsSQLite(users, callback) {
                   if (completed === users.length) {
                     // 一時テーブルを削除
                     db.run("DROP TABLE temp_users", () => {
-                      // シーケンステーブルをリセット
-                      db.run(
-                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
-                        [users.length],
-                        () => {
-                          console.log("ユーザーID修正完了（SQLite）");
-                          callback(null);
-                        }
-                      );
+                      // SQLite環境でのみシーケンステーブルをリセット
+                      const isPostgres = !!process.env.DATABASE_URL;
+                      if (!isPostgres) {
+                        db.run(
+                          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
+                          [users.length],
+                          () => {
+                            console.log("ユーザーID修正完了（SQLite）");
+                            callback(null);
+                          }
+                        );
+                      } else {
+                        console.log("ユーザーID修正完了（SQLite）");
+                        callback(null);
+                      }
                     });
                   }
                 }
