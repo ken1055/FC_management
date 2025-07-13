@@ -143,28 +143,50 @@ router.get("/", (req, res) => {
 
 // ID整合性チェック機能（代理店用）
 function checkAgencyIdIntegrity(callback) {
+  console.log("代理店ID整合性チェック開始...");
+
   db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
-    if (err) return callback(err, null);
+    if (err) {
+      console.error("代理店ID整合性チェック - DB取得エラー:", err);
+      return callback(err, null);
+    }
+
+    console.log(
+      `代理店ID整合性チェック - 取得した代理店数: ${agencies.length}`
+    );
+    console.log(
+      "代理店一覧:",
+      agencies.map((a) => `ID:${a.id} Name:${a.name}`)
+    );
 
     const issues = [];
     let expectedId = 1;
 
     agencies.forEach((agency, index) => {
+      console.log(
+        `チェック中: ID=${agency.id}, 期待値=${expectedId}, 名前=${agency.name}`
+      );
+
       if (agency.id !== expectedId) {
-        issues.push({
+        const issue = {
           currentId: agency.id,
           expectedId: expectedId,
           name: agency.name,
-        });
+        };
+        issues.push(issue);
+        console.log(`ID問題発見:`, issue);
       }
       expectedId++;
     });
 
-    callback(null, {
+    const result = {
       totalAgencies: agencies.length,
       issues: issues,
       isIntegrityOk: issues.length === 0,
-    });
+    };
+
+    console.log("代理店ID整合性チェック結果:", result);
+    callback(null, result);
   });
 }
 
@@ -443,20 +465,20 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
     // ID整合性に問題がある場合は自動修正
     if (!integrityInfo.isIntegrityOk && integrityInfo.issues.length > 0) {
       console.log("代理店ID整合性の問題を発見、自動修正を実行...");
+      console.log("問題のあるID:", integrityInfo.issues);
+
       fixAgencyIds((fixErr) => {
         if (fixErr) {
           console.error("代理店ID自動修正エラー:", fixErr);
           // エラーがあっても画面表示は続行
-          cleanupOrphanedUsers(() => {
-            renderAgenciesList(
-              req,
-              res,
-              group_id,
-              search,
-              integrityInfo,
-              message
-            );
-          });
+          renderAgenciesList(
+            req,
+            res,
+            group_id,
+            search,
+            integrityInfo,
+            message
+          );
         } else {
           console.log("代理店ID自動修正完了");
           // 修正完了後、再度整合性チェック
@@ -464,25 +486,21 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
             const finalIntegrityInfo = recheckErr
               ? integrityInfo
               : updatedIntegrityInfo;
-            cleanupOrphanedUsers(() => {
-              renderAgenciesList(
-                req,
-                res,
-                group_id,
-                search,
-                finalIntegrityInfo,
-                message,
-                "代理店IDの連番を自動修正しました"
-              );
-            });
+            renderAgenciesList(
+              req,
+              res,
+              group_id,
+              search,
+              finalIntegrityInfo,
+              message,
+              "代理店IDの連番を自動修正しました"
+            );
           });
         }
       });
     } else {
-      // 孤立したユーザーアカウントをクリーンアップ
-      cleanupOrphanedUsers(() => {
-        renderAgenciesList(req, res, group_id, search, integrityInfo, message);
-      });
+      // ID整合性に問題がない場合は通常の表示
+      renderAgenciesList(req, res, group_id, search, integrityInfo, message);
     }
   });
 });
@@ -1117,58 +1135,52 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
                   `代理店「${agency.name}」(ID: ${agencyId}) を削除しました`
                 );
 
-                // 削除後に孤立したユーザーアカウントをチェック・削除
-                cleanupOrphanedUsers(() => {
-                  // 削除後にID整合性をチェックし、必要に応じて自動修正
-                  checkAgencyIdIntegrity((checkErr, integrityInfo) => {
-                    if (checkErr) {
-                      console.error(
-                        "削除後のID整合性チェックエラー:",
-                        checkErr
-                      );
-                      return res.redirect(
-                        "/agencies/list?success=" +
-                          encodeURIComponent(
-                            `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                          )
-                      );
-                    }
+                // 削除後にID整合性をチェックし、必要に応じて自動修正
+                checkAgencyIdIntegrity((checkErr, integrityInfo) => {
+                  if (checkErr) {
+                    console.error("削除後のID整合性チェックエラー:", checkErr);
+                    return res.redirect(
+                      "/agencies/list?success=" +
+                        encodeURIComponent(
+                          `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                        )
+                    );
+                  }
 
-                    if (
-                      !integrityInfo.isIntegrityOk &&
-                      integrityInfo.issues.length > 0
-                    ) {
-                      console.log(
-                        "削除後のID整合性問題を発見、自動修正を実行..."
-                      );
-                      fixAgencyIds((fixErr) => {
-                        if (fixErr) {
-                          console.error("削除後のID自動修正エラー:", fixErr);
-                          return res.redirect(
-                            "/agencies/list?success=" +
-                              encodeURIComponent(
-                                `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                              )
-                          );
-                        }
-
-                        console.log("削除後のID自動修正完了");
-                        res.redirect(
+                  if (
+                    !integrityInfo.isIntegrityOk &&
+                    integrityInfo.issues.length > 0
+                  ) {
+                    console.log(
+                      "削除後のID整合性問題を発見、自動修正を実行..."
+                    );
+                    fixAgencyIds((fixErr) => {
+                      if (fixErr) {
+                        console.error("削除後のID自動修正エラー:", fixErr);
+                        return res.redirect(
                           "/agencies/list?success=" +
                             encodeURIComponent(
-                              `「${agency.name}」の代理店データと関連するユーザーアカウントを削除し、IDの連番を自動修正しました`
+                              `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
                             )
                         );
-                      });
-                    } else {
+                      }
+
+                      console.log("削除後のID自動修正完了");
                       res.redirect(
                         "/agencies/list?success=" +
                           encodeURIComponent(
-                            `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                            `「${agency.name}」の代理店データと関連するユーザーアカウントを削除し、IDの連番を自動修正しました`
                           )
                       );
-                    }
-                  });
+                    });
+                  } else {
+                    res.redirect(
+                      "/agencies/list?success=" +
+                        encodeURIComponent(
+                          `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                        )
+                    );
+                  }
                 });
               }
             );
@@ -1178,71 +1190,6 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
     }
   );
 });
-
-// 手動クリーンアップエンドポイント
-router.post("/cleanup-orphaned-users", requireRole(["admin"]), (req, res) => {
-  cleanupOrphanedUsers(() => {
-    res.redirect(
-      "/agencies/list?success=" +
-        encodeURIComponent(
-          "孤立したユーザーアカウントのクリーンアップが完了しました"
-        )
-    );
-  });
-});
-
-// 孤立したユーザーアカウントをクリーンアップする関数
-function cleanupOrphanedUsers(callback) {
-  console.log("孤立したユーザーアカウントのクリーンアップを開始...");
-
-  // 存在しないagency_idを持つユーザーを検索
-  db.all(
-    `SELECT u.id, u.email, u.agency_id 
-     FROM users u 
-     WHERE u.agency_id IS NOT NULL 
-     AND u.agency_id NOT IN (SELECT id FROM agencies)`,
-    [],
-    (err, orphanUsers) => {
-      if (err) {
-        console.error("孤立ユーザー検索エラー:", err);
-        return callback();
-      }
-
-      if (orphanUsers.length === 0) {
-        console.log("孤立したユーザーアカウントはありません");
-        return callback();
-      }
-
-      console.log(
-        `${orphanUsers.length}個の孤立したユーザーアカウントを発見:`,
-        orphanUsers
-      );
-
-      // 孤立したユーザーアカウントを削除
-      db.run(
-        `DELETE FROM users 
-         WHERE agency_id IS NOT NULL 
-         AND agency_id NOT IN (SELECT id FROM agencies)`,
-        [],
-        function (err) {
-          if (err) {
-            console.error("孤立ユーザー削除エラー:", err);
-          } else {
-            console.log(
-              `${this.changes}個の孤立したユーザーアカウントを削除しました`
-            );
-            orphanUsers.forEach((user) => {
-              console.log(
-                `削除: ID=${user.id}, Email=${user.email}, 存在しないAgency ID=${user.agency_id}`
-              );
-            });
-          }
-          callback();
-        }
-      );
-    }
-  );
-}
 
 // 代理店プロフィール表示
 router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
