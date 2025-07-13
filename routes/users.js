@@ -61,7 +61,20 @@ function fixUserIds(callback) {
     (err, users) => {
       if (err) return callback(err);
 
-      if (users.length === 0) return callback(null);
+      if (users.length === 0) {
+        console.log("修正対象のユーザーがありません");
+        return callback(null);
+      }
+
+      // 常に強制的にID修正を実行
+      console.log("ユーザーが存在するため、強制的にID修正を実行します");
+      console.log(`取得したユーザー数: ${users.length}`);
+      users.forEach((user, index) => {
+        const expectedId = index + 1;
+        console.log(
+          `ID修正予定: ID=${user.id} → 期待値=${expectedId} (${user.email})`
+        );
+      });
 
       // データベースタイプを判定
       // SQLiteを明示的に指定した場合のみSQLite用処理を使用
@@ -96,20 +109,8 @@ function fixUserIdsPostgres(users, callback) {
     return callback(null);
   }
 
-  // 修正が必要かチェック
-  let needsFixing = false;
-  users.forEach((user, index) => {
-    if (user.id !== index + 1) {
-      needsFixing = true;
-    }
-  });
-
-  if (!needsFixing) {
-    console.log("ユーザーID修正完了（変更不要）");
-    return callback(null);
-  }
-
-  console.log("ID修正が必要なユーザーを検出、修正処理を開始...");
+  // 常に強制的にID修正を実行
+  console.log("PostgreSQL環境で強制的にユーザーID修正を実行します");
 
   // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
   db.run(
@@ -264,6 +265,14 @@ function fixUserIdsPostgres(users, callback) {
 function fixUserIdsSQLite(users, callback) {
   console.log("SQLite環境でのユーザーID修正を実行中...");
 
+  if (users.length === 0) {
+    console.log("修正対象のユーザーがありません");
+    return callback(null);
+  }
+
+  // 常に強制的にID修正を実行
+  console.log("SQLite環境で強制的にユーザーID修正を実行します");
+
   // 一時テーブルを作成
   db.run(
     "CREATE TEMP TABLE temp_users AS SELECT * FROM users WHERE role IN ('admin', 'agency')",
@@ -388,33 +397,30 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
       };
     }
 
-    // ID整合性に問題がある場合は自動修正
-    if (!integrityInfo.isIntegrityOk && integrityInfo.issues.length > 0) {
-      console.log("ユーザーID整合性の問題を発見、自動修正を実行...");
-      fixUserIds((fixErr) => {
-        if (fixErr) {
-          console.error("ユーザーID自動修正エラー:", fixErr);
-          // エラーがあっても画面表示は続行
-          renderUsersList(req, res, integrityInfo);
-        } else {
-          console.log("ユーザーID自動修正完了");
-          // 修正完了後、再度整合性チェック
-          checkUserIdIntegrity((recheckErr, updatedIntegrityInfo) => {
-            const finalIntegrityInfo = recheckErr
-              ? integrityInfo
-              : updatedIntegrityInfo;
-            renderUsersList(
-              req,
-              res,
-              finalIntegrityInfo,
-              "ユーザーIDの連番を自動修正しました"
-            );
-          });
-        }
-      });
-    } else {
-      renderUsersList(req, res, integrityInfo);
-    }
+    // 毎回強制的にID修正を実行
+    console.log("=== ユーザーID強制修正を実行 ===");
+
+    fixUserIds((fixErr) => {
+      if (fixErr) {
+        console.error("ユーザーID強制修正エラー:", fixErr);
+        // エラーがあっても画面表示は続行
+        renderUsersList(req, res, integrityInfo);
+      } else {
+        console.log("ユーザーID強制修正完了");
+        // 修正完了後、再度整合性チェック
+        checkUserIdIntegrity((recheckErr, updatedIntegrityInfo) => {
+          const finalIntegrityInfo = recheckErr
+            ? integrityInfo
+            : updatedIntegrityInfo;
+          renderUsersList(
+            req,
+            res,
+            finalIntegrityInfo,
+            "ユーザーIDの連番を強制修正しました"
+          );
+        });
+      }
+    });
   });
 });
 
