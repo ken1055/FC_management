@@ -866,7 +866,12 @@ function renderAgenciesList(
     SELECT 
       a.*,
       g.name as group_name,
-      COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count
+      COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count,
+      ${
+        isPostgres
+          ? "STRING_AGG(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ' ORDER BY ap.product_name) as product_names"
+          : "GROUP_CONCAT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ') as product_names"
+      }
     FROM agencies a 
     LEFT JOIN group_agency ga ON a.id = ga.agency_id 
     LEFT JOIN groups g ON ga.group_id = g.id

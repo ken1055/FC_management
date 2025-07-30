@@ -231,7 +231,21 @@
           <td><%= a.product_features || '未設定' %></td>
           <td>
             <% if (a.product_count > 0) { %>
-              <span class="badge bg-primary"><%= a.product_count %>件</span>
+              <div class="d-flex flex-column">
+                <span class="badge bg-primary mb-1"><%= a.product_count %>件</span>
+                <% if (a.product_names) { %>
+                  <small class="text-muted" style="font-size: 0.75rem;">
+                    <% 
+                      const maxLength = 30;
+                      let displayNames = a.product_names;
+                      if (displayNames.length > maxLength) {
+                        displayNames = displayNames.substring(0, maxLength) + '...';
+                      }
+                    %>
+                    <%= displayNames %>
+                  </small>
+                <% } %>
+              </div>
             <% } else { %>
               <span class="text-muted">未設定</span>
             <% } %>
