@@ -882,11 +882,9 @@ function renderAgenciesList(
 
     if (searchQuery) {
       conditions.push(
-        "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR a.product_features LIKE ? OR ap.product_name LIKE ? OR ap.product_detail LIKE ? OR ap.product_url LIKE ?)"
+        "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR a.product_features LIKE ? OR ap.product_name LIKE ?)"
       );
       params.push(
-        `%${searchQuery}%`,
-        `%${searchQuery}%`,
         `%${searchQuery}%`,
         `%${searchQuery}%`,
         `%${searchQuery}%`,
