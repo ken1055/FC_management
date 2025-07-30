@@ -226,7 +226,12 @@
             <% if (typeof agency !== 'undefined' && agency && agency.products &&
             agency.products.length > 0) { %> <%
             agency.products.forEach((product, index) => { %>
-            <div class="card mb-2 product-item">
+            <div
+              class="card mb-2 product-item"
+              data-product-name="<%= product.product_name %>"
+              data-product-detail="<%= product.product_detail || '' %>"
+              data-product-url="<%= product.product_url || '' %>"
+            >
               <div class="card-body">
                 <div class="row align-items-center">
                   <div class="col-md-3">
@@ -261,8 +266,21 @@
                   </div>
                 </div>
                 <!-- 隠しフィールドで商品データを保持 -->
-                <input type="hidden" name="products" value="<%=
-                JSON.stringify(product).replace(/"/g, '&quot;') %>">
+                <input
+                  type="hidden"
+                  name="product_names[]"
+                  value="<%= product.product_name %>"
+                />
+                <input
+                  type="hidden"
+                  name="product_details[]"
+                  value="<%= product.product_detail || '' %>"
+                />
+                <input
+                  type="hidden"
+                  name="product_urls[]"
+                  value="<%= product.product_url || '' %>"
+                />
               </div>
             </div>
             <% }) %> <% } %>

@@ -1055,7 +1055,10 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
       contract_date,
       start_date,
       product_features,
-      products,
+      product_names,
+      product_details,
+      product_urls,
+      products, // 旧形式との互換性のため残す
       email,
       password,
       password_confirm,
@@ -1197,9 +1200,32 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
     function saveProducts(agencyId) {
       console.log("=== saveProducts開始 ===");
       console.log("agencyId:", agencyId);
+      console.log("product_names:", product_names);
+      console.log("product_details:", product_details);
+      console.log("product_urls:", product_urls);
 
-      // 取り扱い商品を保存（既存データベース構造対応）
-      if (products) {
+      // 新形式: 配列形式での商品データ処理
+      if (
+        product_names &&
+        Array.isArray(product_names) &&
+        product_names.length > 0
+      ) {
+        console.log("新形式の商品データを処理");
+        product_names.forEach((productName, index) => {
+          if (productName && productName.trim() !== "") {
+            db.run(
+              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              [agencyId, productName.trim()],
+              (err) => {
+                if (err) console.error("商品保存エラー:", err);
+              }
+            );
+          }
+        });
+      }
+      // 旧形式: JSON文字列での商品データ処理（互換性のため）
+      else if (products) {
+        console.log("旧形式の商品データを処理");
         const productList = Array.isArray(products) ? products : [products];
         console.log("保存する商品:", productList);
 
@@ -1286,7 +1312,10 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     contract_date,
     start_date,
     product_features,
-    products,
+    product_names,
+    product_details,
+    product_urls,
+    products, // 旧形式との互換性のため残す
   } = req.body;
 
   // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
@@ -1323,8 +1352,28 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
         (err) => {
           if (err) console.error("商品削除エラー:", err);
 
-          // 新しい商品を保存（既存データベース構造対応）
-          if (products) {
+          // 新形式: 配列形式での商品データ処理
+          if (
+            product_names &&
+            Array.isArray(product_names) &&
+            product_names.length > 0
+          ) {
+            console.log("編集: 新形式の商品データを処理");
+            product_names.forEach((productName, index) => {
+              if (productName && productName.trim() !== "") {
+                db.run(
+                  "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                  [req.params.id, productName.trim()],
+                  (err) => {
+                    if (err) console.error("商品保存エラー:", err);
+                  }
+                );
+              }
+            });
+          }
+          // 旧形式: JSON文字列での商品データ処理（互換性のため）
+          else if (products) {
+            console.log("編集: 旧形式の商品データを処理");
             const productList = Array.isArray(products) ? products : [products];
             productList.forEach((productStr) => {
               try {
@@ -1684,7 +1733,10 @@ router.post(
       contract_date,
       start_date,
       product_features,
-      products,
+      product_names,
+      product_details,
+      product_urls,
+      products, // 旧形式との互換性のため残す
     } = req.body;
 
     // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
@@ -1721,8 +1773,28 @@ router.post(
           (err) => {
             if (err) console.error("商品削除エラー:", err);
 
-            // 新しい商品を保存（既存データベース構造対応）
-            if (products) {
+            // 新形式: 配列形式での商品データ処理
+            if (
+              product_names &&
+              Array.isArray(product_names) &&
+              product_names.length > 0
+            ) {
+              console.log("プロフィール編集: 新形式の商品データを処理");
+              product_names.forEach((productName, index) => {
+                if (productName && productName.trim() !== "") {
+                  db.run(
+                    "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                    [agencyId, productName.trim()],
+                    (err) => {
+                      if (err) console.error("商品保存エラー:", err);
+                    }
+                  );
+                }
+              });
+            }
+            // 旧形式: JSON文字列での商品データ処理（互換性のため）
+            else if (products) {
+              console.log("プロフィール編集: 旧形式の商品データを処理");
               const productList = Array.isArray(products)
                 ? products
                 : [products];
@@ -1807,7 +1879,10 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     contract_date,
     start_date,
     product_features,
-    products,
+    product_names,
+    product_details,
+    product_urls,
+    products, // 旧形式との互換性のため残す
   } = req.body;
 
   // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
@@ -1838,8 +1913,28 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
 
       const agencyId = this.lastID;
 
-      // 取り扱い商品を保存（既存データベース構造対応）
-      if (products) {
+      // 新形式: 配列形式での商品データ処理
+      if (
+        product_names &&
+        Array.isArray(product_names) &&
+        product_names.length > 0
+      ) {
+        console.log("プロフィール作成: 新形式の商品データを処理");
+        product_names.forEach((productName, index) => {
+          if (productName && productName.trim() !== "") {
+            db.run(
+              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              [agencyId, productName.trim()],
+              (err) => {
+                if (err) console.error("商品保存エラー:", err);
+              }
+            );
+          }
+        });
+      }
+      // 旧形式: JSON文字列での商品データ処理（互換性のため）
+      else if (products) {
+        console.log("プロフィール作成: 旧形式の商品データを処理");
         const productList = Array.isArray(products) ? products : [products];
         productList.forEach((productStr) => {
           try {
