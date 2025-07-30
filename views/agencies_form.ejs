@@ -272,7 +272,7 @@
           <div class="card border-success">
             <div class="card-header bg-light">
               <h6 class="mb-0">
-                <i class="bi bi-plus-circle"></i> 新しい商品を追加
+                <i class="bi bi-plus-circle"></i> 新しい商品を追加（任意）
               </h6>
             </div>
             <div class="card-body">
@@ -283,7 +283,6 @@
                     id="newProductName"
                     class="form-control"
                     placeholder="商品名"
-                    required
                   />
                 </div>
                 <div class="col-md-4">
@@ -436,7 +435,7 @@
         return div.innerHTML;
       }
 
-      // Enterキーでの商品追加
+      // Enterキーでの商品追加（商品名が入力されている場合のみ）
       document.addEventListener("DOMContentLoaded", function () {
         const inputs = ["newProductName", "newProductDetail", "newProductUrl"];
         inputs.forEach((id) => {
@@ -444,8 +443,15 @@
             .getElementById(id)
             .addEventListener("keypress", function (e) {
               if (e.key === "Enter") {
-                e.preventDefault();
-                addProduct();
+                const name = document
+                  .getElementById("newProductName")
+                  .value.trim();
+                if (name) {
+                  // 商品名が入力されている場合のみ商品追加
+                  e.preventDefault();
+                  addProduct();
+                }
+                // 商品名が空の場合は通常のフォーム送信を行う（preventDefault()しない）
               }
             });
         });
