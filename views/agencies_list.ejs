@@ -156,10 +156,10 @@
   <div class="mb-3">
     <form method="get" class="row g-2 align-items-center">
       <div class="col-auto">
-        <label class="form-label">代理店名で検索:</label>
+        <label class="form-label">代理店・商品検索:</label>
       </div>
       <div class="col-auto">
-        <input type="text" name="search" class="form-control" placeholder="代理店名を入力..." value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>">
+        <input type="text" name="search" class="form-control" placeholder="代理店名、商品名、住所など..." value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>">
       </div>
       <div class="col-auto">
         <button type="submit" class="btn btn-success">
@@ -229,7 +229,13 @@
           <td><%= a.contract_date || '未設定' %></td>
           <td><%= a.start_date || '未設定' %></td>
           <td><%= a.product_features || '未設定' %></td>
-          <td><%= a.product_names || '未設定' %></td>
+          <td>
+            <% if (a.product_count > 0) { %>
+              <span class="badge bg-primary"><%= a.product_count %>件</span>
+            <% } else { %>
+              <span class="text-muted">未設定</span>
+            <% } %>
+          </td>
           <td>
             <% if (a.group_name) { %>
               <span class="badge bg-info"><%= a.group_name %></span>

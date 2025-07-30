@@ -144,9 +144,11 @@ async function initializePostgresDatabase() {
       agency_id INTEGER
     )`,
     `CREATE TABLE IF NOT EXISTS agency_products (
+      id SERIAL PRIMARY KEY,
       agency_id INTEGER,
       product_name TEXT,
-      PRIMARY KEY (agency_id, product_name)
+      product_detail TEXT,
+      product_url TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS product_files (
       id SERIAL PRIMARY KEY,
@@ -477,9 +479,11 @@ function initializeInMemoryDatabase() {
 
     db.run(`
       CREATE TABLE IF NOT EXISTS agency_products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         agency_id INTEGER,
         product_name TEXT,
-        PRIMARY KEY (agency_id, product_name),
+        product_detail TEXT,
+        product_url TEXT,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
     `);
@@ -591,9 +595,11 @@ function initializeLocalDatabase() {
     `);
     db.run(`
       CREATE TABLE IF NOT EXISTS agency_products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         agency_id INTEGER,
         product_name TEXT,
-        PRIMARY KEY (agency_id, product_name),
+        product_detail TEXT,
+        product_url TEXT,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
       )
     `);

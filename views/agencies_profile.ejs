@@ -171,14 +171,25 @@
               <h5 class="mb-0">取り扱い商品</h5>
             </div>
             <div class="card-body">
-              <% if (agency.product_names && agency.product_names.length > 0) {
-              %>
-              <div class="d-flex flex-wrap gap-2">
-                <% agency.product_names.forEach(product => { %>
-                <span class="badge bg-primary"><%= product %></span>
-                <% }) %>
+              <% if (agency.products && agency.products.length > 0) { %> <%
+              agency.products.forEach(product => { %>
+              <div class="border rounded p-3 mb-3">
+                <h6 class="mb-2"><%= product.product_name %></h6>
+                <% if (product.product_detail) { %>
+                <p class="text-muted mb-2 small">
+                  <%= product.product_detail %>
+                </p>
+                <% } %> <% if (product.product_url) { %>
+                <a
+                  href="<%= product.product_url %>"
+                  target="_blank"
+                  class="btn btn-sm btn-outline-primary"
+                >
+                  <i class="bi bi-link-45deg"></i> 詳細を見る
+                </a>
+                <% } %>
               </div>
-              <% } else { %>
+              <% }) %> <% } else { %>
               <p class="text-muted mb-0">未設定</p>
               <% } %>
             </div>

@@ -161,41 +161,14 @@
         </div>
         <% } %>
         <div class="mb-3">
-          <label class="form-label">年齢（20歳以上、または選択入力）</label>
-          <div class="row">
-            <div class="col-md-6">
-              <input
-                type="number"
-                name="age"
-                class="form-control"
-                min="20"
-                placeholder="直接入力"
-                value="<%= agency ? agency.age : '' %>"
-              />
-            </div>
-            <div class="col-md-6">
-              <select
-                name="age_select"
-                class="form-select"
-                onchange="setAge(this.value)"
-              >
-                <option value="">選択してください</option>
-                <option value="20">20歳</option>
-                <option value="25">25歳</option>
-                <option value="30">30歳</option>
-                <option value="35">35歳</option>
-                <option value="40">40歳</option>
-                <option value="45">45歳</option>
-                <option value="50">50歳</option>
-                <option value="55">55歳</option>
-                <option value="60">60歳</option>
-                <option value="65">65歳</option>
-              </select>
-            </div>
-          </div>
-          <small class="form-text text-muted"
-            >直接入力するか、選択肢から選んでください</small
-          >
+          <label class="form-label">年齢</label>
+          <input
+            type="text"
+            name="age"
+            class="form-control"
+            placeholder="年齢を入力してください"
+            value="<%= agency ? agency.age : '' %>"
+          />
         </div>
         <div class="mb-3">
           <label class="form-label">住所</label>
@@ -246,49 +219,98 @@
           />
         </div>
         <div class="mb-3">
-          <label class="form-label">取り扱い商品名（複数選択可）</label>
-          <div class="row">
-            <div class="col-md-6">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="products"
-                value="商品A" id="productA" <%= (agency && agency.product_names
-                && agency.product_names.includes('商品A')) ? 'checked' : '' %>>
-                <label class="form-check-label" for="productA">商品A</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="products"
-                value="商品B" id="productB" <%= (agency && agency.product_names
-                && agency.product_names.includes('商品B')) ? 'checked' : '' %>>
-                <label class="form-check-label" for="productB">商品B</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="products"
-                value="商品C" id="productC" <%= (agency && agency.product_names
-                && agency.product_names.includes('商品C')) ? 'checked' : '' %>>
-                <label class="form-check-label" for="productC">商品C</label>
+          <label class="form-label">取り扱い商品</label>
+
+          <!-- 既存の商品一覧 -->
+          <div id="productsList" class="mb-3">
+            <% if (typeof agency !== 'undefined' && agency && agency.products &&
+            agency.products.length > 0) { %> <%
+            agency.products.forEach((product, index) => { %>
+            <div class="card mb-2 product-item">
+              <div class="card-body">
+                <div class="row align-items-center">
+                  <div class="col-md-3">
+                    <strong><%= product.product_name %></strong>
+                  </div>
+                  <div class="col-md-4">
+                    <small class="text-muted"
+                      ><%= product.product_detail || '詳細なし' %></small
+                    >
+                  </div>
+                  <div class="col-md-3">
+                    <% if (product.product_url) { %>
+                    <a
+                      href="<%= product.product_url %>"
+                      target="_blank"
+                      class="text-decoration-none"
+                    >
+                      <i class="bi bi-link-45deg"></i> リンク
+                    </a>
+                    <% } else { %>
+                    <span class="text-muted">URLなし</span>
+                    <% } %>
+                  </div>
+                  <div class="col-md-2">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      onclick="removeProduct(this)"
+                    >
+                      <i class="bi bi-trash"></i> 削除
+                    </button>
+                  </div>
+                </div>
+                <!-- 隠しフィールドで商品データを保持 -->
+                <input type="hidden" name="products" value="<%=
+                JSON.stringify(product).replace(/"/g, '&quot;') %>">
               </div>
             </div>
-            <div class="col-md-6">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="products"
-                value="商品D" id="productD" <%= (agency && agency.product_names
-                && agency.product_names.includes('商品D')) ? 'checked' : '' %>>
-                <label class="form-check-label" for="productD">商品D</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="products"
-                value="商品E" id="productE" <%= (agency && agency.product_names
-                && agency.product_names.includes('商品E')) ? 'checked' : '' %>>
-                <label class="form-check-label" for="productE">商品E</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="products"
-                value="その他" id="productOther" <%= (agency &&
-                agency.product_names && agency.product_names.includes('その他'))
-                ? 'checked' : '' %>>
-                <label class="form-check-label" for="productOther"
-                  >その他</label
-                >
+            <% }) %> <% } %>
+          </div>
+
+          <!-- 新規商品追加フォーム -->
+          <div class="card border-success">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">
+                <i class="bi bi-plus-circle"></i> 新しい商品を追加
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4">
+                  <input
+                    type="text"
+                    id="newProductName"
+                    class="form-control"
+                    placeholder="商品名"
+                    required
+                  />
+                </div>
+                <div class="col-md-4">
+                  <input
+                    type="text"
+                    id="newProductDetail"
+                    class="form-control"
+                    placeholder="商品詳細"
+                  />
+                </div>
+                <div class="col-md-3">
+                  <input
+                    type="url"
+                    id="newProductUrl"
+                    class="form-control"
+                    placeholder="商品URL"
+                  />
+                </div>
+                <div class="col-md-1">
+                  <button
+                    type="button"
+                    class="btn btn-success"
+                    onclick="addProduct()"
+                  >
+                    <i class="bi bi-plus"></i>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -321,11 +343,113 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-      function setAge(value) {
-        if (value) {
-          document.querySelector('input[name="age"]').value = value;
+      function addProduct() {
+        const name = document.getElementById("newProductName").value.trim();
+        const detail = document.getElementById("newProductDetail").value.trim();
+        const url = document.getElementById("newProductUrl").value.trim();
+
+        if (!name) {
+          alert("商品名を入力してください");
+          return;
+        }
+
+        // URLの妥当性チェック（入力されている場合のみ）
+        if (url && !isValidUrl(url)) {
+          alert("有効なURLを入力してください");
+          return;
+        }
+
+        const productData = {
+          product_name: name,
+          product_detail: detail || null,
+          product_url: url || null,
+        };
+
+        // 商品アイテムを作成
+        const productItem = createProductItem(productData);
+
+        // 商品リストに追加
+        document.getElementById("productsList").appendChild(productItem);
+
+        // 入力フィールドをクリア
+        document.getElementById("newProductName").value = "";
+        document.getElementById("newProductDetail").value = "";
+        document.getElementById("newProductUrl").value = "";
+      }
+
+      function createProductItem(productData) {
+        const div = document.createElement("div");
+        div.className = "card mb-2 product-item";
+
+        const detailText = productData.product_detail || "詳細なし";
+        const urlSection = productData.product_url
+          ? `<a href="${productData.product_url}" target="_blank" class="text-decoration-none">
+               <i class="bi bi-link-45deg"></i> リンク
+             </a>`
+          : '<span class="text-muted">URLなし</span>';
+
+        div.innerHTML = `
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-3">
+                <strong>${escapeHtml(productData.product_name)}</strong>
+              </div>
+              <div class="col-md-4">
+                <small class="text-muted">${escapeHtml(detailText)}</small>
+              </div>
+              <div class="col-md-3">
+                ${urlSection}
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeProduct(this)">
+                  <i class="bi bi-trash"></i> 削除
+                </button>
+              </div>
+            </div>
+            <input type="hidden" name="products" value="${escapeHtml(
+              JSON.stringify(productData)
+            )}">
+          </div>
+        `;
+
+        return div;
+      }
+
+      function removeProduct(button) {
+        if (confirm("この商品を削除しますか？")) {
+          button.closest(".product-item").remove();
         }
       }
+
+      function isValidUrl(string) {
+        try {
+          new URL(string);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Enterキーでの商品追加
+      document.addEventListener("DOMContentLoaded", function () {
+        const inputs = ["newProductName", "newProductDetail", "newProductUrl"];
+        inputs.forEach((id) => {
+          document
+            .getElementById(id)
+            .addEventListener("keypress", function (e) {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addProduct();
+              }
+            });
+        });
+      });
     </script>
   </body>
 </html>
