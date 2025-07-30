@@ -866,7 +866,7 @@ function renderAgenciesList(
     SELECT 
       a.*,
       g.name as group_name,
-      COUNT(ap.id) as product_count
+      COUNT(ap.agency_id) as product_count
     FROM agencies a 
     LEFT JOIN group_agency ga ON a.id = ga.agency_id 
     LEFT JOIN groups g ON ga.group_id = g.id
