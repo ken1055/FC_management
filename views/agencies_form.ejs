@@ -423,8 +423,14 @@
                 </button>
               </div>
             </div>
-            <input type="hidden" name="products" value="${escapeHtml(
-              JSON.stringify(productData)
+            <input type="hidden" name="product_names[]" value="${escapeHtml(
+              productData.product_name
+            )}">
+            <input type="hidden" name="product_details[]" value="${escapeHtml(
+              productData.product_detail || ""
+            )}">
+            <input type="hidden" name="product_urls[]" value="${escapeHtml(
+              productData.product_url || ""
             )}">
           </div>
         `;
