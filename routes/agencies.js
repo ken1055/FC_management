@@ -866,7 +866,7 @@ function renderAgenciesList(
     SELECT 
       a.*,
       g.name as group_name,
-      COUNT(ap.agency_id) as product_count
+      COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count
     FROM agencies a 
     LEFT JOIN group_agency ga ON a.id = ga.agency_id 
     LEFT JOIN groups g ON ga.group_id = g.id
@@ -944,9 +944,9 @@ router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
     (err, agency) => {
       if (err || !agency) return res.status(404).send("データがありません");
 
-      // 取り扱い商品を取得
+      // 取り扱い商品を取得（新旧データベース構造対応）
       db.all(
-        "SELECT id, product_name, product_detail, product_url FROM agency_products WHERE agency_id = ?",
+        "SELECT product_name FROM agency_products WHERE agency_id = ?",
         [req.params.id],
         (err, products) => {
           if (err) {
@@ -954,8 +954,12 @@ router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
             products = [];
           }
 
-          // 商品データの配列を作成
-          agency.products = products;
+          // 既存データを新形式に変換
+          agency.products = products.map((p) => ({
+            product_name: p.product_name,
+            product_detail: null,
+            product_url: null,
+          }));
 
           res.render("agencies_form", {
             agency,
@@ -1189,7 +1193,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
       console.log("=== saveProducts開始 ===");
       console.log("agencyId:", agencyId);
 
-      // 取り扱い商品を保存
+      // 取り扱い商品を保存（既存データベース構造対応）
       if (products) {
         const productList = Array.isArray(products) ? products : [products];
         console.log("保存する商品:", productList);
@@ -1197,20 +1201,24 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
         productList.forEach((productStr) => {
           try {
             const product = JSON.parse(productStr);
+            // 既存のテーブル構造に合わせて product_name のみ保存
             db.run(
-              "INSERT INTO agency_products (agency_id, product_name, product_detail, product_url) VALUES (?, ?, ?, ?)",
-              [
-                agencyId,
-                product.product_name,
-                product.product_detail,
-                product.product_url,
-              ],
+              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              [agencyId, product.product_name],
               (err) => {
                 if (err) console.error("商品保存エラー:", err);
               }
             );
           } catch (parseErr) {
             console.error("商品データパースエラー:", parseErr);
+            // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
+            db.run(
+              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              [agencyId, productStr],
+              (err) => {
+                if (err) console.error("商品保存エラー（文字列）:", err);
+              }
+            );
           }
         });
       }
@@ -1310,26 +1318,29 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
         (err) => {
           if (err) console.error("商品削除エラー:", err);
 
-          // 新しい商品を保存
+          // 新しい商品を保存（既存データベース構造対応）
           if (products) {
             const productList = Array.isArray(products) ? products : [products];
             productList.forEach((productStr) => {
               try {
                 const product = JSON.parse(productStr);
                 db.run(
-                  "INSERT INTO agency_products (agency_id, product_name, product_detail, product_url) VALUES (?, ?, ?, ?)",
-                  [
-                    req.params.id,
-                    product.product_name,
-                    product.product_detail,
-                    product.product_url,
-                  ],
+                  "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                  [req.params.id, product.product_name],
                   (err) => {
                     if (err) console.error("商品保存エラー:", err);
                   }
                 );
               } catch (parseErr) {
                 console.error("商品データパースエラー:", parseErr);
+                // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
+                db.run(
+                  "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                  [req.params.id, productStr],
+                  (err) => {
+                    if (err) console.error("商品保存エラー（文字列）:", err);
+                  }
+                );
               }
             });
           }
@@ -1554,9 +1565,9 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
   db.get("SELECT * FROM agencies WHERE id = ?", [agencyId], (err, agency) => {
     if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
-    // 取り扱い商品を取得
+    // 取り扱い商品を取得（既存データベース構造対応）
     db.all(
-      "SELECT id, product_name, product_detail, product_url FROM agency_products WHERE agency_id = ?",
+      "SELECT product_name FROM agency_products WHERE agency_id = ?",
       [agencyId],
       (err, products) => {
         if (err) {
@@ -1579,8 +1590,12 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
               groupInfo = null;
             }
 
-            // 商品データの配列を作成
-            agency.products = products;
+            // 既存データを新形式に変換
+            agency.products = products.map((p) => ({
+              product_name: p.product_name,
+              product_detail: null,
+              product_url: null,
+            }));
             agency.group_name = groupInfo ? groupInfo.group_name : null;
 
             res.render("agencies_profile", {
@@ -1612,9 +1627,9 @@ router.get(
     db.get("SELECT * FROM agencies WHERE id = ?", [agencyId], (err, agency) => {
       if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
-      // 取り扱い商品を取得
+      // 取り扱い商品を取得（既存データベース構造対応）
       db.all(
-        "SELECT id, product_name, product_detail, product_url FROM agency_products WHERE agency_id = ?",
+        "SELECT product_name FROM agency_products WHERE agency_id = ?",
         [agencyId],
         (err, products) => {
           if (err) {
@@ -1622,8 +1637,12 @@ router.get(
             products = [];
           }
 
-          // 商品データの配列を作成
-          agency.products = products;
+          // 既存データを新形式に変換
+          agency.products = products.map((p) => ({
+            product_name: p.product_name,
+            product_detail: null,
+            product_url: null,
+          }));
 
           res.render("agencies_form", {
             agency,
@@ -1697,7 +1716,7 @@ router.post(
           (err) => {
             if (err) console.error("商品削除エラー:", err);
 
-            // 新しい商品を保存
+            // 新しい商品を保存（既存データベース構造対応）
             if (products) {
               const productList = Array.isArray(products)
                 ? products
@@ -1706,19 +1725,22 @@ router.post(
                 try {
                   const product = JSON.parse(productStr);
                   db.run(
-                    "INSERT INTO agency_products (agency_id, product_name, product_detail, product_url) VALUES (?, ?, ?, ?)",
-                    [
-                      agencyId,
-                      product.product_name,
-                      product.product_detail,
-                      product.product_url,
-                    ],
+                    "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                    [agencyId, product.product_name],
                     (err) => {
                       if (err) console.error("商品保存エラー:", err);
                     }
                   );
                 } catch (parseErr) {
                   console.error("商品データパースエラー:", parseErr);
+                  // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
+                  db.run(
+                    "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                    [agencyId, productStr],
+                    (err) => {
+                      if (err) console.error("商品保存エラー（文字列）:", err);
+                    }
+                  );
                 }
               });
             }
@@ -1811,26 +1833,29 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
 
       const agencyId = this.lastID;
 
-      // 取り扱い商品を保存
+      // 取り扱い商品を保存（既存データベース構造対応）
       if (products) {
         const productList = Array.isArray(products) ? products : [products];
         productList.forEach((productStr) => {
           try {
             const product = JSON.parse(productStr);
             db.run(
-              "INSERT INTO agency_products (agency_id, product_name, product_detail, product_url) VALUES (?, ?, ?, ?)",
-              [
-                agencyId,
-                product.product_name,
-                product.product_detail,
-                product.product_url,
-              ],
+              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              [agencyId, product.product_name],
               (err) => {
                 if (err) console.error("商品保存エラー:", err);
               }
             );
           } catch (parseErr) {
             console.error("商品データパースエラー:", parseErr);
+            // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
+            db.run(
+              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              [agencyId, productStr],
+              (err) => {
+                if (err) console.error("商品保存エラー（文字列）:", err);
+              }
+            );
           }
         });
       }
