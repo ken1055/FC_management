@@ -1890,7 +1890,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [
       name,
       processedAge,
@@ -1899,7 +1899,6 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
       processedExperienceYears,
       processedContractDate,
       processedStartDate,
-      null, // product_features を NULL に設定
     ],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
