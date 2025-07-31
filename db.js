@@ -141,7 +141,8 @@ async function initializePostgresDatabase() {
       id SERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      agency_id INTEGER
+      agency_id INTEGER,
+      FOREIGN KEY (agency_id) REFERENCES agencies(id)
     )`,
     `CREATE TABLE IF NOT EXISTS agency_products (
       id SERIAL PRIMARY KEY,

@@ -1954,18 +1954,43 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
       }
 
       // ユーザーテーブルのagency_idを更新
+      console.log("=== アカウント連携開始 ===");
+      console.log("agencyId:", agencyId, "type:", typeof agencyId);
+      console.log(
+        "session.user.id:",
+        req.session.user.id,
+        "type:",
+        typeof req.session.user.id
+      );
+      console.log("session.user:", req.session.user);
+      console.log("PostgreSQL環境:", !!process.env.DATABASE_URL);
+
+      // PostgreSQL環境でのパラメータ形式を調整
+      const isPostgres = !!process.env.DATABASE_URL;
+      const updateQuery = isPostgres
+        ? "UPDATE users SET agency_id = $1 WHERE id = $2"
+        : "UPDATE users SET agency_id = ? WHERE id = ?";
+
       db.run(
-        "UPDATE users SET agency_id = ? WHERE id = ?",
-        [agencyId, req.session.user.id],
+        updateQuery,
+        [parseInt(agencyId), parseInt(req.session.user.id)],
         function (err) {
           if (err) {
-            console.error("ユーザーのagency_id更新エラー:", err);
+            console.error("=== ユーザーのagency_id更新エラー ===");
+            console.error("エラー詳細:", err);
+            console.error("エラーコード:", err.code);
+            console.error("エラーメッセージ:", err.message);
+            console.error("更新対象のagencyId:", agencyId);
+            console.error("更新対象のuserId:", req.session.user.id);
             return res
               .status(500)
               .send(
-                "プロフィール作成は完了しましたが、アカウント連携でエラーが発生しました"
+                `プロフィール作成は完了しましたが、アカウント連携でエラーが発生しました。<br>エラー詳細: ${err.message}<br><a href="/">ダッシュボードに戻る</a>`
               );
           }
+
+          console.log("=== アカウント連携成功 ===");
+          console.log("更新された行数:", this.changes || "不明");
 
           // セッションのagency_idも更新
           req.session.user.agency_id = agencyId;
