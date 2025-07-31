@@ -184,6 +184,13 @@ async function initializePostgresDatabase() {
       agency_id INTEGER,
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS settings (
+      id SERIAL PRIMARY KEY,
+      key_name TEXT NOT NULL UNIQUE,
+      key_value TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
   ];
 
   try {
@@ -550,6 +557,16 @@ function initializeInMemoryDatabase() {
       )
     `);
 
+    db.run(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key_name TEXT NOT NULL UNIQUE,
+        key_value TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 初期化完了
     isInitialized = true;
     console.log("メモリDB初期化完了");
@@ -657,6 +674,16 @@ function initializeLocalDatabase() {
         agency_id INTEGER,
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (agency_id) REFERENCES agencies(id)
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key_name TEXT NOT NULL UNIQUE,
+        key_value TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 

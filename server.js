@@ -327,6 +327,13 @@ try {
   console.error("materials ルート読み込みエラー:", error);
 }
 
+try {
+  app.use("/settings", require("./routes/settings"));
+  console.log("settings ルート読み込み完了");
+} catch (error) {
+  console.error("settings ルート読み込みエラー:", error);
+}
+
 console.log("全ルート読み込み処理完了");
 
 // メインページ（簡素化・安全化）- 最優先でルート定義
