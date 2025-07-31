@@ -1988,7 +1988,6 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
             experience_years,
             contract_date,
             start_date,
-            product_features,
           };
 
           const userData = {
