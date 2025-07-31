@@ -56,13 +56,7 @@
         <div class="col-md-12">
           <div class="card shadow-sm p-4 mb-4">
             <h1 class="mb-3">代理店管理システム</h1>
-            <p class="mb-4">やり取りは公式LINEからお願いします。</p>
-            <a
-              href="https://line.me/R/ti/p/公式LINEのID"
-              target="_blank"
-              class="btn btn-success mb-3"
-              >公式LINEへ</a
-            >
+            <p class="mb-4">代理店管理システムへようこそ。</p>
 
             <!-- 代理店ユーザー向けメニュー -->
             <% if (session && session.user && session.user.role === 'agency') {
@@ -71,7 +65,7 @@
               <h5>代理店機能</h5>
               <% if (session.user.agency_id) { %>
               <div class="row g-3">
-                <div class="col-md-4">
+                <div class="col-lg-3 col-md-6">
                   <div class="card h-100">
                     <div class="card-body text-center">
                       <i class="bi bi-person-circle fs-1 text-primary"></i>
@@ -88,7 +82,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-lg-3 col-md-6">
                   <div class="card h-100">
                     <div class="card-body text-center">
                       <i class="bi bi-graph-up fs-1 text-success"></i>
@@ -100,7 +94,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-lg-3 col-md-6">
                   <div class="card h-100">
                     <div class="card-body text-center">
                       <i class="bi bi-folder-fill fs-1 text-info"></i>
@@ -113,6 +107,31 @@
                         class="btn btn-outline-info"
                       >
                         資料を見る
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                  <div
+                    class="card h-100"
+                    id="admin-url-card-standalone"
+                    style="display: none"
+                  >
+                    <div class="card-body text-center">
+                      <i
+                        class="bi bi-arrow-up-right-square fs-1 text-primary"
+                      ></i>
+                      <h6 class="card-title mt-2">指定ページ</h6>
+                      <p class="card-text text-muted">
+                        管理者が設定したページへ
+                      </p>
+                      <a
+                        href="#"
+                        id="admin-url-link-standalone"
+                        target="_blank"
+                        class="btn btn-primary"
+                      >
+                        <i class="bi bi-arrow-up-right-square"></i> ページを開く
                       </a>
                     </div>
                   </div>
@@ -138,5 +157,53 @@
         </div>
       </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- 管理者設定URL取得・表示 -->
+    <% if (session && session.user && session.user.role === 'agency') { %>
+    <script>
+      // 代理店ユーザーのみ管理者設定URLリンクを取得・表示
+      console.log("=== 管理者設定URL取得開始（standalone） ===");
+      console.log("APIエンドポイント: /settings/api/official-line-url");
+
+      fetch("/settings/api/official-line-url")
+        .then((response) => {
+          console.log("APIレスポンス状態:", response.status);
+          console.log("APIレスポンスOK:", response.ok);
+          return response.json();
+        })
+        .then((data) => {
+          console.log("取得したデータ:", data);
+          console.log("URL:", data.url);
+
+          if (data.url) {
+            console.log("管理者設定URLが設定されています:", data.url);
+            const linkElement = document.getElementById(
+              "admin-url-link-standalone"
+            );
+            const cardElement = document.getElementById(
+              "admin-url-card-standalone"
+            );
+
+            if (linkElement && cardElement) {
+              linkElement.href = data.url;
+              cardElement.style.display = "block";
+              console.log("管理者設定URLカード（standalone）を表示しました");
+            } else {
+              console.error("HTML要素が見つかりません:", {
+                linkElement: !!linkElement,
+                cardElement: !!cardElement,
+              });
+            }
+          } else {
+            console.log("管理者設定URLが設定されていません");
+          }
+        })
+        .catch((error) => {
+          console.error("管理者設定URL取得エラー:", error);
+        });
+    </script>
+    <% } %>
   </body>
 </html>
