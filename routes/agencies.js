@@ -37,8 +37,6 @@ router.post(
         experience_years: 8,
         contract_date: "2024-01-01",
         start_date: "2024-01-15",
-        product_features:
-          "これは代理店登録通知メールのテストです。高品質な商品を取り扱っています。",
         email: "test-agency@example.com", // テスト用メールアドレス
       };
 
@@ -97,7 +95,6 @@ router.post("/test-email", requireRole(["admin"]), async (req, res) => {
       experience_years: 5,
       contract_date: "2024-01-01",
       start_date: "2024-01-15",
-      product_features: "これはメール通知のテストです。",
     };
 
     const testUserData = {
@@ -320,7 +317,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
           console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
           db.run(
-            "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+            "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date FROM temp_agencies WHERE id = ?",
             [newId, agency.id],
             function (err) {
               if (err) {
@@ -642,7 +639,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
         console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
         db.run(
-          "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date, product_features) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date, product_features FROM temp_agencies WHERE id = ?",
+          "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date FROM temp_agencies WHERE id = ?",
           [newId, agency.id],
           function (err) {
             if (err) {
@@ -904,7 +901,7 @@ function renderAgenciesList(
     // PostgreSQLでは、SELECTで選択するすべての非集約列をGROUP BYに含める必要がある
     if (isPostgres) {
       query +=
-        " GROUP BY a.id, a.name, a.age, a.address, a.bank_info, a.experience_years, a.contract_date, a.start_date, a.product_features, g.name ORDER BY a.id";
+        " GROUP BY a.id, a.name, a.age, a.address, a.bank_info, a.experience_years, a.contract_date, a.start_date, g.name ORDER BY a.id";
     } else {
       query += " GROUP BY a.id ORDER BY a.id";
     }
@@ -988,7 +985,7 @@ router.post("/", (req, res) => {
     start_date,
   } = req.body;
   db.run(
-    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [
       name,
       age,
@@ -997,7 +994,6 @@ router.post("/", (req, res) => {
       experience_years,
       contract_date,
       start_date,
-      null, // product_features を NULL に設定
     ],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
@@ -1018,7 +1014,7 @@ router.put("/:id", (req, res) => {
     start_date,
   } = req.body;
   db.run(
-    "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=?, product_features=? WHERE id=?",
+    "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=? WHERE id=?",
     [
       name,
       age,
@@ -1027,7 +1023,6 @@ router.put("/:id", (req, res) => {
       experience_years,
       contract_date,
       start_date,
-      null, // product_features を NULL に設定
       req.params.id,
     ],
     function (err) {
@@ -1108,7 +1103,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
     function createAgencyOnly() {
       db.run(
-        "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
           name,
           processedAge,
@@ -1117,7 +1112,6 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
           processedExperienceYears,
           processedContractDate,
           processedStartDate,
-          null, // product_features を NULL に設定
         ],
         function (err) {
           if (err) {
@@ -1138,7 +1132,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
         // 代理店を作成
         db.run(
-          "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             name,
             processedAge,
@@ -1147,7 +1141,6 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
             processedExperienceYears,
             processedContractDate,
             processedStartDate,
-            null, // product_features を NULL に設定
           ],
           function (err) {
             if (err) {
@@ -1260,7 +1253,6 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
         experience_years,
         contract_date,
         start_date,
-        product_features,
         email: email || null, // ユーザーアカウントのメールアドレス
       };
 
@@ -1325,7 +1317,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=?, product_features=? WHERE id=?",
+    "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=? WHERE id=?",
     [
       name,
       processedAge,
@@ -1334,7 +1326,6 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
       processedExperienceYears,
       processedContractDate,
       processedStartDate,
-      null, // product_features を NULL に設定
       req.params.id,
     ],
     function (err) {
@@ -1443,91 +1434,118 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
             );
           }
 
-          // 関連データを削除する関数（順次実行）
-          const deleteRelatedData = (callback) => {
-            // 1. 関連するユーザーアカウントを最初に削除（重要）
+          // 改善されたトランザクション型削除処理
+          const deleteRelatedDataSafely = (callback) => {
             console.log(
-              `代理店ID ${agencyId} に関連するユーザーアカウントを削除中...`
+              `代理店ID ${agencyId} の関連データ削除を開始（トランザクション処理）`
             );
-            db.run(
-              "DELETE FROM users WHERE agency_id = ?",
-              [agencyId],
-              function (err) {
-                if (err) {
-                  console.error("ユーザーアカウント削除エラー:", err);
-                } else {
+
+            // PostgreSQL環境ではBEGINでトランザクション開始
+            const isPostgres = !!process.env.DATABASE_URL;
+            const startTransaction = isPostgres ? "BEGIN" : "BEGIN TRANSACTION";
+
+            db.run(startTransaction, (err) => {
+              if (err) {
+                console.error("トランザクション開始エラー:", err);
+                return callback(err);
+              }
+
+              console.log("トランザクション開始完了");
+
+              // 削除対象テーブルの配列（削除順序重要：外部キー制約を考慮）
+              const deleteQueries = [
+                {
+                  name: "ユーザーアカウント",
+                  query: "DELETE FROM users WHERE agency_id = ?",
+                },
+                {
+                  name: "売上データ",
+                  query: "DELETE FROM sales WHERE agency_id = ?",
+                },
+                {
+                  name: "商品資料",
+                  query: "DELETE FROM materials WHERE agency_id = ?",
+                },
+                {
+                  name: "グループ所属",
+                  query: "DELETE FROM group_agency WHERE agency_id = ?",
+                },
+                {
+                  name: "取り扱い商品",
+                  query: "DELETE FROM agency_products WHERE agency_id = ?",
+                },
+                {
+                  name: "製品ファイル",
+                  query: "DELETE FROM product_files WHERE agency_id = ?",
+                },
+              ];
+
+              let completed = 0;
+              let hasError = false;
+
+              const executeDelete = (index) => {
+                if (hasError || index >= deleteQueries.length) {
+                  if (hasError) {
+                    console.log("エラーが発生したためロールバック実行");
+                    db.run("ROLLBACK", () => {
+                      callback(
+                        new Error("関連データ削除中にエラーが発生しました")
+                      );
+                    });
+                  } else {
+                    console.log("すべての関連データ削除完了、コミット実行");
+                    db.run("COMMIT", (commitErr) => {
+                      if (commitErr) {
+                        console.error("コミットエラー:", commitErr);
+                        return callback(commitErr);
+                      }
+                      console.log("トランザクション正常完了");
+                      callback();
+                    });
+                  }
+                  return;
+                }
+
+                const deleteInfo = deleteQueries[index];
+                console.log(`${deleteInfo.name}を削除中...`);
+
+                db.run(deleteInfo.query, [agencyId], function (deleteErr) {
+                  if (deleteErr) {
+                    console.error(`${deleteInfo.name}削除エラー:`, deleteErr);
+                    hasError = true;
+                    return executeDelete(index + 1);
+                  }
+
                   console.log(
-                    `代理店ID ${agencyId} のユーザーアカウントを削除しました (削除件数: ${this.changes})`
+                    `${deleteInfo.name}削除完了 (削除件数: ${this.changes})`
                   );
 
-                  // 削除されたユーザーの詳細をログに記録
-                  if (relatedUsers.length > 0) {
+                  // 特別処理：ユーザーアカウント削除時の詳細ログ
+                  if (index === 0 && relatedUsers.length > 0) {
                     relatedUsers.forEach((user) => {
                       console.log(
                         `削除されたユーザー: ID=${user.id}, Email=${user.email}`
                       );
                     });
                   }
-                }
 
-                // 2. 売上データを削除
-                db.run(
-                  "DELETE FROM sales WHERE agency_id = ?",
-                  [agencyId],
-                  (err) => {
-                    if (err) console.error("売上データ削除エラー:", err);
+                  executeDelete(index + 1);
+                });
+              };
 
-                    // 3. 商品資料を削除
-                    db.run(
-                      "DELETE FROM materials WHERE agency_id = ?",
-                      [agencyId],
-                      (err) => {
-                        if (err) console.error("資料削除エラー:", err);
-
-                        // 4. グループ所属を削除
-                        db.run(
-                          "DELETE FROM group_agency WHERE agency_id = ?",
-                          [agencyId],
-                          (err) => {
-                            if (err)
-                              console.error("グループ所属削除エラー:", err);
-
-                            // 5. 取り扱い商品を削除
-                            db.run(
-                              "DELETE FROM agency_products WHERE agency_id = ?",
-                              [agencyId],
-                              (err) => {
-                                if (err) console.error("商品削除エラー:", err);
-
-                                // 6. 製品ファイルを削除
-                                db.run(
-                                  "DELETE FROM product_files WHERE agency_id = ?",
-                                  [agencyId],
-                                  (err) => {
-                                    if (err)
-                                      console.error(
-                                        "製品ファイル削除エラー:",
-                                        err
-                                      );
-
-                                    // すべての関連データ削除完了
-                                    callback();
-                                  }
-                                );
-                              }
-                            );
-                          }
-                        );
-                      }
-                    );
-                  }
-                );
-              }
-            );
+              executeDelete(0);
+            });
           };
 
           // 関連データを削除してから代理店本体を削除
-          deleteRelatedData(() => {
+          deleteRelatedDataSafely((err) => {
+            if (err) {
+              console.error("関連データ削除エラー:", err);
+              return res.redirect(
+                "/agencies/list?error=" +
+                  encodeURIComponent("関連データ削除中にエラーが発生しました")
+              );
+            }
             db.run(
               "DELETE FROM agencies WHERE id = ?",
               [agencyId],
@@ -1544,53 +1562,20 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
                   `代理店「${agency.name}」(ID: ${agencyId}) を削除しました`
                 );
 
-                // 削除後にID整合性をチェックし、必要に応じて自動修正
-                checkAgencyIdIntegrity((checkErr, integrityInfo) => {
-                  if (checkErr) {
-                    console.error("削除後のID整合性チェックエラー:", checkErr);
-                    return res.redirect(
-                      "/agencies/list?success=" +
-                        encodeURIComponent(
-                          `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                        )
-                    );
-                  }
+                // 削除後のID整合性チェックと自動修正を無効化（安全性のため）
+                console.log(
+                  "=== 削除後のID自動修正は安全性のため無効化されています ==="
+                );
+                console.log(
+                  "他の代理店データの整合性を保つため、ID修正は手動で実行してください"
+                );
 
-                  if (
-                    !integrityInfo.isIntegrityOk &&
-                    integrityInfo.issues.length > 0
-                  ) {
-                    console.log(
-                      "削除後のID整合性問題を発見、自動修正を実行..."
-                    );
-                    fixAgencyIds((fixErr) => {
-                      if (fixErr) {
-                        console.error("削除後のID自動修正エラー:", fixErr);
-                        return res.redirect(
-                          "/agencies/list?success=" +
-                            encodeURIComponent(
-                              `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                            )
-                        );
-                      }
-
-                      console.log("削除後のID自動修正完了");
-                      res.redirect(
-                        "/agencies/list?success=" +
-                          encodeURIComponent(
-                            `「${agency.name}」の代理店データと関連するユーザーアカウントを削除し、IDの連番を自動修正しました`
-                          )
-                      );
-                    });
-                  } else {
-                    res.redirect(
-                      "/agencies/list?success=" +
-                        encodeURIComponent(
-                          `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                        )
-                    );
-                  }
-                });
+                res.redirect(
+                  "/agencies/list?success=" +
+                    encodeURIComponent(
+                      `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                    )
+                );
               }
             );
           });
@@ -1745,7 +1730,7 @@ router.post(
       start_date && start_date.trim() !== "" ? start_date : null;
 
     db.run(
-      "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=?, product_features=? WHERE id=?",
+      "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=? WHERE id=?",
       [
         name,
         processedAge,
@@ -1754,7 +1739,6 @@ router.post(
         processedExperienceYears,
         processedContractDate,
         processedStartDate,
-        null, // product_features を NULL に設定
         agencyId,
       ],
       function (err) {

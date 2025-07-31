@@ -139,13 +139,7 @@ async function sendProfileRegistrationNotification(agency, user) {
           </table>
         </div>
 
-        <div style="background-color: #e9ecef; padding: 20px; border-radius: 5px; margin: 20px 0;">
-          <h3 style="color: #17a2b8; margin-top: 0;">商品情報</h3>
-          <p><strong>商品の特徴:</strong></p>
-          <p style="background-color: white; padding: 10px; border-radius: 3px;">
-            ${agency.product_features || "未設定"}
-          </p>
-        </div>
+
 
         <div style="background-color: #fff3cd; padding: 20px; border-radius: 5px; margin: 20px 0;">
           <h3 style="color: #856404; margin-top: 0;">アカウント情報</h3>
@@ -316,13 +310,7 @@ async function sendAgencyRegistrationNotification(
           </table>
         </div>
 
-        <div style="background-color: #e9ecef; padding: 20px; border-radius: 5px; margin: 20px 0;">
-          <h3 style="color: #495057; margin-top: 0;">商品情報</h3>
-          <p><strong>商品の特徴:</strong></p>
-          <p style="background-color: white; padding: 10px; border-radius: 3px; border: 1px solid #ddd;">
-            ${agency.product_features || "未設定"}
-          </p>
-        </div>
+
 
         ${
           hasUserAccount
