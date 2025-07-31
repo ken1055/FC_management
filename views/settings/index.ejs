@@ -51,18 +51,16 @@
               </div>
               <% } %>
 
-              <!-- 指定ページURL設定 -->
+              <!-- 公式LINE URL設定 -->
               <div class="mb-4">
-                <h5>
-                  <i class="bi bi-arrow-up-right-square"></i> 指定ページ設定
-                </h5>
+                <h5><i class="bi bi-chat-dots"></i> 公式LINE設定</h5>
                 <p class="text-muted">
-                  代理店ユーザーに表示される指定ページのURLを設定します。
+                  代理店ユーザーに表示される公式LINE URLを設定します。
                 </p>
 
                 <form method="post" action="/settings/official-line">
                   <div class="mb-3">
-                    <label for="url" class="form-label">指定ページ URL</label>
+                    <label for="url" class="form-label">公式LINE URL</label>
                     <input
                       type="url"
                       id="url"
@@ -72,7 +70,8 @@
                       placeholder="https://example.com/..."
                     />
                     <div class="form-text">
-                      代理店ユーザーがアクセスするページのURLを入力してください。空にすると代理店画面でリンクが非表示になります。
+                      代理店ユーザーがアクセスする公式LINE
+                      URLを入力してください。空にすると代理店画面でリンクが非表示になります。
                     </div>
                   </div>
 
@@ -95,9 +94,9 @@
                 <a
                   href="<%= officialLineUrl %>"
                   target="_blank"
-                  class="btn btn-primary"
+                  class="btn btn-success"
                 >
-                  <i class="bi bi-arrow-up-right-square"></i> ページを開く
+                  <i class="bi bi-chat-dots"></i> 公式LINEへ
                 </a>
               </div>
               <% } %>

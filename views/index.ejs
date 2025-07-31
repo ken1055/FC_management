@@ -141,16 +141,16 @@
           <div class="col-lg-3 col-md-6">
             <div class="card h-100" id="admin-url-card" style="display: none">
               <div class="card-body text-center">
-                <i class="bi bi-arrow-up-right-square fs-1 text-primary"></i>
-                <h6 class="card-title mt-2">指定ページ</h6>
-                <p class="card-text text-muted">管理者が設定したページへ</p>
+                <i class="bi bi-chat-dots fs-1 text-success"></i>
+                <h6 class="card-title mt-2">公式ライン</h6>
+                <p class="card-text text-muted">公式LINEでサポート</p>
                 <a
                   href="#"
                   id="admin-url-link"
                   target="_blank"
-                  class="btn btn-primary"
+                  class="btn btn-success"
                 >
-                  <i class="bi bi-arrow-up-right-square"></i> ページを開く
+                  <i class="bi bi-chat-dots"></i> 公式LINEへ
                 </a>
               </div>
             </div>
@@ -170,7 +170,7 @@
           </a>
         </div>
 
-        <!-- プロフィール未作成時でも指定ページボタンを表示 -->
+        <!-- プロフィール未作成時でも公式ラインボタンを表示 -->
         <div class="row g-3">
           <div class="col-lg-3 col-md-6">
             <div
@@ -179,16 +179,16 @@
               style="display: none"
             >
               <div class="card-body text-center">
-                <i class="bi bi-arrow-up-right-square fs-1 text-primary"></i>
-                <h6 class="card-title mt-2">指定ページ</h6>
-                <p class="card-text text-muted">管理者が設定したページへ</p>
+                <i class="bi bi-chat-dots fs-1 text-success"></i>
+                <h6 class="card-title mt-2">公式ライン</h6>
+                <p class="card-text text-muted">公式LINEでサポート</p>
                 <a
                   href="#"
                   id="admin-url-link-no-profile"
                   target="_blank"
-                  class="btn btn-primary"
+                  class="btn btn-success"
                 >
-                  <i class="bi bi-arrow-up-right-square"></i> ページを開く
+                  <i class="bi bi-chat-dots"></i> 公式LINEへ
                 </a>
               </div>
             </div>
@@ -204,8 +204,8 @@
     <!-- 管理者設定URL取得・表示 -->
     <% if (session && session.user && session.user.role === 'agency') { %>
     <script>
-      // 代理店ユーザーのみ管理者設定URLリンクを取得・表示
-      console.log("=== 管理者設定URL取得開始 ===");
+      // 代理店ユーザーのみ公式LINE URLリンクを取得・表示
+      console.log("=== 公式LINE URL取得開始 ===");
       console.log("APIエンドポイント: /settings/api/official-line-url");
 
       fetch("/settings/api/official-line-url")
@@ -219,7 +219,7 @@
           console.log("URL:", data.url);
 
           if (data.url) {
-            console.log("管理者設定URLが設定されています:", data.url);
+            console.log("公式LINE URLが設定されています:", data.url);
 
             // プロフィール作成済み用のボタン
             const linkElement = document.getElementById("admin-url-link");
@@ -237,14 +237,14 @@
             if (linkElement && cardElement) {
               linkElement.href = data.url;
               cardElement.style.display = "block";
-              console.log("管理者設定URLカードを表示しました");
+              console.log("公式LINE URLカードを表示しました");
             }
 
             // プロフィール未作成用ボタンの制御
             if (linkElementNoProfile && cardElementNoProfile) {
               linkElementNoProfile.href = data.url;
               cardElementNoProfile.style.display = "block";
-              console.log("管理者設定URLカード（no-profile）を表示しました");
+              console.log("公式LINE URLカード（no-profile）を表示しました");
             }
 
             // どちらも見つからない場合のエラーログ
@@ -262,7 +262,7 @@
               });
             }
           } else {
-            console.log("管理者設定URLが設定されていません");
+            console.log("公式LINE URLが設定されていません");
           }
         })
         .catch((error) => {
