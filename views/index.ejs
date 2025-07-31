@@ -145,22 +145,18 @@
             </div>
           </div>
           <div class="col-lg-3 col-md-6">
-            <div
-              class="card h-100"
-              id="official-line-card"
-              style="display: none"
-            >
+            <div class="card h-100" id="admin-url-card" style="display: none">
               <div class="card-body text-center">
-                <i class="bi bi-chat-dots fs-1 text-success"></i>
-                <h6 class="card-title mt-2">公式LINE</h6>
-                <p class="card-text text-muted">お問い合わせ・サポート</p>
+                <i class="bi bi-arrow-up-right-square fs-1 text-primary"></i>
+                <h6 class="card-title mt-2">指定ページ</h6>
+                <p class="card-text text-muted">管理者が設定したページへ</p>
                 <a
                   href="#"
-                  id="official-line-link"
+                  id="admin-url-link"
                   target="_blank"
-                  class="btn btn-success"
+                  class="btn btn-primary"
                 >
-                  <i class="bi bi-chat-dots"></i> 公式LINEはこちら
+                  <i class="bi bi-arrow-up-right-square"></i> ページを開く
                 </a>
               </div>
             </div>
@@ -189,8 +185,8 @@
     <!-- 公式ラインURL取得・表示 -->
     <% if (session && session.user && session.user.role === 'agency') { %>
     <script>
-      // 代理店ユーザーのみ公式ラインリンクを取得・表示
-      console.log("=== 公式LINE URL取得開始 ===");
+      // 代理店ユーザーのみ管理者設定URLリンクを取得・表示
+      console.log("=== 管理者設定URL取得開始 ===");
       console.log("APIエンドポイント: /settings/api/official-line-url");
 
       fetch("/settings/api/official-line-url")
@@ -204,14 +200,14 @@
           console.log("URL:", data.url);
 
           if (data.url) {
-            console.log("公式LINE URLが設定されています:", data.url);
-            const linkElement = document.getElementById("official-line-link");
-            const cardElement = document.getElementById("official-line-card");
+            console.log("管理者設定URLが設定されています:", data.url);
+            const linkElement = document.getElementById("admin-url-link");
+            const cardElement = document.getElementById("admin-url-card");
 
             if (linkElement && cardElement) {
               linkElement.href = data.url;
               cardElement.style.display = "block";
-              console.log("公式LINEカードを表示しました");
+              console.log("管理者設定URLカードを表示しました");
             } else {
               console.error("HTML要素が見つかりません:", {
                 linkElement: !!linkElement,
@@ -219,11 +215,11 @@
               });
             }
           } else {
-            console.log("公式LINE URLが設定されていません");
+            console.log("管理者設定URLが設定されていません");
           }
         })
         .catch((error) => {
-          console.error("公式ラインURL取得エラー:", error);
+          console.error("管理者設定URL取得エラー:", error);
         });
     </script>
     <% } %>

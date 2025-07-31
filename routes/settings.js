@@ -38,11 +38,11 @@ router.get("/", requireRole(["admin"]), (req, res) => {
   );
 });
 
-// 公式ラインURL設定
+// 指定ページURL設定
 router.post("/official-line", requireRole(["admin"]), (req, res) => {
   const { url } = req.body;
 
-  console.log("=== 公式LINE URL設定保存 ===");
+  console.log("=== 指定ページ URL設定保存 ===");
   console.log("受信したURL:", url);
   console.log("管理者:", req.session?.user?.email);
 
@@ -92,9 +92,9 @@ router.post("/official-line", requireRole(["admin"]), (req, res) => {
   }
 });
 
-// 公式ラインURL取得API（代理店用）
+// 指定ページURL取得API（代理店用）
 router.get("/api/official-line-url", (req, res) => {
-  console.log("=== 公式LINE URL API呼び出し ===");
+  console.log("=== 指定ページ URL API呼び出し ===");
   console.log("リクエスト元:", req.headers["user-agent"]);
   console.log("セッション情報:", req.session?.user?.role);
 
