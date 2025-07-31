@@ -157,7 +157,7 @@
           </div>
         </div>
         <% } else { %>
-        <div class="alert alert-warning">
+        <div class="alert alert-warning mb-4">
           <h6>
             <i class="bi bi-exclamation-triangle"></i>
             プロフィール設定が必要です
@@ -168,6 +168,31 @@
           <a href="/agencies/create-profile" class="btn btn-primary">
             <i class="bi bi-person-plus"></i> プロフィールを作成
           </a>
+        </div>
+
+        <!-- プロフィール未作成時でも指定ページボタンを表示 -->
+        <div class="row g-3">
+          <div class="col-lg-3 col-md-6">
+            <div
+              class="card h-100"
+              id="admin-url-card-no-profile"
+              style="display: none"
+            >
+              <div class="card-body text-center">
+                <i class="bi bi-arrow-up-right-square fs-1 text-primary"></i>
+                <h6 class="card-title mt-2">指定ページ</h6>
+                <p class="card-text text-muted">管理者が設定したページへ</p>
+                <a
+                  href="#"
+                  id="admin-url-link-no-profile"
+                  target="_blank"
+                  class="btn btn-primary"
+                >
+                  <i class="bi bi-arrow-up-right-square"></i> ページを開く
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
         <% } %>
       </div>
@@ -195,17 +220,45 @@
 
           if (data.url) {
             console.log("管理者設定URLが設定されています:", data.url);
+
+            // プロフィール作成済み用のボタン
             const linkElement = document.getElementById("admin-url-link");
             const cardElement = document.getElementById("admin-url-card");
 
+            // プロフィール未作成用のボタン
+            const linkElementNoProfile = document.getElementById(
+              "admin-url-link-no-profile"
+            );
+            const cardElementNoProfile = document.getElementById(
+              "admin-url-card-no-profile"
+            );
+
+            // プロフィール作成済み用ボタンの制御
             if (linkElement && cardElement) {
               linkElement.href = data.url;
               cardElement.style.display = "block";
               console.log("管理者設定URLカードを表示しました");
-            } else {
+            }
+
+            // プロフィール未作成用ボタンの制御
+            if (linkElementNoProfile && cardElementNoProfile) {
+              linkElementNoProfile.href = data.url;
+              cardElementNoProfile.style.display = "block";
+              console.log("管理者設定URLカード（no-profile）を表示しました");
+            }
+
+            // どちらも見つからない場合のエラーログ
+            if (
+              !linkElement &&
+              !cardElement &&
+              !linkElementNoProfile &&
+              !cardElementNoProfile
+            ) {
               console.error("HTML要素が見つかりません:", {
                 linkElement: !!linkElement,
                 cardElement: !!cardElement,
+                linkElementNoProfile: !!linkElementNoProfile,
+                cardElementNoProfile: !!cardElementNoProfile,
               });
             }
           } else {
