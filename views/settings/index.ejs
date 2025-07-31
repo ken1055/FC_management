@@ -21,7 +21,7 @@
         </a>
         <div class="navbar-nav ms-auto">
           <% if (session.user && session.user.role === 'admin') { %>
-          <a class="nav-link" href="/admin">
+          <a class="nav-link" href="/">
             <i class="bi bi-speedometer2"></i> 管理者ダッシュボード
           </a>
           <% } %>
@@ -78,7 +78,7 @@
                     <button type="submit" class="btn btn-success">
                       <i class="bi bi-save"></i> 保存
                     </button>
-                    <a href="/admin" class="btn btn-secondary">
+                    <a href="/" class="btn btn-secondary">
                       <i class="bi bi-arrow-left"></i>
                       管理者ダッシュボードに戻る
                     </a>
