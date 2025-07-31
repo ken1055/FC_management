@@ -332,17 +332,7 @@
             </div>
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">商品の特徴</label>
-          <textarea
-            name="product_features"
-            class="form-control"
-            rows="4"
-            placeholder="取り扱い商品の特徴や詳細を記載してください"
-          >
-<%= agency ? agency.product_features : '' %></textarea
-          >
-        </div>
+
         <button type="submit" class="btn btn-success">保存</button>
         <% if (typeof isCreateProfile !== 'undefined' && isCreateProfile) { %>
         <a href="/" class="btn btn-secondary ms-2">ダッシュボードへ戻る</a>

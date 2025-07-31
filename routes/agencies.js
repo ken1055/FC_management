@@ -887,10 +887,9 @@ function renderAgenciesList(
 
     if (searchQuery) {
       conditions.push(
-        "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR a.product_features LIKE ? OR ap.product_name LIKE ?)"
+        "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR ap.product_name LIKE ?)"
       );
       params.push(
-        `%${searchQuery}%`,
         `%${searchQuery}%`,
         `%${searchQuery}%`,
         `%${searchQuery}%`,
@@ -987,7 +986,6 @@ router.post("/", (req, res) => {
     experience_years,
     contract_date,
     start_date,
-    product_features,
   } = req.body;
   db.run(
     "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date, product_features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -999,7 +997,7 @@ router.post("/", (req, res) => {
       experience_years,
       contract_date,
       start_date,
-      product_features,
+      null, // product_features を NULL に設定
     ],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
@@ -1018,7 +1016,6 @@ router.put("/:id", (req, res) => {
     experience_years,
     contract_date,
     start_date,
-    product_features,
   } = req.body;
   db.run(
     "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=?, product_features=? WHERE id=?",
@@ -1030,7 +1027,7 @@ router.put("/:id", (req, res) => {
       experience_years,
       contract_date,
       start_date,
-      product_features,
+      null, // product_features を NULL に設定
       req.params.id,
     ],
     function (err) {
@@ -1054,7 +1051,6 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
       experience_years,
       contract_date,
       start_date,
-      product_features,
       product_names,
       product_details,
       product_urls,
@@ -1121,7 +1117,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
           processedExperienceYears,
           processedContractDate,
           processedStartDate,
-          product_features,
+          null, // product_features を NULL に設定
         ],
         function (err) {
           if (err) {
@@ -1151,7 +1147,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
             processedExperienceYears,
             processedContractDate,
             processedStartDate,
-            product_features,
+            null, // product_features を NULL に設定
           ],
           function (err) {
             if (err) {
@@ -1311,7 +1307,6 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     experience_years,
     contract_date,
     start_date,
-    product_features,
     product_names,
     product_details,
     product_urls,
@@ -1339,7 +1334,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
       processedExperienceYears,
       processedContractDate,
       processedStartDate,
-      product_features,
+      null, // product_features を NULL に設定
       req.params.id,
     ],
     function (err) {
@@ -1732,7 +1727,6 @@ router.post(
       experience_years,
       contract_date,
       start_date,
-      product_features,
       product_names,
       product_details,
       product_urls,
@@ -1760,7 +1754,7 @@ router.post(
         processedExperienceYears,
         processedContractDate,
         processedStartDate,
-        product_features,
+        null, // product_features を NULL に設定
         agencyId,
       ],
       function (err) {
@@ -1878,7 +1872,6 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     experience_years,
     contract_date,
     start_date,
-    product_features,
     product_names,
     product_details,
     product_urls,
@@ -1906,7 +1899,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
       processedExperienceYears,
       processedContractDate,
       processedStartDate,
-      product_features,
+      null, // product_features を NULL に設定
     ],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
