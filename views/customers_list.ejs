@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %> | FC店舗管理システム</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #f8f9fa;
+      }
+      .navbar-brand {
+        font-weight: bold;
+      }
+      .card {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border: none;
+      }
+      .table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+      }
+      .btn-group .btn {
+        font-size: 0.875rem;
+      }
+      .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+      .search-box {
+        max-width: 400px;
+      }
+    </style>
+  </head>
+  <body class="bg-light">
+    <div class="container py-5">
+      <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
+        <div class="container-fluid">
+          <a class="navbar-brand" href="/">FC店舗管理システム</a>
+          <div class="collapse navbar-collapse">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              <li class="nav-item">
+                <a class="nav-link" href="/stores/list">店舗一覧</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="/sales/list">売上管理</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link active" href="/customers/list">顧客管理</a>
+              </li>
+              <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  ロイヤリティ管理
+                </a>
+                <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                  <li><a class="dropdown-item" href="/royalty/settings">設定管理</a></li>
+                  <li><a class="dropdown-item" href="/royalty/calculations">計算実行</a></li>
+                  <li><a class="dropdown-item" href="/royalty/report">レポート</a></li>
+                </ul>
+              </li>
+            </ul>
+            <ul class="navbar-nav">
+              <li class="nav-item">
+                <a class="nav-link" href="/auth/logout">ログアウト</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </nav>
+      <div class="row">
+        <div class="col-12">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+              <i class="bi bi-people text-primary"></i> 顧客一覧
+            </h1>
+            <a href="/customers/new" class="btn btn-primary">
+              <i class="bi bi-plus-circle"></i> 新規顧客登録
+            </a>
+          </div>
+
+          <!-- 統計情報 -->
+          <div class="row mb-4">
+            <div class="col-md-3">
+              <div class="card stats-card">
+                <div class="card-body text-center">
+                  <h3 class="mb-0"><%= customers.length %></h3>
+                  <p class="mb-0">総顧客数</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                  <h3 class="mb-0">
+                    <%= customers.filter(c => c.last_visit_date && new
+                    Date(c.last_visit_date) > new Date(Date.now() -
+                    30*24*60*60*1000)).length %>
+                  </h3>
+                  <p class="mb-0">30日以内来店</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                  <h3 class="mb-0">
+                    <%= customers.filter(c => c.email).length %>
+                  </h3>
+                  <p class="mb-0">メール登録</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                  <h3 class="mb-0">
+                    ¥<%= customers.reduce((sum, c) => sum +
+                    (c.total_purchase_amount || 0), 0).toLocaleString() %>
+                  </h3>
+                  <p class="mb-0">総購入金額</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 検索・フィルターフォーム -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <form class="row g-3" method="GET" action="/customers/list">
+                <% if (isAdmin) { %>
+                <div class="col-md-3">
+                  <label class="form-label">店舗選択</label>
+                  <select class="form-select" name="store_id" onchange="this.form.submit()">
+                    <option value="all" <%= selectedStoreId === 'all' ? 'selected' : '' %>>全店舗</option>
+                    <% stores.forEach(store => { %>
+                    <option value="<%= store.id %>" <%= selectedStoreId == store.id ? 'selected' : '' %>>
+                      <%= store.name %>
+                    </option>
+                    <% }); %>
+                  </select>
+                </div>
+                <% } %>
+                <div class="<%= isAdmin ? 'col-md-6' : 'col-md-8' %>">
+                  <label class="form-label">検索</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    name="search"
+                    value="<%= searchTerm %>"
+                    placeholder="顧客名・顧客コード・メールアドレスで検索"
+                  />
+                </div>
+                <div class="<%= isAdmin ? 'col-md-3' : 'col-md-4' %>">
+                  <label class="form-label">&nbsp;</label>
+                  <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bi bi-search"></i> 検索
+                    </button>
+                    <a href="/customers/list" class="btn btn-outline-secondary">
+                      <i class="bi bi-arrow-clockwise"></i> クリア
+                    </a>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- 顧客一覧テーブル -->
+          <div class="card">
+            <div class="card-body">
+              <% if (customers.length === 0) { %>
+              <div class="text-center py-5">
+                <i class="bi bi-people fs-1 text-muted"></i>
+                <p class="text-muted mt-3">まだ顧客が登録されていません。</p>
+                <a href="/customers/new" class="btn btn-primary">
+                  <i class="bi bi-plus-circle"></i> 最初の顧客を登録
+                </a>
+              </div>
+              <% } else { %>
+              <div class="table-responsive">
+                <table class="table table-hover" id="customersTable">
+                  <thead>
+                    <tr>
+                      <th>顧客コード</th>
+                      <th>顧客名</th>
+                      <th>フリガナ</th>
+                      <% if (isAdmin) { %>
+                      <th>店舗</th>
+                      <% } %>
+                      <th>電話番号</th>
+                      <th>メールアドレス</th>
+                      <th>来店回数</th>
+                      <th>総購入金額</th>
+                      <th>最終来店日</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% customers.forEach(customer => { %>
+                    <tr>
+                      <td>
+                        <% if (customer.customer_code) { %>
+                        <code><%= customer.customer_code %></code>
+                        <% } else { %>
+                        <span class="text-muted">-</span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <strong><%= customer.name %></strong>
+                      </td>
+                      <td><%= customer.kana || '-' %></td>
+                      <% if (isAdmin) { %>
+                      <td>
+                        <% if (customer.store_name) { %>
+                        <span class="badge bg-secondary"
+                          ><%= customer.store_name %></span
+                        >
+                        <% } else { %>
+                        <span class="text-muted">-</span>
+                        <% } %>
+                      </td>
+                      <% } %>
+                      <td><%= customer.phone || '-' %></td>
+                      <td>
+                        <% if (customer.email) { %>
+                        <a href="mailto:<%= customer.email %>"
+                          ><%= customer.email %></a
+                        >
+                        <% } else { %>
+                        <span class="text-muted">-</span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <span class="badge bg-info"
+                          ><%= customer.visit_count || 0 %>回</span
+                        >
+                      </td>
+                      <td>
+                        <% if (customer.total_purchase_amount > 0) { %> ¥<%=
+                        customer.total_purchase_amount.toLocaleString() %> <% }
+                        else { %>
+                        <span class="text-muted">¥0</span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <% if (customer.last_visit_date) { %> <%= new
+                        Date(customer.last_visit_date).toLocaleDateString('ja-JP')
+                        %> <% } else { %>
+                        <span class="text-muted">-</span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <div class="btn-group" role="group">
+                          <a
+                            href="/customers/detail/<%= customer.id %>"
+                            class="btn btn-sm btn-outline-primary"
+                            title="詳細"
+                          >
+                            <i class="bi bi-eye"></i>
+                          </a>
+                          <a
+                            href="/customers/edit/<%= customer.id %>"
+                            class="btn btn-sm btn-outline-warning"
+                            title="編集"
+                          >
+                            <i class="bi bi-pencil"></i>
+                          </a>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-danger"
+                            onclick="confirmDelete(<%= customer.id %>, '<%= customer.name %>')"
+                            title="削除"
+                          >
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <% }); %>
+                  </tbody>
+                </table>
+              </div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 削除確認モーダル -->
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">顧客削除の確認</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <p>以下の顧客を削除してもよろしいですか？</p>
+            <p><strong id="deleteCustomerName"></strong></p>
+            <p class="text-danger">
+              <i class="bi bi-exclamation-triangle"></i>
+              この操作は元に戻せません。
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              キャンセル
+            </button>
+            <form id="deleteForm" method="post" style="display: inline">
+              <button type="submit" class="btn btn-danger">削除する</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // 検索機能
+      function filterTable() {
+        const nameSearch = document
+          .getElementById("nameSearch")
+          .value.toLowerCase();
+        const codeSearch = document
+          .getElementById("codeSearch")
+          .value.toLowerCase();
+        const storeSearch = document.getElementById("storeSearch")
+          ? document.getElementById("storeSearch").value.toLowerCase()
+          : "";
+        const table = document.getElementById("customersTable");
+        const rows = table.getElementsByTagName("tr");
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const cells = row.getElementsByTagName("td");
+          let showRow = true;
+
+          if (nameSearch && cells[1] && cells[2]) {
+            const name = cells[1].textContent.toLowerCase();
+            const kana = cells[2].textContent.toLowerCase();
+            if (!name.includes(nameSearch) && !kana.includes(nameSearch)) {
+              showRow = false;
+            }
+          }
+
+          if (codeSearch && cells[0]) {
+            const code = cells[0].textContent.toLowerCase();
+            if (!code.includes(codeSearch)) {
+              showRow = false;
+            }
+          }
+
+          if (storeSearch && cells[3]) {
+            const store = cells[3].textContent.toLowerCase();
+            if (!store.includes(storeSearch)) {
+              showRow = false;
+            }
+          }
+
+          row.style.display = showRow ? "" : "none";
+        }
+      }
+
+      function clearSearch() {
+        document.getElementById("nameSearch").value = "";
+        document.getElementById("codeSearch").value = "";
+        if (document.getElementById("storeSearch")) {
+          document.getElementById("storeSearch").value = "";
+        }
+        filterTable();
+      }
+
+      // 検索フィールドにイベントリスナーを追加
+      document
+        .getElementById("nameSearch")
+        .addEventListener("input", filterTable);
+      document
+        .getElementById("codeSearch")
+        .addEventListener("input", filterTable);
+      if (document.getElementById("storeSearch")) {
+        document
+          .getElementById("storeSearch")
+          .addEventListener("change", filterTable);
+      }
+
+      // 削除確認
+      function confirmDelete(customerId, customerName) {
+        document.getElementById("deleteCustomerName").textContent =
+          customerName;
+        document.getElementById(
+          "deleteForm"
+        ).action = `/customers/delete/${customerId}`;
+        new bootstrap.Modal(document.getElementById("deleteModal")).show();
+      }
+    </script>
+    </div>
+  </body>
+</html>

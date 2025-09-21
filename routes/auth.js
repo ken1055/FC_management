@@ -110,7 +110,7 @@ router.post("/login", (req, res) => {
           id: admin.id,
           email: admin.email,
           role: "admin",
-          agency_id: null,
+          store_id: null,
         };
 
         console.log("Admin session created:", req.session.user);
@@ -124,7 +124,7 @@ router.post("/login", (req, res) => {
         console.log("DB query result (users):", {
           err,
           user: user
-            ? { id: user.id, email: user.email, agency_id: user.agency_id }
+            ? { id: user.id, email: user.email, store_id: user.store_id }
             : null,
         });
 
@@ -143,7 +143,7 @@ router.post("/login", (req, res) => {
             id: user.id,
             email: user.email,
             role: "agency",
-            agency_id: user.agency_id,
+            store_id: user.store_id,
           };
 
           console.log("User session created:", req.session.user);
@@ -222,8 +222,8 @@ router.post("/register", (req, res) => {
   }
 
   try {
-    let agency_id = null;
-    if (role === "agency") agency_id = null;
+    let store_id = null;
+    if (role === "agency") store_id = null;
 
     // bcryptでパスワードをハッシュ化
     bcrypt.hash(password, 10, (err, hashedPassword) => {
@@ -238,11 +238,11 @@ router.post("/register", (req, res) => {
 
       const dbInsert =
         role === "agency"
-          ? "INSERT INTO users (email, password, agency_id) VALUES (?, ?, ?)"
+          ? "INSERT INTO users (email, password, store_id) VALUES (?, ?, ?)"
           : "INSERT INTO admins (email, password) VALUES (?, ?)";
       const params =
         role === "agency"
-          ? [email, hashedPassword, agency_id]
+          ? [email, hashedPassword, store_id]
           : [email, hashedPassword];
 
       db.run(dbInsert, params, function (err) {
@@ -375,7 +375,7 @@ router.post("/promote", (req, res) => {
                     id: newAdminId,
                     email: user.email,
                     role: "admin",
-                    agency_id: null,
+                    store_id: null,
                   };
 
                   console.log("昇格完了:", req.session.user);

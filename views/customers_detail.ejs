@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %> | FC店舗管理システム</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #f8f9fa;
+      }
+      .navbar-brand {
+        font-weight: bold;
+      }
+      .card {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border: none;
+      }
+      .info-label {
+        font-weight: 600;
+        color: #495057;
+      }
+      .info-value {
+        color: #212529;
+      }
+      .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+      <div class="container">
+        <a class="navbar-brand" href="/">
+          <i class="bi bi-shop"></i> FC店舗管理システム
+        </a>
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarNav"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="bi bi-house"></i> ダッシュボード
+              </a>
+            </li>
+            <% if (session && session.user && session.user.role === 'admin') {
+            %>
+            <li class="nav-item">
+              <a class="nav-link" href="/stores/list">
+                <i class="bi bi-building"></i> 店舗管理
+              </a>
+            </li>
+            <% } %>
+            <li class="nav-item">
+              <a class="nav-link active" href="/customers/list">
+                <i class="bi bi-people"></i> 顧客管理
+              </a>
+            </li>
+          </ul>
+          <ul class="navbar-nav">
+            <li class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                role="button"
+                data-bs-toggle="dropdown"
+              >
+                <i class="bi bi-person-circle"></i> <%= session.user.email %>
+              </a>
+              <ul class="dropdown-menu">
+                <li>
+                  <a class="dropdown-item" href="/auth/logout">ログアウト</a>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+              <i class="bi bi-person text-primary"></i> 顧客詳細
+            </h1>
+            <div>
+              <a href="/customers/list" class="btn btn-secondary me-2">
+                <i class="bi bi-arrow-left"></i> 一覧に戻る
+              </a>
+              <a
+                href="/customers/edit/<%= customer.id %>"
+                class="btn btn-warning me-2"
+              >
+                <i class="bi bi-pencil"></i> 編集
+              </a>
+              <button
+                type="button"
+                class="btn btn-danger"
+                onclick="confirmDelete(<%= customer.id %>, '<%= customer.name %>')"
+              >
+                <i class="bi bi-trash"></i> 削除
+              </button>
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- 基本情報 -->
+            <div class="col-lg-8">
+              <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                  <h5 class="mb-0">
+                    <i class="bi bi-person-badge"></i> 基本情報
+                  </h5>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">顧客コード</div>
+                      <div class="info-value">
+                        <% if (customer.customer_code) { %>
+                        <code class="fs-6"><%= customer.customer_code %></code>
+                        <% } else { %>
+                        <span class="text-muted">未設定</span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">顧客名</div>
+                      <div class="info-value">
+                        <strong class="fs-5"><%= customer.name %></strong>
+                      </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">フリガナ</div>
+                      <div class="info-value">
+                        <%= customer.kana || '未設定' %>
+                      </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">性別</div>
+                      <div class="info-value">
+                        <% if (customer.gender) { %>
+                        <span class="badge bg-secondary"
+                          ><%= customer.gender %></span
+                        >
+                        <% } else { %>
+                        <span class="text-muted">未設定</span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">生年月日</div>
+                      <div class="info-value">
+                        <% if (customer.birth_date) { %> <%= new
+                        Date(customer.birth_date).toLocaleDateString('ja-JP') %>
+                        <% const age = Math.floor((new Date() - new
+                        Date(customer.birth_date)) / (365.25 * 24 * 60 * 60 *
+                        1000)); %>
+                        <span class="text-muted">（<%= age %>歳）</span>
+                        <% } else { %>
+                        <span class="text-muted">未設定</span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <% if (isAdmin && customer.store_name) { %>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">所属店舗</div>
+                      <div class="info-value">
+                        <span class="badge bg-info"
+                          ><%= customer.store_name %></span
+                        >
+                      </div>
+                    </div>
+                    <% } %>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">登録日</div>
+                      <div class="info-value">
+                        <% if (customer.registration_date) { %> <%= new
+                        Date(customer.registration_date).toLocaleDateString('ja-JP')
+                        %> <% } else { %>
+                        <span class="text-muted">不明</span>
+                        <% } %>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 連絡先情報 -->
+              <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                  <h5 class="mb-0">
+                    <i class="bi bi-telephone"></i> 連絡先情報
+                  </h5>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">電話番号</div>
+                      <div class="info-value">
+                        <% if (customer.phone) { %>
+                        <a href="tel:<%= customer.phone %>">
+                          <i class="bi bi-telephone"></i> <%= customer.phone %>
+                        </a>
+                        <% } else { %>
+                        <span class="text-muted">未設定</span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                      <div class="info-label">メールアドレス</div>
+                      <div class="info-value">
+                        <% if (customer.email) { %>
+                        <a href="mailto:<%= customer.email %>">
+                          <i class="bi bi-envelope"></i> <%= customer.email %>
+                        </a>
+                        <% } else { %>
+                        <span class="text-muted">未設定</span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="col-12 mb-3">
+                      <div class="info-label">住所</div>
+                      <div class="info-value">
+                        <% if (customer.address) { %>
+                        <i class="bi bi-geo-alt"></i> <%= customer.address %> <%
+                        } else { %>
+                        <span class="text-muted">未設定</span>
+                        <% } %>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 備考 -->
+              <% if (customer.notes) { %>
+              <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                  <h5 class="mb-0"><i class="bi bi-sticky"></i> 備考</h5>
+                </div>
+                <div class="card-body">
+                  <p class="mb-0"><%= customer.notes %></p>
+                </div>
+              </div>
+              <% } %>
+            </div>
+
+            <!-- 統計情報 -->
+            <div class="col-lg-4">
+              <div class="card stats-card mb-4">
+                <div class="card-header">
+                  <h5 class="mb-0"><i class="bi bi-graph-up"></i> 購入統計</h5>
+                </div>
+                <div class="card-body">
+                  <div class="text-center mb-3">
+                    <div class="display-4 fw-bold">
+                      <%= customer.visit_count || 0 %>
+                    </div>
+                    <div>来店回数</div>
+                  </div>
+                  <div class="text-center mb-3">
+                    <div class="h2 fw-bold">
+                      ¥<%= (customer.total_purchase_amount ||
+                      0).toLocaleString() %>
+                    </div>
+                    <div>総購入金額</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="h5">
+                      <% if (customer.last_visit_date) { %> <%= new
+                      Date(customer.last_visit_date).toLocaleDateString('ja-JP')
+                      %> <% } else { %>
+                      <span class="text-muted">未来店</span>
+                      <% } %>
+                    </div>
+                    <div>最終来店日</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 平均購入単価 -->
+              <div class="card bg-success text-white mb-4">
+                <div class="card-body text-center">
+                  <h3 class="mb-0">
+                    <% if (customer.visit_count > 0) { %> ¥<%=
+                    Math.round((customer.total_purchase_amount || 0) /
+                    customer.visit_count).toLocaleString() %> <% } else { %> ¥0
+                    <% } %>
+                  </h3>
+                  <p class="mb-0">平均購入単価</p>
+                </div>
+              </div>
+
+              <!-- 顧客ランク -->
+              <div class="card mb-4">
+                <div class="card-header">
+                  <h6 class="mb-0"><i class="bi bi-star"></i> 顧客ランク</h6>
+                </div>
+                <div class="card-body text-center">
+                  <% let rank = 'ブロンズ'; let rankColor = 'secondary'; const
+                  totalAmount = customer.total_purchase_amount || 0; if
+                  (totalAmount >= 100000) { rank = 'プラチナ'; rankColor =
+                  'dark'; } else if (totalAmount >= 50000) { rank = 'ゴールド';
+                  rankColor = 'warning'; } else if (totalAmount >= 20000) { rank
+                  = 'シルバー'; rankColor = 'info'; } %>
+                  <span class="badge bg-<%= rankColor %> fs-6"
+                    ><%= rank %></span
+                  >
+                  <div class="mt-2 small text-muted">
+                    <% if (rank === 'ブロンズ') { %> シルバーまで¥<%= (20000 -
+                    totalAmount).toLocaleString() %> <% } else if (rank ===
+                    'シルバー') { %> ゴールドまで¥<%= (50000 -
+                    totalAmount).toLocaleString() %> <% } else if (rank ===
+                    'ゴールド') { %> プラチナまで¥<%= (100000 -
+                    totalAmount).toLocaleString() %> <% } else { %>
+                    最高ランクです！ <% } %>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 更新日時 -->
+              <div class="card">
+                <div class="card-body small text-muted">
+                  <div class="mb-2">
+                    <i class="bi bi-calendar-plus"></i>
+                    作成日: <%= new
+                    Date(customer.created_at).toLocaleString('ja-JP') %>
+                  </div>
+                  <div>
+                    <i class="bi bi-calendar-check"></i>
+                    更新日: <%= new
+                    Date(customer.updated_at).toLocaleString('ja-JP') %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 削除確認モーダル -->
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">顧客削除の確認</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <p>以下の顧客を削除してもよろしいですか？</p>
+            <p><strong id="deleteCustomerName"></strong></p>
+            <p class="text-danger">
+              <i class="bi bi-exclamation-triangle"></i>
+              この操作は元に戻せません。
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              キャンセル
+            </button>
+            <form id="deleteForm" method="post" style="display: inline">
+              <button type="submit" class="btn btn-danger">削除する</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // 削除確認
+      function confirmDelete(customerId, customerName) {
+        document.getElementById("deleteCustomerName").textContent =
+          customerName;
+        document.getElementById(
+          "deleteForm"
+        ).action = `/customers/delete/${customerId}`;
+        new bootstrap.Modal(document.getElementById("deleteModal")).show();
+      }
+    </script>
+  </body>
+</html>

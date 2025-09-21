@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>
+      店舗<%= agency ? '編集' : '新規登録' %> - 店舗管理システム
+    </title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
+    />
+  </head>
+  <body class="container py-5">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">店舗管理システム</a>
+        <div class="collapse navbar-collapse">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <% if (typeof session !== 'undefined' && session && session.user &&
+            session.user.role === 'admin') { %>
+            <li class="nav-item">
+              <a class="nav-link" href="/stores/list">店舗一覧</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/sales/list">売上管理</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/groups/list">グループ管理</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/api/users/list">アカウント管理</a>
+            </li>
+            <% } %> <% if (typeof session !== 'undefined' && session &&
+            session.user && session.user.role === 'agency') { %>
+            <li class="nav-item">
+              <a class="nav-link text-warning" href="/auth/promote"
+                >管理者・役員に切り替え</a
+              >
+            </li>
+            <% if (session.user.store_id) { %>
+            <li class="nav-item">
+              <a
+                class="nav-link"
+                href="/stores/profile/<%= session.user.store_id %>"
+                >マイプロフィール</a
+              >
+            </li>
+            <% } %>
+            <li class="nav-item">
+              <a class="nav-link" href="/sales/list">売上管理</a>
+            </li>
+            <% if (session.user.store_id) { %>
+            <li class="nav-item">
+              <a
+                class="nav-link"
+                href="/materials/<%= session.user.store_id %>"
+                >商品資料格納庫</a
+              >
+            </li>
+            <% } %> <% } %> <% if (typeof session !== 'undefined' && session &&
+            session.user && (session.user.role === 'admin')) { %> <% } %> <% if
+            (typeof session !== 'undefined' && session && session.user) { %>
+            <li class="nav-item">
+              <a class="nav-link" href="/auth/logout">ログアウト</a>
+            </li>
+            <% } else { %>
+            <li class="nav-item">
+              <a class="nav-link" href="/auth/login">ログイン</a>
+            </li>
+            <% } %>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="card shadow-sm p-4 mb-4">
+      <h1 class="mb-4">店舗<%= agency ? '編集' : '新規登録' %></h1>
+      <form
+        method="post"
+        action="<%= 
+      typeof isCreateProfile !== 'undefined' && isCreateProfile ? '/stores/create-profile' :
+      typeof isProfile !== 'undefined' && isProfile ? '/stores/profile/' + agency.id + '/edit' : 
+      (agency ? '/stores/edit/' + agency.id : '/stores/new') 
+    %>"
+      >
+        <div class="mb-3">
+          <label class="form-label"
+            >名前 <span class="text-danger">*</span></label
+          >
+          <input
+            type="text"
+            name="name"
+            class="form-control"
+            value="<%= agency ? agency.name : '' %>"
+            required
+          />
+        </div>
+
+        <% if (typeof session !== 'undefined' && session && session.user &&
+        session.user.role === 'admin' && !agency) { %>
+        <!-- 管理者による新規店舗作成時のみ表示 -->
+        <div class="card border-info mb-3">
+          <div class="card-header bg-info text-white">
+            <h6 class="mb-0">
+              <i class="bi bi-person-circle"></i> アカウント情報
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">
+                メールアドレス <span class="text-danger">*</span>
+              </label>
+              <input
+                type="email"
+                name="email"
+                class="form-control"
+                placeholder="agency@example.com"
+                required
+              />
+              <small class="form-text text-muted">
+                店舗ユーザーのログイン用メールアドレス
+              </small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">
+                パスワード <span class="text-danger">*</span>
+              </label>
+              <input
+                type="password"
+                name="password"
+                class="form-control"
+                placeholder="8文字以上のパスワード"
+                minlength="8"
+                required
+              />
+              <small class="form-text text-muted">
+                店舗ユーザーのログイン用パスワード（8文字以上）
+              </small>
+            </div>
+            <div class="mb-0">
+              <label class="form-label">
+                パスワード確認 <span class="text-danger">*</span>
+              </label>
+              <input
+                type="password"
+                name="password_confirm"
+                class="form-control"
+                placeholder="パスワードを再入力"
+                minlength="8"
+                required
+              />
+              <small class="form-text text-muted">
+                確認のため同じパスワードを入力してください
+              </small>
+            </div>
+          </div>
+        </div>
+        <% } %>
+        <div class="mb-3">
+          <label class="form-label">年齢</label>
+          <input
+            type="text"
+            name="age"
+            class="form-control"
+            placeholder="年齢を入力してください"
+            value="<%= agency ? agency.age : '' %>"
+          />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">住所</label>
+          <input
+            type="text"
+            name="address"
+            class="form-control"
+            value="<%= agency ? agency.address : '' %>"
+          />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">振込先情報</label>
+          <textarea
+            name="bank_info"
+            class="form-control"
+            rows="3"
+            placeholder="銀行名、支店名、口座番号、口座名義など"
+          >
+<%= agency ? agency.bank_info : '' %></textarea
+          >
+        </div>
+        <div class="mb-3">
+          <label class="form-label">経験年数</label>
+          <input
+            type="number"
+            name="experience_years"
+            class="form-control"
+            min="0"
+            value="<%= agency ? agency.experience_years : '' %>"
+          />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">契約日</label>
+          <input
+            type="date"
+            name="contract_date"
+            class="form-control"
+            value="<%= agency ? agency.contract_date : '' %>"
+          />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">活動開始日</label>
+          <input
+            type="date"
+            name="start_date"
+            class="form-control"
+            value="<%= agency ? agency.start_date : '' %>"
+          />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">取り扱い商品</label>
+
+          <!-- 既存の商品一覧 -->
+          <div id="productsList" class="mb-3">
+            <% if (typeof agency !== 'undefined' && agency && agency.products &&
+            agency.products.length > 0) { %> <%
+            agency.products.forEach((product, index) => { %>
+            <div
+              class="card mb-2 product-item"
+              data-product-name="<%= product.product_name %>"
+              data-product-detail="<%= product.product_detail || '' %>"
+              data-product-url="<%= product.product_url || '' %>"
+            >
+              <div class="card-body">
+                <div class="row align-items-center">
+                  <div class="col-md-3">
+                    <strong><%= product.product_name %></strong>
+                  </div>
+                  <div class="col-md-4">
+                    <small class="text-muted"
+                      ><%= product.product_detail || '詳細なし' %></small
+                    >
+                  </div>
+                  <div class="col-md-3">
+                    <% if (product.product_url) { %>
+                    <a
+                      href="<%= product.product_url %>"
+                      target="_blank"
+                      class="text-decoration-none"
+                    >
+                      <i class="bi bi-link-45deg"></i> リンク
+                    </a>
+                    <% } else { %>
+                    <span class="text-muted">URLなし</span>
+                    <% } %>
+                  </div>
+                  <div class="col-md-2">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      onclick="removeProduct(this)"
+                    >
+                      <i class="bi bi-trash"></i> 削除
+                    </button>
+                  </div>
+                </div>
+                <!-- 隠しフィールドで商品データを保持 -->
+                <input
+                  type="hidden"
+                  name="product_names[]"
+                  value="<%= product.product_name %>"
+                />
+                <input
+                  type="hidden"
+                  name="product_details[]"
+                  value="<%= product.product_detail || '' %>"
+                />
+                <input
+                  type="hidden"
+                  name="product_urls[]"
+                  value="<%= product.product_url || '' %>"
+                />
+              </div>
+            </div>
+            <% }) %> <% } %>
+          </div>
+
+          <!-- 新規商品追加フォーム -->
+          <div class="card border-success">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">
+                <i class="bi bi-plus-circle"></i> 新しい商品を追加（任意）
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4">
+                  <input
+                    type="text"
+                    id="newProductName"
+                    class="form-control"
+                    placeholder="商品名"
+                  />
+                </div>
+                <div class="col-md-4">
+                  <input
+                    type="text"
+                    id="newProductDetail"
+                    class="form-control"
+                    placeholder="商品詳細"
+                  />
+                </div>
+                <div class="col-md-3">
+                  <input
+                    type="url"
+                    id="newProductUrl"
+                    class="form-control"
+                    placeholder="商品URL"
+                  />
+                </div>
+                <div class="col-md-1">
+                  <button
+                    type="button"
+                    class="btn btn-success"
+                    onclick="addProduct()"
+                  >
+                    <i class="bi bi-plus"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-success">保存</button>
+        <% if (typeof isCreateProfile !== 'undefined' && isCreateProfile) { %>
+        <a href="/" class="btn btn-secondary ms-2">ダッシュボードへ戻る</a>
+        <% } else if (typeof isProfile !== 'undefined' && isProfile) { %>
+        <a
+          href="/stores/profile/<%= agency.id %>"
+          class="btn btn-secondary ms-2"
+          >プロフィールへ戻る</a
+        >
+        <% } else { %>
+        <a href="/stores/list" class="btn btn-secondary ms-2">一覧へ戻る</a>
+        <% } %>
+      </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      function addProduct() {
+        const name = document.getElementById("newProductName").value.trim();
+        const detail = document.getElementById("newProductDetail").value.trim();
+        const url = document.getElementById("newProductUrl").value.trim();
+
+        if (!name) {
+          alert("商品名を入力してください");
+          return;
+        }
+
+        // URLの妥当性チェック（入力されている場合のみ）
+        if (url && !isValidUrl(url)) {
+          alert("有効なURLを入力してください");
+          return;
+        }
+
+        const productData = {
+          product_name: name,
+          product_detail: detail || null,
+          product_url: url || null,
+        };
+
+        // 商品アイテムを作成
+        const productItem = createProductItem(productData);
+
+        // 商品リストに追加
+        document.getElementById("productsList").appendChild(productItem);
+
+        // 入力フィールドをクリア
+        document.getElementById("newProductName").value = "";
+        document.getElementById("newProductDetail").value = "";
+        document.getElementById("newProductUrl").value = "";
+      }
+
+      function createProductItem(productData) {
+        const div = document.createElement("div");
+        div.className = "card mb-2 product-item";
+
+        const detailText = productData.product_detail || "詳細なし";
+        const urlSection = productData.product_url
+          ? `<a href="${productData.product_url}" target="_blank" class="text-decoration-none">
+               <i class="bi bi-link-45deg"></i> リンク
+             </a>`
+          : '<span class="text-muted">URLなし</span>';
+
+        div.innerHTML = `
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-3">
+                <strong>${escapeHtml(productData.product_name)}</strong>
+              </div>
+              <div class="col-md-4">
+                <small class="text-muted">${escapeHtml(detailText)}</small>
+              </div>
+              <div class="col-md-3">
+                ${urlSection}
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeProduct(this)">
+                  <i class="bi bi-trash"></i> 削除
+                </button>
+              </div>
+            </div>
+            <input type="hidden" name="product_names[]" value="${escapeHtml(
+              productData.product_name
+            )}">
+            <input type="hidden" name="product_details[]" value="${escapeHtml(
+              productData.product_detail || ""
+            )}">
+            <input type="hidden" name="product_urls[]" value="${escapeHtml(
+              productData.product_url || ""
+            )}">
+          </div>
+        `;
+
+        return div;
+      }
+
+      function removeProduct(button) {
+        if (confirm("この商品を削除しますか？")) {
+          button.closest(".product-item").remove();
+        }
+      }
+
+      function isValidUrl(string) {
+        try {
+          new URL(string);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Enterキーでの商品追加（商品名が入力されている場合のみ）
+      document.addEventListener("DOMContentLoaded", function () {
+        const inputs = ["newProductName", "newProductDetail", "newProductUrl"];
+        inputs.forEach((id) => {
+          document
+            .getElementById(id)
+            .addEventListener("keypress", function (e) {
+              if (e.key === "Enter") {
+                const name = document
+                  .getElementById("newProductName")
+                  .value.trim();
+                if (name) {
+                  // 商品名が入力されている場合のみ商品追加
+                  e.preventDefault();
+                  addProduct();
+                }
+                // 商品名が空の場合は通常のフォーム送信を行う（preventDefault()しない）
+              }
+            });
+        });
+      });
+    </script>
+  </body>
+</html>

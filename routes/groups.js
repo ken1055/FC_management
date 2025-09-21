@@ -17,9 +17,9 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
     `SELECT 
       g.id, 
       g.name, 
-      COUNT(ga.agency_id) as agency_count
+      COUNT(ga.store_id) as agency_count
     FROM groups g 
-    LEFT JOIN group_agency ga ON g.id = ga.group_id 
+    LEFT JOIN group_store ga ON g.id = ga.group_id 
     GROUP BY g.id, g.name 
     ORDER BY g.name`,
     [],
@@ -112,7 +112,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
 router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
   // まず関連する代理店の割り当てを削除
   db.run(
-    "DELETE FROM group_agency WHERE group_id = ?",
+    "DELETE FROM group_store WHERE group_id = ?",
     [req.params.id],
     (err) => {
       if (err) return res.status(500).send("DBエラー");
@@ -141,8 +141,8 @@ router.get("/manage/:id", requireRole(["admin"]), (req, res) => {
     // グループに所属している代理店を取得
     db.all(
       `SELECT a.id, a.name 
-       FROM agencies a 
-       INNER JOIN group_agency ga ON a.id = ga.agency_id 
+       FROM stores a 
+       INNER JOIN group_store ga ON a.id = ga.store_id 
        WHERE ga.group_id = ? 
        ORDER BY a.name`,
       [groupId],
@@ -152,10 +152,10 @@ router.get("/manage/:id", requireRole(["admin"]), (req, res) => {
         // グループに所属していない代理店を取得
         db.all(
           `SELECT a.id, a.name 
-           FROM agencies a 
+           FROM stores a 
            WHERE a.id NOT IN (
-             SELECT ga.agency_id 
-             FROM group_agency ga 
+             SELECT ga.store_id 
+             FROM group_store ga 
              WHERE ga.group_id = ?
            ) 
            ORDER BY a.name`,
@@ -180,18 +180,18 @@ router.get("/manage/:id", requireRole(["admin"]), (req, res) => {
 // 代理店をグループに追加
 router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
   const groupId = req.params.id;
-  const { agency_id } = req.body;
+  const { store_id } = req.body;
 
-  if (!agency_id) {
+  if (!store_id) {
     return res.redirect(`/groups/manage/${groupId}`);
   }
 
-  console.log("グループ代理店追加:", { groupId, agency_id });
+  console.log("グループ代理店追加:", { groupId, store_id });
 
   // 既存の関連をチェック
   db.get(
-    "SELECT * FROM group_agency WHERE group_id = ? AND agency_id = ?",
-    [groupId, agency_id],
+    "SELECT * FROM group_store WHERE group_id = ? AND store_id = ?",
+    [groupId, store_id],
     (err, existing) => {
       if (err) {
         console.error("既存チェックエラー:", err);
@@ -205,8 +205,8 @@ router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
 
       // 新しい関連を作成
       db.run(
-        "INSERT INTO group_agency (group_id, agency_id) VALUES (?, ?)",
-        [groupId, agency_id],
+        "INSERT INTO group_store (group_id, store_id) VALUES (?, ?)",
+        [groupId, store_id],
         function (err) {
           if (err) {
             console.error("グループ代理店追加エラー:", err);
@@ -228,7 +228,7 @@ router.post(
     const { groupId, agencyId } = req.params;
 
     db.run(
-      "DELETE FROM group_agency WHERE group_id = ? AND agency_id = ?",
+      "DELETE FROM group_store WHERE group_id = ? AND store_id = ?",
       [groupId, agencyId],
       function (err) {
         if (err) return res.status(500).send("DBエラー");

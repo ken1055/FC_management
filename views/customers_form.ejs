@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> | FC店舗管理システム</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: none;
+        }
+        .form-label {
+            font-weight: 600;
+        }
+        .required {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="/">FC店舗管理システム</a>
+                <div class="collapse navbar-collapse">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/stores/list">店舗一覧</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/sales/list">売上管理</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/customers/list">顧客管理</a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                ロイヤリティ管理
+                            </a>
+                            <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                                <li><a class="dropdown-item" href="/royalty/settings">設定管理</a></li>
+                                <li><a class="dropdown-item" href="/royalty/calculations">計算実行</a></li>
+                                <li><a class="dropdown-item" href="/royalty/report">レポート</a></li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/auth/logout">ログアウト</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">
+                            <i class="bi bi-person-plus"></i> <%= title %>
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="<%= customer ? `/customers/update/${customer.id}` : '/customers/create' %>" novalidate>
+                            <div class="row">
+                                <!-- 基本情報 -->
+                                <div class="col-12">
+                                    <h5 class="border-bottom pb-2 mb-3">基本情報</h5>
+                                </div>
+
+                                <!-- 店舗選択（管理者のみ） -->
+                                <% if (isAdmin && stores.length > 0) { %>
+                                <div class="col-md-6 mb-3">
+                                    <label for="store_id" class="form-label">店舗 <span class="required">*</span></label>
+                                    <select class="form-select" id="store_id" name="store_id" required>
+                                        <option value="">店舗を選択してください</option>
+                                        <% stores.forEach(store => { %>
+                                        <option value="<%= store.id %>" <%= customer && customer.store_id == store.id ? 'selected' : '' %>>
+                                            <%= store.name %>
+                                        </option>
+                                        <% }); %>
+                                    </select>
+                                    <div class="invalid-feedback">
+                                        店舗を選択してください。
+                                    </div>
+                                </div>
+                                <% } %>
+
+                                <!-- 顧客コード -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="customer_code" class="form-label">顧客コード</label>
+                                    <input type="text" class="form-control" id="customer_code" name="customer_code" 
+                                           value="<%= customer ? (customer.customer_code || '') : '' %>"
+                                           placeholder="例: C001">
+                                    <div class="form-text">顧客を識別するための任意のコードです。</div>
+                                </div>
+
+                                <!-- 顧客名 -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="name" class="form-label">顧客名 <span class="required">*</span></label>
+                                    <input type="text" class="form-control" id="name" name="name" 
+                                           value="<%= customer ? customer.name : '' %>" required
+                                           placeholder="例: 山田太郎">
+                                    <div class="invalid-feedback">
+                                        顧客名を入力してください。
+                                    </div>
+                                </div>
+
+                                <!-- フリガナ -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="kana" class="form-label">フリガナ</label>
+                                    <input type="text" class="form-control" id="kana" name="kana" 
+                                           value="<%= customer ? (customer.kana || '') : '' %>"
+                                           placeholder="例: ヤマダタロウ">
+                                </div>
+
+                                <!-- 性別 -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="gender" class="form-label">性別</label>
+                                    <select class="form-select" id="gender" name="gender">
+                                        <option value="">選択してください</option>
+                                        <option value="男性" <%= customer && customer.gender === '男性' ? 'selected' : '' %>>男性</option>
+                                        <option value="女性" <%= customer && customer.gender === '女性' ? 'selected' : '' %>>女性</option>
+                                        <option value="その他" <%= customer && customer.gender === 'その他' ? 'selected' : '' %>>その他</option>
+                                    </select>
+                                </div>
+
+                                <!-- 生年月日 -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="birth_date" class="form-label">生年月日</label>
+                                    <input type="date" class="form-control" id="birth_date" name="birth_date" 
+                                           value="<%= customer ? (customer.birth_date || '') : '' %>">
+                                </div>
+
+                                <!-- 連絡先情報 -->
+                                <div class="col-12 mt-4">
+                                    <h5 class="border-bottom pb-2 mb-3">連絡先情報</h5>
+                                </div>
+
+                                <!-- 電話番号 -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="phone" class="form-label">電話番号</label>
+                                    <input type="tel" class="form-control" id="phone" name="phone" 
+                                           value="<%= customer ? (customer.phone || '') : '' %>"
+                                           placeholder="例: 090-1234-5678">
+                                </div>
+
+                                <!-- メールアドレス -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="email" class="form-label">メールアドレス</label>
+                                    <input type="email" class="form-control" id="email" name="email" 
+                                           value="<%= customer ? (customer.email || '') : '' %>"
+                                           placeholder="例: customer@example.com">
+                                    <div class="invalid-feedback">
+                                        正しいメールアドレス形式で入力してください。
+                                    </div>
+                                </div>
+
+                                <!-- 住所 -->
+                                <div class="col-12 mb-3">
+                                    <label for="address" class="form-label">住所</label>
+                                    <textarea class="form-control" id="address" name="address" rows="2"
+                                              placeholder="例: 東京都渋谷区..."><%= customer ? (customer.address || '') : '' %></textarea>
+                                </div>
+
+                                <!-- 備考 -->
+                                <div class="col-12 mb-3">
+                                    <label for="notes" class="form-label">備考</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="3"
+                                              placeholder="顧客に関する特記事項があれば入力してください"><%= customer ? (customer.notes || '') : '' %></textarea>
+                                </div>
+
+                                <!-- 購入履歴情報（編集時のみ表示） -->
+                                <% if (customer) { %>
+                                <div class="col-12 mt-4">
+                                    <h5 class="border-bottom pb-2 mb-3">購入履歴情報</h5>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">来店回数</label>
+                                    <input type="text" class="form-control" value="<%= customer.visit_count || 0 %>回" readonly>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">総購入金額</label>
+                                    <input type="text" class="form-control" value="¥<%= (customer.total_purchase_amount || 0).toLocaleString() %>" readonly>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">最終来店日</label>
+                                    <input type="text" class="form-control" 
+                                           value="<%= customer.last_visit_date ? new Date(customer.last_visit_date).toLocaleDateString('ja-JP') : '-' %>" readonly>
+                                </div>
+                                <% } %>
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-4">
+                                <a href="/customers/list" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-left"></i> 一覧に戻る
+                                </a>
+                                <div>
+                                    <% if (customer) { %>
+                                    <a href="/customers/detail/<%= customer.id %>" class="btn btn-info me-2">
+                                        <i class="bi bi-eye"></i> 詳細表示
+                                    </a>
+                                    <% } %>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-check-circle"></i> <%= customer ? '更新' : '登録' %>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Bootstrap validation
+        (function() {
+            'use strict';
+            window.addEventListener('load', function() {
+                var forms = document.getElementsByClassName('needs-validation');
+                var validation = Array.prototype.filter.call(forms, function(form) {
+                    form.addEventListener('submit', function(event) {
+                        if (form.checkValidity() === false) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }
+                        form.classList.add('was-validated');
+                    }, false);
+                });
+            }, false);
+        })();
+
+        // フリガナ自動入力（ひらがな→カタカナ変換）
+        document.getElementById('name').addEventListener('input', function() {
+            const name = this.value;
+            const kanaField = document.getElementById('kana');
+            
+            // 簡単なひらがな検出とカタカナ変換
+            if (/[ひらがな]/.test(name)) {
+                const katakana = name.replace(/[ひらがな]/g, function(match) {
+                    return String.fromCharCode(match.charCodeAt(0) + 0x60);
+                });
+                kanaField.value = katakana;
+            }
+        });
+
+        // 電話番号フォーマット
+        document.getElementById('phone').addEventListener('input', function() {
+            let value = this.value.replace(/[^\d]/g, '');
+            if (value.length >= 7) {
+                value = value.replace(/(\d{2,4})(\d{4})(\d{4})/, '$1-$2-$3');
+            } else if (value.length >= 4) {
+                value = value.replace(/(\d{2,4})(\d{1,4})/, '$1-$2');
+            }
+            this.value = value;
+        });
+    </script>
+    </div>
+</body>
+</html>

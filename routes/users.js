@@ -651,8 +651,8 @@ router.post("/create", requireRole(["admin"]), (req, res) => {
   } else {
     // 代理店アカウントの場合はusersテーブルに挿入
     db.run(
-      "INSERT INTO users (email, password, agency_id) VALUES (?, ?, ?)",
-      [email, hashedPassword, null], // agency_idはnull
+      "INSERT INTO users (email, password, store_id) VALUES (?, ?, ?)",
+      [email, hashedPassword, null], // store_idはnull
       function (err) {
         if (err) {
           console.error("代理店ユーザー作成エラー:", err);

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>代理店ダッシュボード - 代理店管理システム</title>
+    <title>店舗ダッシュボード - 店舗管理システム</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -17,26 +17,19 @@
     <div class="container py-5">
       <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
         <div class="container-fluid">
-          <a class="navbar-brand" href="/">代理店管理システム</a>
+          <a class="navbar-brand" href="/">店舗管理システム</a>
           <div class="collapse navbar-collapse">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-              <% if (session && session.user && session.user.agency_id) { %>
+              <% if (session && session.user && session.user.store_id) { %>
               <li class="nav-item">
                 <a
                   class="nav-link"
-                  href="/agencies/profile/<%= session.user.agency_id %>"
+                  href="/stores/profile/<%= session.user.store_id %>"
                   >マイプロフィール</a
                 >
               </li>
               <li class="nav-item">
                 <a class="nav-link" href="/sales/list">売上管理</a>
-              </li>
-              <li class="nav-item">
-                <a
-                  class="nav-link"
-                  href="/materials/<%= session.user.agency_id %>"
-                  >商品資料格納庫</a
-                >
               </li>
               <% } %>
               <li class="nav-item">
@@ -55,15 +48,15 @@
       <div class="row">
         <div class="col-md-12">
           <div class="card shadow-sm p-4 mb-4">
-            <h1 class="mb-3">代理店管理システム</h1>
-            <p class="mb-4">代理店管理システムへようこそ。</p>
+            <h1 class="mb-3">店舗管理システム</h1>
+            <p class="mb-4">店舗管理システムへようこそ。</p>
 
-            <!-- 代理店ユーザー向けメニュー -->
+            <!-- 店舗ユーザー向けメニュー -->
             <% if (session && session.user && session.user.role === 'agency') {
             %>
             <div class="mb-3">
-              <h5>代理店機能</h5>
-              <% if (session.user.agency_id) { %>
+              <h5>店舗機能</h5>
+              <% if (session.user.store_id) { %>
               <div class="row g-3">
                 <div class="col-lg-3 col-md-6">
                   <div class="card h-100">
@@ -74,7 +67,7 @@
                         個人情報や取り扱い商品を管理
                       </p>
                       <a
-                        href="/agencies/profile/<%= session.user.agency_id %>"
+                        href="/stores/profile/<%= session.user.store_id %>"
                         class="btn btn-outline-primary"
                       >
                         プロフィール表示
@@ -91,23 +84,6 @@
                       <a href="/sales/list" class="btn btn-outline-success"
                         >売上管理</a
                       >
-                    </div>
-                  </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                  <div class="card h-100">
-                    <div class="card-body text-center">
-                      <i class="bi bi-folder-fill fs-1 text-info"></i>
-                      <h6 class="card-title mt-2">商品資料格納庫</h6>
-                      <p class="card-text text-muted">
-                        商品資料の閲覧・ダウンロード
-                      </p>
-                      <a
-                        href="/materials/<%= session.user.agency_id %>"
-                        class="btn btn-outline-info"
-                      >
-                        資料を見る
-                      </a>
                     </div>
                   </div>
                 </div>
@@ -140,9 +116,9 @@
                   プロフィール設定が必要です
                 </h6>
                 <p class="mb-3">
-                  代理店機能を利用するには、まず代理店プロフィールを作成してください。
+                  店舗機能を利用するには、まず店舗プロフィールを作成してください。
                 </p>
-                <a href="/agencies/create-profile" class="btn btn-primary">
+                <a href="/stores/create-profile" class="btn btn-primary">
                   <i class="bi bi-person-plus"></i> プロフィールを作成
                 </a>
               </div>
@@ -184,7 +160,7 @@
     <!-- 管理者設定URL取得・表示 -->
     <% if (session && session.user && session.user.role === 'agency') { %>
     <script>
-      // 代理店ユーザーのみ公式LINE URLリンクを取得・表示
+      // 店舗ユーザーのみ公式LINE URLリンクを取得・表示
       console.log("=== 公式LINE URL取得開始（standalone） ===");
       console.log("APIエンドポイント: /settings/api/official-line-url");
 

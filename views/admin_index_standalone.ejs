@@ -3,25 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>管理者ダッシュボード - 代理店管理システム</title>
+    <title>管理者ダッシュボード - FC店舗管理システム</title>
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
       rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
     />
   </head>
   <body class="bg-light">
     <div class="container py-5">
       <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
         <div class="container-fluid">
-          <a class="navbar-brand" href="/">代理店管理システム</a>
+          <a class="navbar-brand" href="/">FC店舗管理システム</a>
           <div class="collapse navbar-collapse">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
               <li class="nav-item">
-                <a class="nav-link" href="/agencies/list">代理店一覧</a>
+                <a class="nav-link" href="/stores/list">店舗一覧</a>
               </li>
               <li class="nav-item">
                 <a class="nav-link" href="/sales/list">売上管理</a>
@@ -47,9 +47,9 @@
 
       <div class="row">
         <div class="col-md-12">
-          <h1 class="mb-4">管理者ダッシュボード</h1>
+          <h1 class="mb-4">FC本部管理者ダッシュボード</h1>
           <p class="text-muted mb-4">
-            代理店管理システムへようこそ。以下の機能をご利用いただけます。
+            FC店舗管理システムへようこそ。以下の機能をご利用いただけます。
           </p>
 
           <!-- メイン機能 -->
@@ -57,12 +57,10 @@
             <div class="col-md-4">
               <div class="card mb-4 h-100 border-primary">
                 <div class="card-body text-center">
-                  <i class="bi bi-people-fill fs-1 text-primary"></i>
-                  <h5 class="card-title mt-3">代理店管理</h5>
-                  <p class="card-text">代理店の登録・編集・削除</p>
-                  <a href="/agencies/list" class="btn btn-primary"
-                    >管理画面へ</a
-                  >
+                  <i class="bi bi-shop fs-1 text-primary"></i>
+                  <h5 class="card-title mt-3">FC店舗管理</h5>
+                  <p class="card-text">FC店舗の登録・編集・削除</p>
+                  <a href="/stores/list" class="btn btn-primary">管理画面へ</a>
                 </div>
               </div>
             </div>
@@ -81,10 +79,50 @@
             <div class="col-md-4">
               <div class="card mb-4 h-100 border-info">
                 <div class="card-body text-center">
-                  <i class="bi bi-collection fs-1 text-info"></i>
+                  <i class="bi bi-people fs-1 text-info"></i>
+                  <h5 class="card-title mt-3">顧客管理</h5>
+                  <p class="card-text">顧客情報の管理・分析</p>
+                  <a href="/customers/list" class="btn btn-info">管理画面へ</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 新機能 -->
+          <div class="row mb-4">
+            <div class="col-md-4">
+              <div class="card mb-4 h-100 border-warning">
+                <div class="card-body text-center">
+                  <i class="bi bi-calculator fs-1 text-warning"></i>
+                  <h5 class="card-title mt-3">ロイヤリティ管理</h5>
+                  <p class="card-text">ロイヤリティ自動計算・請求書発行</p>
+                  <a href="/royalty/calculations" class="btn btn-warning"
+                    >管理画面へ</a
+                  >
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card mb-4 h-100 border-secondary">
+                <div class="card-body text-center">
+                  <i class="bi bi-collection fs-1 text-secondary"></i>
                   <h5 class="card-title mt-3">グループ管理</h5>
-                  <p class="card-text">代理店グループの管理</p>
-                  <a href="/groups/list" class="btn btn-info">管理画面へ</a>
+                  <p class="card-text">店舗グループの管理</p>
+                  <a href="/groups/list" class="btn btn-secondary"
+                    >管理画面へ</a
+                  >
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card mb-4 h-100 border-dark">
+                <div class="card-body text-center">
+                  <i class="bi bi-file-earmark-pdf fs-1 text-dark"></i>
+                  <h5 class="card-title mt-3">レポート</h5>
+                  <p class="card-text">月次・年次レポート</p>
+                  <a href="/royalty/report" class="btn btn-dark"
+                    >レポート画面へ</a
+                  >
                 </div>
               </div>
             </div>
@@ -110,24 +148,11 @@
             <div class="col-md-4">
               <div class="card mb-4 h-100 border-secondary">
                 <div class="card-body text-center">
-                  <i class="bi bi-folder-fill fs-1 text-secondary"></i>
-                  <h5 class="card-title mt-3">資料管理</h5>
-                  <p class="card-text">商品資料格納庫の管理</p>
-                  <a href="/materials/" class="btn btn-secondary">
-                    <i class="bi bi-files"></i> 全体資料を見る
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-4">
-              <div class="card mb-4 h-100 border-danger">
-                <div class="card-body text-center">
-                  <i class="bi bi-gear fs-1 text-danger"></i>
+                  <i class="bi bi-gear-fill fs-1 text-secondary"></i>
                   <h5 class="card-title mt-3">システム設定</h5>
-                  <p class="card-text">公式LINE設定などのシステム管理</p>
-                  <a href="/settings" class="btn btn-danger">
-                    <i class="bi bi-gear"></i> 設定画面へ
+                  <p class="card-text">システム全般の設定管理</p>
+                  <a href="/settings" class="btn btn-secondary">
+                    <i class="bi bi-gear"></i> 設定を開く
                   </a>
                 </div>
               </div>

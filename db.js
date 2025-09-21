@@ -1,6 +1,10 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const crypto = require("crypto");
+const {
+  getSupabaseClient,
+  isSupabaseConfigured,
+} = require("./config/supabase");
 
 // パスワードハッシュ化関数
 function hashPassword(password) {
@@ -9,8 +13,10 @@ function hashPassword(password) {
 
 // 環境の検出
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
-const isRailway = process.env.RAILWAY_ENVIRONMENT_NAME;
+const isRailway =
+  process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_ENVIRONMENT;
 const databaseUrl = process.env.DATABASE_URL;
+const isSupabase = isSupabaseConfigured();
 
 // デバッグ情報を追加
 console.log("=== 環境変数デバッグ ===");
@@ -18,6 +24,11 @@ console.log("DATABASE_URL:", databaseUrl ? "設定済み" : "未設定");
 console.log(
   "DATABASE_URL (先頭50文字):",
   databaseUrl ? databaseUrl.substring(0, 50) + "..." : "null"
+);
+console.log("SUPABASE_URL:", process.env.SUPABASE_URL ? "設定済み" : "未設定");
+console.log(
+  "SUPABASE_ANON_KEY:",
+  process.env.SUPABASE_ANON_KEY ? "設定済み" : "未設定"
 );
 console.log("RAILWAY_ENVIRONMENT_NAME:", isRailway);
 console.log("NODE_ENV:", process.env.NODE_ENV);
@@ -33,12 +44,29 @@ console.log("=== データベース初期化開始 ===");
 console.log("Environment:", {
   isVercel,
   isRailway,
+  isSupabase,
   databaseUrl: !!databaseUrl,
   FAST_INIT,
 });
 
 try {
-  if (databaseUrl && (isRailway || process.env.NODE_ENV === "production")) {
+  if (isSupabase) {
+    // Supabase接続
+    console.log("Supabase環境: Supabaseデータベースを使用");
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      db = supabase;
+      isPostgres = true;
+      console.log("Supabase接続完了");
+      // Supabaseの場合、テーブル作成は手動またはマイグレーションで行う
+      isInitialized = true;
+    } else {
+      throw new Error("Supabase初期化失敗");
+    }
+  } else if (
+    databaseUrl &&
+    (isRailway || process.env.NODE_ENV === "production")
+  ) {
     // PostgreSQL接続（Railway本番環境）
     console.log("PostgreSQL環境: 本番データベースを使用");
     const { Pool } = require("pg");
@@ -94,6 +122,7 @@ try {
       const dbDir = path.dirname(dbPath);
       if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
+        console.log(`Railway: データディレクトリを作成しました: ${dbDir}`);
       }
     }
 
@@ -113,17 +142,82 @@ async function initializePostgresDatabase() {
 
   // PostgreSQL用のテーブル作成SQL（外部キー制約なし）
   const tables = [
-    // 最初に参照されるテーブルを作成
-    `CREATE TABLE IF NOT EXISTS agencies (
+    // FC店舗情報テーブル（旧agencies）
+    `CREATE TABLE IF NOT EXISTS stores (
       id SERIAL PRIMARY KEY,
+      -- 店舗基本情報
       name TEXT NOT NULL,
-      age INTEGER,
+      business_address TEXT,
+      main_phone TEXT,
+      manager_name TEXT,
+      mobile_phone TEXT,
+      representative_email TEXT,
+      -- 契約基本情報
+      contract_type TEXT,
+      contract_start_date DATE,
+      royalty_rate DECIMAL(5,2) DEFAULT 5.00,
+      -- 請求基本情報
+      invoice_number TEXT,
+      bank_name TEXT,
+      branch_name TEXT,
+      account_type TEXT,
+      account_number TEXT,
+      account_holder TEXT,
+      -- 許認可情報
+      license_status TEXT DEFAULT 'none',
+      license_type TEXT,
+      license_number TEXT,
+      license_file_path TEXT,
+      -- 連携ID
+      line_official_id TEXT,
+      representative_gmail TEXT,
+      -- システム情報
+      status TEXT DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // 顧客情報管理テーブル（新規追加）
+    `CREATE TABLE IF NOT EXISTS customers (
+      id SERIAL PRIMARY KEY,
+      store_id INTEGER,
+      customer_code TEXT UNIQUE,
+      name TEXT NOT NULL,
+      kana TEXT,
+      email TEXT,
+      phone TEXT,
       address TEXT,
-      bank_info TEXT,
-      experience_years INTEGER,
-      contract_date DATE,
-      start_date DATE,
-      product_features TEXT
+      birth_date DATE,
+      gender TEXT,
+      registration_date DATE DEFAULT CURRENT_DATE,
+      last_visit_date DATE,
+      total_purchase_amount INTEGER DEFAULT 0,
+      visit_count INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // ロイヤリティ設定テーブル（新規追加）
+    `CREATE TABLE IF NOT EXISTS royalty_settings (
+      id SERIAL PRIMARY KEY,
+      store_id INTEGER,
+      royalty_rate DECIMAL(5,2) NOT NULL,
+      effective_date DATE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // ロイヤリティ計算結果テーブル（新規追加）
+    `CREATE TABLE IF NOT EXISTS royalty_calculations (
+      id SERIAL PRIMARY KEY,
+      store_id INTEGER,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      sales_amount INTEGER NOT NULL,
+      royalty_rate DECIMAL(5,2) NOT NULL,
+      royalty_amount INTEGER NOT NULL,
+      status TEXT DEFAULT 'calculated',
+      invoice_generated BOOLEAN DEFAULT FALSE,
+      invoice_path TEXT,
+      calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(store_id, year, month)
     )`,
     `CREATE TABLE IF NOT EXISTS groups (
       id SERIAL PRIMARY KEY,
@@ -136,40 +230,40 @@ async function initializePostgresDatabase() {
       password TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
-    // 代理店アカウント専用テーブル（roleフィールドを削除）
+    // 店舗アカウント専用テーブル（roleフィールドを削除）
     `CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      agency_id INTEGER,
-      FOREIGN KEY (agency_id) REFERENCES agencies(id)
+      store_id INTEGER,
+      FOREIGN KEY (store_id) REFERENCES stores(id)
     )`,
-    `CREATE TABLE IF NOT EXISTS agency_products (
+    `CREATE TABLE IF NOT EXISTS store_products (
       id SERIAL PRIMARY KEY,
-      agency_id INTEGER,
+      store_id INTEGER,
       product_name TEXT,
       product_detail TEXT,
       product_url TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS product_files (
       id SERIAL PRIMARY KEY,
-      agency_id INTEGER,
+      store_id INTEGER,
       product_name TEXT,
       file_path TEXT,
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS sales (
       id SERIAL PRIMARY KEY,
-      agency_id INTEGER,
+      store_id INTEGER,
       year INTEGER,
       month INTEGER,
       amount INTEGER
     )`,
-    `CREATE TABLE IF NOT EXISTS group_agency (
+    `CREATE TABLE IF NOT EXISTS group_store (
       group_id INTEGER,
-      agency_id INTEGER,
-      PRIMARY KEY (group_id, agency_id),
-      UNIQUE (group_id, agency_id)
+      store_id INTEGER,
+      PRIMARY KEY (group_id, store_id),
+      UNIQUE (group_id, store_id)
     )`,
     `CREATE TABLE IF NOT EXISTS group_admin (
       group_id INTEGER,
@@ -182,13 +276,13 @@ async function initializePostgresDatabase() {
       originalname TEXT NOT NULL,
       mimetype TEXT NOT NULL,
       description TEXT,
-      agency_id INTEGER,
+      store_id INTEGER,
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS settings (
       id SERIAL PRIMARY KEY,
       key_name TEXT NOT NULL UNIQUE,
-      key_value TEXT,
+      value TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -203,15 +297,18 @@ async function initializePostgresDatabase() {
 
     // 外部キー制約を後で追加（エラーを無視）
     const foreignKeys = [
-      `ALTER TABLE users ADD CONSTRAINT fk_users_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-      `ALTER TABLE agency_products ADD CONSTRAINT fk_agency_products_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-      `ALTER TABLE product_files ADD CONSTRAINT fk_product_files_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-      `ALTER TABLE sales ADD CONSTRAINT fk_sales_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
-      `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
-      `ALTER TABLE group_agency ADD CONSTRAINT fk_group_agency_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE users ADD CONSTRAINT fk_users_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE customers ADD CONSTRAINT fk_customers_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE royalty_settings ADD CONSTRAINT fk_royalty_settings_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE royalty_calculations ADD CONSTRAINT fk_royalty_calculations_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE store_products ADD CONSTRAINT fk_store_products_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE product_files ADD CONSTRAINT fk_product_files_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE sales ADD CONSTRAINT fk_sales_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE group_store ADD CONSTRAINT fk_group_store_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
+      `ALTER TABLE group_store ADD CONSTRAINT fk_group_store_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
       `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
       `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_admin FOREIGN KEY (admin_id) REFERENCES admins(id)`,
-      `ALTER TABLE materials ADD CONSTRAINT fk_materials_agency FOREIGN KEY (agency_id) REFERENCES agencies(id)`,
+      `ALTER TABLE materials ADD CONSTRAINT fk_materials_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
     ];
 
     for (const fkSql of foreignKeys) {
@@ -233,6 +330,44 @@ async function initializePostgresDatabase() {
       `INSERT INTO admins (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`,
       ["admin", adminPassword]
     );
+
+    // 既存のagenciesテーブルからstoresテーブルへのデータ移行
+    console.log("既存の代理店データをFC店舗データに移行中...");
+    try {
+      const existingAgencies = await db.query("SELECT * FROM agencies");
+
+      if (existingAgencies.rows && existingAgencies.rows.length > 0) {
+        console.log(
+          `${existingAgencies.rows.length}件の代理店データを店舗データに移行します`
+        );
+
+        for (const agency of existingAgencies.rows) {
+          await db.query(
+            `INSERT INTO stores (id, name, owner_name, address, bank_info, contract_date, start_date, royalty_rate, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+             ON CONFLICT (id) DO NOTHING`,
+            [
+              agency.id,
+              agency.name,
+              agency.name, // owner_nameとしてnameを使用
+              agency.address,
+              agency.bank_info,
+              agency.contract_date,
+              agency.start_date,
+              5.0, // デフォルトロイヤリティ率
+            ]
+          );
+          console.log(`店舗移行完了: ${agency.name}`);
+        }
+      } else {
+        console.log("移行する代理店データがありません");
+      }
+    } catch (migrationError) {
+      console.log(
+        "代理店データ移行エラー（新規DBの可能性）:",
+        migrationError.message
+      );
+    }
 
     // 既存のusersテーブルから管理者データを移行
     console.log("既存の管理者データを移行中...");
@@ -258,14 +393,46 @@ async function initializePostgresDatabase() {
         // 移行後、usersテーブルから管理者データを削除
         await db.query("DELETE FROM users WHERE role = 'admin'");
         console.log("usersテーブルから管理者データを削除完了");
-      } else {
-        console.log("移行する管理者データがありません");
       }
     } catch (migrationError) {
       console.log(
         "管理者データ移行エラー（新規DBの可能性）:",
         migrationError.message
       );
+    }
+
+    // usersテーブルのagency_id → store_idの移行
+    console.log("usersテーブルのagency_id → store_idの移行中...");
+    try {
+      // agency_idカラムが存在するかチェックし、存在する場合は移行
+      await db.query(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER"
+      );
+      await db.query(
+        "UPDATE users SET store_id = agency_id WHERE agency_id IS NOT NULL AND store_id IS NULL"
+      );
+      await db.query("ALTER TABLE users DROP COLUMN IF EXISTS agency_id");
+      console.log("usersテーブルのカラム移行完了");
+    } catch (columnError) {
+      console.log("usersテーブルカラム移行スキップ:", columnError.message);
+    }
+
+    // その他のテーブルのagency_id → store_idの移行
+    const tablesToMigrate = ["sales", "materials", "product_files"];
+    for (const table of tablesToMigrate) {
+      try {
+        console.log(`${table}テーブルのagency_id → store_idの移行中...`);
+        await db.query(
+          `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS store_id INTEGER`
+        );
+        await db.query(
+          `UPDATE ${table} SET store_id = agency_id WHERE agency_id IS NOT NULL AND store_id IS NULL`
+        );
+        await db.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS agency_id`);
+        console.log(`${table}テーブルのカラム移行完了`);
+      } catch (tableError) {
+        console.log(`${table}テーブルカラム移行スキップ:`, tableError.message);
+      }
     }
 
     // usersテーブルからroleカラムを削除（PostgreSQL）
@@ -562,7 +729,7 @@ function initializeInMemoryDatabase() {
       CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         key_name TEXT NOT NULL UNIQUE,
-        key_value TEXT,
+        value TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -575,9 +742,99 @@ function initializeInMemoryDatabase() {
 }
 
 function initializeLocalDatabase() {
-  console.log("ローカルDB初期化中...");
+  console.log("ローカルDB初期化中（FC店舗管理システム用）...");
 
   db.serialize(() => {
+    // FC店舗情報テーブル（旧agencies）
+    db.run(`
+      CREATE TABLE IF NOT EXISTS stores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        -- 店舗基本情報
+        name TEXT NOT NULL,
+        business_address TEXT,
+        main_phone TEXT,
+        manager_name TEXT,
+        mobile_phone TEXT,
+        representative_email TEXT,
+        -- 契約基本情報
+        contract_type TEXT,
+        contract_start_date DATE,
+        royalty_rate REAL DEFAULT 5.0,
+        -- 請求基本情報
+        invoice_number TEXT,
+        bank_name TEXT,
+        branch_name TEXT,
+        account_type TEXT,
+        account_number TEXT,
+        account_holder TEXT,
+        -- 許認可情報
+        license_status TEXT DEFAULT 'none',
+        license_type TEXT,
+        license_number TEXT,
+        license_file_path TEXT,
+        -- 連携ID
+        line_official_id TEXT,
+        representative_gmail TEXT,
+        -- システム情報
+        status TEXT DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 顧客情報管理テーブル（新規追加）
+    db.run(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        store_id INTEGER,
+        customer_code TEXT UNIQUE,
+        name TEXT NOT NULL,
+        kana TEXT,
+        email TEXT,
+        phone TEXT,
+        address TEXT,
+        birth_date DATE,
+        gender TEXT,
+        registration_date DATE DEFAULT (date('now')),
+        last_visit_date DATE,
+        total_purchase_amount INTEGER DEFAULT 0,
+        visit_count INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (store_id) REFERENCES stores(id)
+      )
+    `);
+
+    // ロイヤリティ設定テーブル（新規追加）
+    db.run(`
+      CREATE TABLE IF NOT EXISTS royalty_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        store_id INTEGER,
+        royalty_rate REAL NOT NULL,
+        effective_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (store_id) REFERENCES stores(id)
+      )
+    `);
+
+    // ロイヤリティ計算結果テーブル（新規追加）
+    db.run(`
+      CREATE TABLE IF NOT EXISTS royalty_calculations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        store_id INTEGER,
+        calculation_year INTEGER NOT NULL,
+        calculation_month INTEGER NOT NULL,
+        monthly_sales INTEGER DEFAULT 0,
+        royalty_rate REAL NOT NULL,
+        royalty_amount INTEGER NOT NULL,
+        status TEXT DEFAULT 'calculated',
+        calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (store_id) REFERENCES stores(id),
+        UNIQUE(store_id, calculation_year, calculation_month)
+      )
+    `);
+
     // 管理者アカウント専用テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS admins (
@@ -588,74 +845,73 @@ function initializeLocalDatabase() {
       )
     `);
 
-    // 代理店アカウント専用テーブル
+    // 店舗アカウント専用テーブル（旧users）
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        agency_id INTEGER,
-        FOREIGN KEY (agency_id) REFERENCES agencies(id)
+        store_id INTEGER,
+        FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
+
+    // 店舗商品テーブル（旧agency_products）
     db.run(`
-      CREATE TABLE IF NOT EXISTS agencies (
+      CREATE TABLE IF NOT EXISTS store_products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        age INTEGER,
-        address TEXT,
-        bank_info TEXT,
-        experience_years INTEGER,
-        contract_date DATE,
-        start_date DATE,
-        product_features TEXT
-      )
-    `);
-    db.run(`
-      CREATE TABLE IF NOT EXISTS agency_products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        agency_id INTEGER,
+        store_id INTEGER,
         product_name TEXT,
         product_detail TEXT,
         product_url TEXT,
-        FOREIGN KEY (agency_id) REFERENCES agencies(id)
+        FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
+
+    // 商品ファイルテーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS product_files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        agency_id INTEGER,
+        store_id INTEGER,
         product_name TEXT,
         file_path TEXT,
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (agency_id) REFERENCES agencies(id)
+        FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
+
+    // 売上テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        agency_id INTEGER,
+        store_id INTEGER,
         year INTEGER,
         month INTEGER,
         amount INTEGER,
-        FOREIGN KEY (agency_id) REFERENCES agencies(id)
+        FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
+
+    // グループテーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL
       )
     `);
+
+    // グループ-店舗関連テーブル（旧group_agency）
     db.run(`
-      CREATE TABLE IF NOT EXISTS group_agency (
+      CREATE TABLE IF NOT EXISTS group_store (
         group_id INTEGER,
-        agency_id INTEGER,
-        PRIMARY KEY (group_id, agency_id),
+        store_id INTEGER,
+        PRIMARY KEY (group_id, store_id),
         FOREIGN KEY (group_id) REFERENCES groups(id),
-        FOREIGN KEY (agency_id) REFERENCES agencies(id)
+        FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
+
+    // グループ-管理者関連テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS group_admin (
         group_id INTEGER,
@@ -665,6 +921,8 @@ function initializeLocalDatabase() {
         FOREIGN KEY (admin_id) REFERENCES admins(id)
       )
     `);
+
+    // 資料テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS materials (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -672,21 +930,47 @@ function initializeLocalDatabase() {
         originalname TEXT NOT NULL,
         mimetype TEXT NOT NULL,
         description TEXT,
-        agency_id INTEGER,
+        store_id INTEGER,
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (agency_id) REFERENCES agencies(id)
+        FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
 
+    // 設定テーブル
     db.run(`
       CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         key_name TEXT NOT NULL UNIQUE,
-        key_value TEXT,
+        value TEXT,
+        description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // 既存データの移行処理
+    console.log("データ移行処理を実行中...");
+
+    // agenciesテーブルからstoresテーブルへの移行
+    db.run(
+      `INSERT OR IGNORE INTO stores (id, name, address, bank_info, contract_date, start_date)
+             SELECT id, name, address, bank_info, contract_date, start_date FROM agencies WHERE EXISTS (SELECT name FROM sqlite_master WHERE type='table' AND name='agencies')`,
+      function (err) {
+        if (!err && this.changes > 0) {
+          console.log(`${this.changes}件の店舗データを移行しました`);
+        }
+      }
+    );
+
+    // store_idをagency_idから更新
+    db.run(
+      `UPDATE users SET store_id = (SELECT agency_id FROM users u2 WHERE u2.id = users.id) WHERE agency_id IS NOT NULL AND EXISTS (SELECT name FROM sqlite_master WHERE type='table' AND name='agencies')`,
+      function (err) {
+        if (!err && this.changes > 0) {
+          console.log(`${this.changes}件のユーザーデータを更新しました`);
+        }
+      }
+    );
 
     // 初期化完了
     isInitialized = true;

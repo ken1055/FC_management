@@ -15,12 +15,12 @@ function requireRole(roles) {
 router.get("/", (req, res) => {
   if (req.session.user.role === "agency") {
     // 代理店は自分のデータのみ
-    if (!req.session.user.agency_id) {
+    if (!req.session.user.store_id) {
       return res.status(400).send("代理店IDが設定されていません");
     }
     db.all(
-      "SELECT * FROM sales WHERE agency_id = ? ORDER BY year DESC, month DESC",
-      [req.session.user.agency_id],
+      "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
+      [req.session.user.store_id],
       (err, rows) => {
         if (err) return res.status(500).send("DBエラー");
         res.json(rows);
@@ -29,7 +29,7 @@ router.get("/", (req, res) => {
   } else {
     // 役員・管理者は全て
     db.all(
-      "SELECT s.*, a.name as agency_name FROM sales s LEFT JOIN agencies a ON s.agency_id = a.id ORDER BY s.year DESC, s.month DESC",
+      "SELECT s.*, a.name as agency_name FROM sales s LEFT JOIN stores a ON s.store_id = a.id ORDER BY s.year DESC, s.month DESC",
       [],
       (err, rows) => {
         if (err) return res.status(500).send("DBエラー");
@@ -41,12 +41,12 @@ router.get("/", (req, res) => {
 
 // 売上登録（API）
 router.post("/", requireRole(["admin", "agency"]), (req, res) => {
-  const { agency_id, year, month, amount } = req.body;
+  const { store_id, year, month, amount } = req.body;
 
   // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
   const processedAgencyId =
-    agency_id && agency_id.toString().trim() !== ""
-      ? parseInt(agency_id)
+    store_id && store_id.toString().trim() !== ""
+      ? parseInt(store_id)
       : null;
   const processedYear =
     year && year.toString().trim() !== "" ? parseInt(year) : null;
@@ -64,19 +64,19 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
     return res.status(400).send("必須項目が不足しています");
   }
 
-  // 代理店は自分のagency_idのみ登録可能
+  // 代理店は自分のstore_idのみ登録可能
   if (req.session.user.role === "agency") {
-    if (!req.session.user.agency_id) {
+    if (!req.session.user.store_id) {
       return res.status(400).send("代理店IDが設定されていません");
     }
-    if (req.session.user.agency_id !== processedAgencyId) {
+    if (req.session.user.store_id !== processedAgencyId) {
       return res.status(403).send("自分の売上のみ登録可能です");
     }
   }
 
   // 重複チェック
   db.get(
-    "SELECT id FROM sales WHERE agency_id = ? AND year = ? AND month = ?",
+    "SELECT id FROM sales WHERE store_id = ? AND year = ? AND month = ?",
     [processedAgencyId, processedYear, processedMonth],
     (err, existing) => {
       if (err) return res.status(500).send("DBエラー");
@@ -85,7 +85,7 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
       }
 
       db.run(
-        "INSERT INTO sales (agency_id, year, month, amount) VALUES (?, ?, ?, ?)",
+        "INSERT INTO sales (store_id, year, month, amount) VALUES (?, ?, ?, ?)",
         [processedAgencyId, processedYear, processedMonth, processedAmount],
         function (err) {
           if (err) return res.status(500).send("DBエラー");
@@ -100,21 +100,21 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
 router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
   if (req.session.user.role === "agency") {
     // 代理店は自分のデータのみ
-    if (!req.session.user.agency_id) {
-      return res.redirect("/agencies/create-profile");
+    if (!req.session.user.store_id) {
+      return res.redirect("/stores/create-profile");
     }
 
     // 代理店情報を取得
     db.get(
-      "SELECT name FROM agencies WHERE id = ?",
-      [req.session.user.agency_id],
+      "SELECT name FROM stores WHERE id = ?",
+      [req.session.user.store_id],
       (err, agency) => {
         if (err) return res.status(500).send("DBエラー");
 
         // 売上データを取得
         db.all(
-          "SELECT * FROM sales WHERE agency_id = ? ORDER BY year DESC, month DESC",
-          [req.session.user.agency_id],
+          "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
+          [req.session.user.store_id],
           (err, sales) => {
             if (err) return res.status(500).send("DBエラー");
 
@@ -145,16 +145,16 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
           a.name,
           COUNT(s.id) as sales_count,
           SUM(s.amount) as total_sales
-        FROM agencies a 
-        LEFT JOIN sales s ON a.id = s.agency_id 
+        FROM stores a 
+        LEFT JOIN sales s ON a.id = s.store_id 
         GROUP BY a.id, a.name 
         ORDER BY a.name`,
       [],
-      (err, agencies) => {
+      (err, stores) => {
         if (err) return res.status(500).send("DBエラー");
 
         res.render("sales_agency_list", {
-          agencies,
+          stores,
           session: req.session,
           title: "売上管理 - 代理店選択",
         });
@@ -169,14 +169,14 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
 
   // 代理店情報を取得
   db.get(
-    "SELECT name FROM agencies WHERE id = ?",
+    "SELECT name FROM stores WHERE id = ?",
     [agencyId],
     (err, agency) => {
       if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
       // 売上データを取得
       db.all(
-        "SELECT * FROM sales WHERE agency_id = ? ORDER BY year DESC, month DESC",
+        "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
         [agencyId],
         (err, sales) => {
           if (err) return res.status(500).send("DBエラー");
@@ -206,23 +206,23 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
 
 // 売上登録フォーム
 router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
-  const preselectedAgencyId = req.query.agency_id; // クエリパラメータから代理店IDを取得
+  const preselectedAgencyId = req.query.store_id; // クエリパラメータから代理店IDを取得
 
   if (req.session.user.role === "agency") {
-    if (!req.session.user.agency_id) {
-      return res.redirect("/agencies/create-profile");
+    if (!req.session.user.store_id) {
+      return res.redirect("/stores/create-profile");
     }
 
     // 代理店情報を取得
     db.get(
-      "SELECT name FROM agencies WHERE id = ?",
-      [req.session.user.agency_id],
+      "SELECT name FROM stores WHERE id = ?",
+      [req.session.user.store_id],
       (err, agency) => {
         if (err) return res.status(500).send("DBエラー");
 
         res.render("sales_form", {
           session: req.session,
-          agencies: [],
+          stores: [],
           agencyName: agency ? agency.name : "未設定",
           sale: null, // sale変数を追加
           title: "売上登録",
@@ -231,18 +231,18 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
     );
   } else {
     // 管理者は代理店一覧を取得
-    db.all("SELECT * FROM agencies ORDER BY name", [], (err, agencies) => {
+    db.all("SELECT * FROM stores ORDER BY name", [], (err, stores) => {
       if (err) return res.status(500).send("DBエラー");
 
       // 事前選択された代理店の情報を取得
       let preselectedAgency = null;
       if (preselectedAgencyId) {
-        preselectedAgency = agencies.find((a) => a.id == preselectedAgencyId);
+        preselectedAgency = stores.find((a) => a.id == preselectedAgencyId);
       }
 
       res.render("sales_form", {
         session: req.session,
-        agencies,
+        stores,
         agencyName: null,
         preselectedAgencyId: preselectedAgencyId,
         preselectedAgencyName: preselectedAgency
@@ -257,21 +257,21 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
 
 // 売上登録（フォームPOST）
 router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
-  const { agency_id, year, month, amount } = req.body;
+  const { store_id, year, month, amount } = req.body;
 
   if (req.session.user.role === "agency") {
-    if (!req.session.user.agency_id) {
+    if (!req.session.user.store_id) {
       return res.status(400).send("代理店IDが設定されていません");
     }
-    if (req.session.user.agency_id !== Number(agency_id)) {
+    if (req.session.user.store_id !== Number(store_id)) {
       return res.status(403).send("自分の売上のみ登録可能です");
     }
   }
 
   // 重複チェック
   db.get(
-    "SELECT id FROM sales WHERE agency_id = ? AND year = ? AND month = ?",
-    [agency_id, year, month],
+    "SELECT id FROM sales WHERE store_id = ? AND year = ? AND month = ?",
+    [store_id, year, month],
     (err, existing) => {
       if (err) return res.status(500).send("DBエラー");
       if (existing) {
@@ -279,14 +279,14 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
         if (req.session.user.role === "agency") {
           // 代理店情報を取得
           db.get(
-            "SELECT name FROM agencies WHERE id = ?",
-            [req.session.user.agency_id],
+            "SELECT name FROM stores WHERE id = ?",
+            [req.session.user.store_id],
             (err, agency) => {
               if (err) return res.status(500).send("DBエラー");
 
               return res.render("sales_form", {
                 session: req.session,
-                agencies: [],
+                stores: [],
                 agencyName: agency ? agency.name : "未設定",
                 title: "売上登録",
                 sale: null, // sale変数を追加
@@ -297,14 +297,14 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
         } else {
           // 管理者は代理店一覧を取得
           db.all(
-            "SELECT * FROM agencies ORDER BY name",
+            "SELECT * FROM stores ORDER BY name",
             [],
-            (err, agencies) => {
+            (err, stores) => {
               if (err) return res.status(500).send("DBエラー");
 
               return res.render("sales_form", {
                 session: req.session,
-                agencies,
+                stores,
                 agencyName: null,
                 title: "売上登録",
                 sale: null, // sale変数を追加
@@ -317,8 +317,8 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
       }
 
       db.run(
-        "INSERT INTO sales (agency_id, year, month, amount) VALUES (?, ?, ?, ?)",
-        [agency_id, year, month, amount],
+        "INSERT INTO sales (store_id, year, month, amount) VALUES (?, ?, ?, ?)",
+        [store_id, year, month, amount],
         function (err) {
           if (err) return res.status(500).send("DBエラー");
           res.redirect("/sales/list");
@@ -335,21 +335,21 @@ router.get("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
 
     // 代理店は自分のデータのみ編集可能
     if (req.session.user.role === "agency") {
-      if (sale.agency_id !== req.session.user.agency_id) {
+      if (sale.store_id !== req.session.user.store_id) {
         return res.status(403).send("自分の売上のみ編集可能です");
       }
     }
 
     if (req.session.user.role === "agency") {
       db.get(
-        "SELECT name FROM agencies WHERE id = ?",
-        [sale.agency_id],
+        "SELECT name FROM stores WHERE id = ?",
+        [sale.store_id],
         (err, agency) => {
           if (err) return res.status(500).send("DBエラー");
 
           res.render("sales_form", {
             session: req.session,
-            agencies: [],
+            stores: [],
             agencyName: agency ? agency.name : "未設定",
             sale: sale,
             title: "売上編集",
@@ -357,11 +357,11 @@ router.get("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
         }
       );
     } else {
-      db.all("SELECT * FROM agencies ORDER BY name", [], (err, agencies) => {
+      db.all("SELECT * FROM stores ORDER BY name", [], (err, stores) => {
         if (err) return res.status(500).send("DBエラー");
         res.render("sales_form", {
           session: req.session,
-          agencies,
+          stores,
           agencyName: null,
           sale: sale,
           title: "売上編集",
@@ -373,21 +373,21 @@ router.get("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
 
 // 売上編集（フォームPOST）
 router.post("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
-  const { agency_id, year, month, amount } = req.body;
+  const { store_id, year, month, amount } = req.body;
 
   db.get("SELECT * FROM sales WHERE id = ?", [req.params.id], (err, sale) => {
     if (err || !sale) return res.status(404).send("データがありません");
 
     // 代理店は自分のデータのみ編集可能
     if (req.session.user.role === "agency") {
-      if (sale.agency_id !== req.session.user.agency_id) {
+      if (sale.store_id !== req.session.user.store_id) {
         return res.status(403).send("自分の売上のみ編集可能です");
       }
     }
 
     db.run(
-      "UPDATE sales SET agency_id=?, year=?, month=?, amount=? WHERE id=?",
-      [agency_id, year, month, amount, req.params.id],
+      "UPDATE sales SET store_id=?, year=?, month=?, amount=? WHERE id=?",
+      [store_id, year, month, amount, req.params.id],
       function (err) {
         if (err) return res.status(500).send("DBエラー");
         res.redirect("/sales/list");
@@ -403,7 +403,7 @@ router.post("/delete/:id", requireRole(["admin", "agency"]), (req, res) => {
 
     // 代理店は自分のデータのみ削除可能
     if (req.session.user.role === "agency") {
-      if (sale.agency_id !== req.session.user.agency_id) {
+      if (sale.store_id !== req.session.user.store_id) {
         return res.status(403).send("自分の売上のみ削除可能です");
       }
     }

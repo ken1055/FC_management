@@ -19,7 +19,7 @@ function requireRole(allowedRoles) {
 router.get("/", requireRole(["admin"]), (req, res) => {
   // 公式ラインURLを取得
   db.get(
-    "SELECT key_value FROM settings WHERE key_name = ?",
+    "SELECT value FROM settings WHERE key_name = ?",
     ["official_line_url"],
     (err, row) => {
       if (err) {
@@ -27,7 +27,7 @@ router.get("/", requireRole(["admin"]), (req, res) => {
         return res.status(500).send("設定取得エラー");
       }
 
-      const officialLineUrl = row ? row.key_value : "";
+      const officialLineUrl = row ? row.value : "";
 
       res.render("settings/index", {
         session: req.session,
@@ -59,10 +59,10 @@ router.post("/official-line", requireRole(["admin"]), (req, res) => {
     // PostgreSQL用のUPSERT
     console.log("PostgreSQL用クエリ実行中...");
     db.run(
-      `INSERT INTO settings (key_name, key_value, updated_at) 
+      `INSERT INTO settings (key_name, value, updated_at) 
        VALUES ($1, $2, CURRENT_TIMESTAMP) 
        ON CONFLICT (key_name) 
-       DO UPDATE SET key_value = $2, updated_at = CURRENT_TIMESTAMP`,
+       DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
       ["official_line_url", url || null],
       (err) => {
         if (err) {
@@ -77,7 +77,7 @@ router.post("/official-line", requireRole(["admin"]), (req, res) => {
     // SQLite用のUPSERT
     console.log("SQLite用クエリ実行中...");
     db.run(
-      `INSERT OR REPLACE INTO settings (key_name, key_value, updated_at) 
+      `INSERT OR REPLACE INTO settings (key_name, value, updated_at) 
        VALUES (?, ?, datetime('now'))`,
       ["official_line_url", url || null],
       (err) => {
@@ -99,7 +99,7 @@ router.get("/api/official-line-url", (req, res) => {
   console.log("セッション情報:", req.session?.user?.role);
 
   db.get(
-    "SELECT key_value FROM settings WHERE key_name = ?",
+    "SELECT value FROM settings WHERE key_name = ?",
     ["official_line_url"],
     (err, row) => {
       if (err) {
@@ -108,7 +108,7 @@ router.get("/api/official-line-url", (req, res) => {
       }
 
       console.log("データベース取得結果:", row);
-      const url = row ? row.key_value : null;
+      const url = row ? row.value : null;
       console.log("返送するURL:", url);
 
       res.json({

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %> | FC店舗管理システム</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #f8f9fa;
+      }
+      .navbar-brand {
+        font-weight: bold;
+      }
+      .card {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border: none;
+      }
+      .required {
+        color: #dc3545;
+      }
+      .form-label {
+        font-weight: 600;
+      }
+      .invalid-feedback {
+        display: block;
+      }
+    </style>
+  </head>
+  <body class="bg-light">
+    <div class="container py-5">
+      <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
+        <div class="container-fluid">
+          <a class="navbar-brand" href="/">FC店舗管理システム</a>
+          <div class="collapse navbar-collapse">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              <li class="nav-item">
+                <a class="nav-link" href="/sales/list">売上管理</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link active" href="/customers/store">顧客管理</a>
+              </li>
+            </ul>
+            <ul class="navbar-nav">
+              <li class="nav-item">
+                <a class="nav-link" href="/auth/logout">ログアウト</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </nav>
+      <div class="row justify-content-center">
+        <div class="col-lg-8">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <h4 class="mb-0">
+                <i class="bi bi-person-plus"></i> <%= title %>
+              </h4>
+            </div>
+            <div class="card-body">
+              <form method="post" action="<%= customer ? `/customers/update/${customer.id}` : '/customers/create' %>" novalidate>
+                <div class="row">
+                  <!-- 基本情報 -->
+                  <div class="col-12">
+                    <h5 class="border-bottom pb-2 mb-3">基本情報</h5>
+                  </div>
+                  
+                  <div class="col-12 mb-3">
+                    <label for="name" class="form-label">顧客名 <span class="required">*</span></label>
+                    <input type="text" class="form-control" id="name" name="name" value="<%= customer ? customer.name : '' %>" required>
+                    <div class="invalid-feedback">
+                      顧客名は必須です。
+                    </div>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="kana" class="form-label">フリガナ</label>
+                    <input type="text" class="form-control" id="kana" name="kana" value="<%= customer ? customer.kana : '' %>">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="customer_code" class="form-label">顧客コード</label>
+                    <input type="text" class="form-control" id="customer_code" name="customer_code" value="<%= customer ? customer.customer_code : '' %>">
+                  </div>
+                  
+                  <!-- 連絡先情報 -->
+                  <div class="col-12">
+                    <h5 class="border-bottom pb-2 mb-3 mt-4">連絡先情報</h5>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="email" class="form-label">メールアドレス</label>
+                    <input type="email" class="form-control" id="email" name="email" value="<%= customer ? customer.email : '' %>">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="phone" class="form-label">電話番号</label>
+                    <input type="tel" class="form-control" id="phone" name="phone" value="<%= customer ? customer.phone : '' %>" placeholder="000-0000-0000">
+                  </div>
+                  <div class="col-12 mb-3">
+                    <label for="address" class="form-label">住所</label>
+                    <input type="text" class="form-control" id="address" name="address" value="<%= customer ? customer.address : '' %>">
+                  </div>
+                  
+                  <!-- その他情報 -->
+                  <div class="col-12">
+                    <h5 class="border-bottom pb-2 mb-3 mt-4">その他情報</h5>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="birth_date" class="form-label">生年月日</label>
+                    <input type="date" class="form-control" id="birth_date" name="birth_date" value="<%= customer ? customer.birth_date : '' %>">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="gender" class="form-label">性別</label>
+                    <select class="form-select" id="gender" name="gender">
+                      <option value="">選択してください</option>
+                      <option value="男性" <%= customer && customer.gender === '男性' ? 'selected' : '' %>>男性</option>
+                      <option value="女性" <%= customer && customer.gender === '女性' ? 'selected' : '' %>>女性</option>
+                      <option value="その他" <%= customer && customer.gender === 'その他' ? 'selected' : '' %>>その他</option>
+                    </select>
+                  </div>
+                  <div class="col-12 mb-3">
+                    <label for="notes" class="form-label">備考</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3"><%= customer ? customer.notes : '' %></textarea>
+                  </div>
+                  <div class="col-12 text-end">
+                    <a href="/customers/store" class="btn btn-secondary me-2">キャンセル</a>
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bi bi-save"></i> <%= customer ? '更新' : '登録' %>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // 電話番号の自動フォーマット
+      document.getElementById('phone').addEventListener('input', function (e) {
+        let value = e.target.value.replace(/\D/g, ''); // 数字以外を削除
+        if (value.length > 10) {
+          value = value.slice(0, 11); // 11桁に制限
+        }
+        if (value.length >= 7) {
+          value = value.replace(/(\d{2,4})(\d{4})(\d{4})/, '$1-$2-$3');
+        } else if (value.length >= 4) {
+          value = value.replace(/(\d{2,4})(\d{1,4})/, '$1-$2');
+        }
+        this.value = value;
+      });
+    </script>
+  </body>
+</html>

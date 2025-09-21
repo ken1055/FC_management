@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>代理店一覧 - 代理店管理システム</title>
+    <title>店舗一覧 - 店舗管理システム</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -15,13 +15,13 @@
   <body class="container py-5">
     <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
       <div class="container-fluid">
-        <a class="navbar-brand" href="/">代理店管理システム</a>
+        <a class="navbar-brand" href="/">店舗管理システム</a>
         <div class="collapse navbar-collapse">
           <ul class="navbar-nav me-auto mb-2 mb-lg-0">
             <% if (typeof session !== 'undefined' && session && session.user &&
             session.user.role === 'admin') { %>
             <li class="nav-item">
-              <a class="nav-link" href="/agencies/list">代理店一覧</a>
+              <a class="nav-link" href="/stores/list">店舗一覧</a>
             </li>
             <li class="nav-item">
               <a class="nav-link" href="/sales/list">売上管理</a>
@@ -39,11 +39,11 @@
                 >管理者・役員に切り替え</a
               >
             </li>
-            <% if (session.user.agency_id) { %>
+            <% if (session.user.store_id) { %>
             <li class="nav-item">
               <a
                 class="nav-link"
-                href="/agencies/profile/<%= session.user.agency_id %>"
+                href="/stores/profile/<%= session.user.store_id %>"
                 >マイプロフィール</a
               >
             </li>
@@ -51,11 +51,11 @@
             <li class="nav-item">
               <a class="nav-link" href="/sales/list">売上管理</a>
             </li>
-            <% if (session.user.agency_id) { %>
+            <% if (session.user.store_id) { %>
             <li class="nav-item">
               <a
                 class="nav-link"
-                href="/materials/<%= session.user.agency_id %>"
+                href="/materials/<%= session.user.store_id %>"
                 >商品資料格納庫</a
               >
             </li>
@@ -77,12 +77,12 @@
 
 <div class="card shadow-sm p-4 mb-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">代理店一覧</h1>
+    <h1 class="mb-0">店舗一覧</h1>
     <div>
       <button type="button" class="btn btn-outline-info me-2" onclick="testRegistrationEmail()">
         <i class="bi bi-envelope-check"></i> 登録通知テスト
       </button>
-      <a href="/agencies/new" class="btn btn-success">
+      <a href="/stores/new" class="btn btn-success">
         <i class="bi bi-person-plus"></i> 新規登録
       </a>
     </div>
@@ -113,13 +113,13 @@
   <!-- ID整合性状況表示 -->
   <% if (integrityInfo && integrityInfo.isIntegrityOk) { %>
   <div class="alert alert-success alert-dismissible fade show">
-    <i class="bi bi-check-circle"></i> 代理店IDの連番は正常です
+    <i class="bi bi-check-circle"></i> 店舗IDの連番は正常です
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
   <% } else if (integrityInfo && integrityInfo.issues && integrityInfo.issues.length > 0) { %>
   <div class="alert alert-warning alert-dismissible fade show">
     <i class="bi bi-exclamation-triangle"></i> 
-    代理店IDの連番に問題があります（<%= integrityInfo.issues.length %>件）。
+    店舗IDの連番に問題があります（<%= integrityInfo.issues.length %>件）。
     ページ読み込み時に自動修正を試行します。
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
@@ -152,14 +152,14 @@
     </form>
   </div>
 
-  <!-- 代理店名検索 -->
+  <!-- 店舗名検索 -->
   <div class="mb-3">
     <form method="get" class="row g-2 align-items-center">
       <div class="col-auto">
-        <label class="form-label">代理店・商品検索:</label>
+        <label class="form-label">店舗・商品検索:</label>
       </div>
       <div class="col-auto">
-        <input type="text" name="search" class="form-control" placeholder="代理店名、商品名、住所など..." value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>">
+        <input type="text" name="search" class="form-control" placeholder="店舗名、商品名、住所など..." value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>">
       </div>
       <div class="col-auto">
         <button type="submit" class="btn btn-success">
@@ -168,7 +168,7 @@
       </div>
       <% if (typeof searchQuery !== 'undefined' && searchQuery) { %>
       <div class="col-auto">
-        <a href="/agencies/list" class="btn btn-outline-secondary">
+        <a href="/stores/list" class="btn btn-outline-secondary">
           <i class="bi bi-x-circle"></i> 検索解除
         </a>
       </div>
@@ -180,14 +180,14 @@
     </form>
   </div>
   
-  <!-- 代理店が存在しない場合の表示 -->
+  <!-- 店舗が存在しない場合の表示 -->
   <% if (agencies.length === 0) { %>
   <div class="text-center py-5">
     <i class="bi bi-building fs-1 text-muted"></i>
-    <h5 class="mt-3 text-muted">代理店がありません</h5>
-    <p class="text-muted">最初の代理店を登録してください。</p>
-    <a href="/agencies/new" class="btn btn-primary">
-      <i class="bi bi-person-plus"></i> 代理店を登録
+    <h5 class="mt-3 text-muted">店舗がありません</h5>
+    <p class="text-muted">最初の店舗を登録してください。</p>
+    <a href="/stores/new" class="btn btn-primary">
+      <i class="bi bi-person-plus"></i> 店舗を登録
     </a>
   </div>
   <% } else { %>
@@ -216,7 +216,7 @@
         <tr>
           <td><%= a.id %></td>
           <td>
-            <a href="/agencies/profile/<%= a.id %>" class="text-decoration-none fw-bold">
+            <a href="/stores/profile/<%= a.id %>" class="text-decoration-none fw-bold">
               <i class="bi bi-person-circle text-primary me-1"></i>
               <%= a.name %>
             </a>
@@ -262,17 +262,17 @@
           </td>
           <td>
             <div class="btn-group-vertical" role="group">
-              <a href="/agencies/profile/<%= a.id %>" class="btn btn-sm btn-outline-info mb-1">
+              <a href="/stores/profile/<%= a.id %>" class="btn btn-sm btn-outline-info mb-1">
                 <i class="bi bi-eye"></i> 詳細
               </a>
-              <a href="/agencies/edit/<%= a.id %>" class="btn btn-sm btn-outline-primary mb-1">
+              <a href="/stores/edit/<%= a.id %>" class="btn btn-sm btn-outline-primary mb-1">
                 <i class="bi bi-pencil"></i> 編集
               </a>
               <form 
                 method="post" 
-                action="/agencies/delete/<%= a.id %>" 
+                action="/stores/delete/<%= a.id %>" 
                 style="display: inline"
-                onsubmit="return confirm('「<%= a.name %>」の代理店データを削除しますか？\n\n注意: 以下のデータもすべて削除されます：\n• 売上データ\n• 商品資料\n• グループ所属情報\n• 取り扱い商品情報\n• 関連ユーザーアカウントとの紐付け\n\n削除後、代理店IDの整合性をチェックして自動的にIDを修正します。\n\nこの操作は取り消せません。')"
+                onsubmit="return confirm('「<%= a.name %>」の店舗データを削除しますか？\n\n注意: 以下のデータもすべて削除されます：\n• 売上データ\n• 商品資料\n• グループ所属情報\n• 取り扱い商品情報\n• 関連ユーザーアカウントとの紐付け\n\n削除後、店舗IDの整合性をチェックして自動的にIDを修正します。\n\nこの操作は取り消せません。')"
               >
                 <button type="submit" class="btn btn-sm btn-outline-danger">
                   <i class="bi bi-trash"></i> 削除
@@ -292,7 +292,7 @@
       <div class="col-md-4">
         <div class="card bg-light">
           <div class="card-body text-center">
-            <h6 class="card-title">総代理店数</h6>
+            <h6 class="card-title">総店舗数</h6>
             <div class="fs-4 fw-bold text-primary"><%= agencies.length %></div>
           </div>
         </div>
@@ -326,11 +326,11 @@
   <div class="mt-4">
     <div class="alert alert-warning">
       <h6 class="alert-heading">
-        <i class="bi bi-exclamation-triangle"></i> 代理店削除に関する注意
+        <i class="bi bi-exclamation-triangle"></i> 店舗削除に関する注意
       </h6>
       <ul class="mb-0">
-        <li><strong>関連データの削除:</strong> 代理店を削除すると、売上データ、商品資料、グループ所属情報、取り扱い商品情報もすべて削除されます。</li>
-        <li><strong>ユーザーアカウント:</strong> 代理店に関連するユーザーアカウントも完全に削除されます。</li>
+        <li><strong>関連データの削除:</strong> 店舗を削除すると、売上データ、商品資料、グループ所属情報、取り扱い商品情報もすべて削除されます。</li>
+        <li><strong>ユーザーアカウント:</strong> 店舗に関連するユーザーアカウントも完全に削除されます。</li>
         <li><strong>自動ID管理:</strong> 画面表示時と削除後にIDの連番をチェックし、問題があれば自動的に修正されます。</li>
         <li><strong>データ整合性:</strong> 削除操作により生じるIDの欠番は自動的に修正され、連番が維持されます。</li>
       </ul>
@@ -349,7 +349,7 @@ function testRegistrationEmail() {
   button.disabled = true;
   button.innerHTML = '<i class="bi bi-hourglass-split"></i> 送信中...';
   
-  fetch('/agencies/test-registration-email', {
+  fetch('/stores/test-registration-email', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

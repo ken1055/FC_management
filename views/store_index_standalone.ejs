@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FC店舗ダッシュボード - FC店舗管理システム</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #f8f9fa;
+      }
+      .navbar-brand {
+        font-weight: bold;
+      }
+      .card {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border: none;
+        transition: transform 0.2s;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+      }
+      .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+      .feature-card {
+        border-left: 4px solid #0d6efd;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+      <div class="container">
+        <a class="navbar-brand" href="/">
+          <i class="bi bi-shop"></i> FC店舗管理システム
+        </a>
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarNav"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link active" href="/">
+                <i class="bi bi-house"></i> ダッシュボード
+              </a>
+            </li>
+            <% if (session && session.user && session.user.store_id) { %>
+            <li class="nav-item">
+              <a
+                class="nav-link"
+                href="/agencies/profile/<%= session.user.store_id %>"
+              >
+                <i class="bi bi-shop"></i> 店舗プロフィール
+              </a>
+            </li>
+            <% } %>
+            <li class="nav-item">
+              <a class="nav-link" href="/customers/store">
+                <i class="bi bi-people"></i> 顧客管理
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/sales/list">
+                <i class="bi bi-graph-up"></i> 売上管理
+              </a>
+            </li>
+          </ul>
+          <ul class="navbar-nav">
+            <li class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                role="button"
+                data-bs-toggle="dropdown"
+              >
+                <i class="bi bi-person-circle"></i> <%= session.user.email %>
+              </a>
+              <ul class="dropdown-menu">
+                <li>
+                  <a class="dropdown-item" href="/auth/promote">
+                    <i class="bi bi-arrow-up-circle"></i> 管理者昇格
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a class="dropdown-item" href="/auth/logout">
+                    <i class="bi bi-box-arrow-right"></i> ログアウト
+                  </a>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h1 class="mb-4">
+            <i class="bi bi-shop text-primary"></i> FC店舗ダッシュボード
+          </h1>
+          <p class="text-muted mb-4">
+            FC店舗管理システムへようこそ。以下の機能をご利用いただけます。
+          </p>
+
+          <!-- アラート（店舗プロフィール未設定時） -->
+          <% if (session && session.user && !session.user.store_id) { %>
+          <div class="alert alert-warning mb-4">
+            <h5>
+              <i class="bi bi-exclamation-triangle"></i>
+              店舗プロフィール設定が必要です
+            </h5>
+            <p class="mb-3">
+              FC店舗機能を利用するには、まず店舗プロフィールを作成してください。
+            </p>
+            <a href="/agencies/create-profile" class="btn btn-primary">
+              <i class="bi bi-shop"></i> 店舗プロフィールを作成
+            </a>
+          </div>
+          <% } %>
+
+          <!-- メイン機能カード -->
+          <div class="row mb-4">
+            <div class="col-md-6 col-lg-3">
+              <div class="card feature-card mb-4 h-100">
+                <div class="card-body text-center">
+                  <i class="bi bi-people-fill fs-1 text-primary"></i>
+                  <h5 class="card-title mt-3">顧客管理</h5>
+                  <p class="card-text">来店顧客の情報管理・分析</p>
+                  <a href="/customers/store" class="btn btn-primary">
+                    管理画面へ
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3">
+              <div class="card feature-card mb-4 h-100">
+                <div class="card-body text-center">
+                  <i class="bi bi-graph-up fs-1 text-success"></i>
+                  <h5 class="card-title mt-3">売上管理</h5>
+                  <p class="card-text">月間売上データの入力・確認</p>
+                  <a href="/sales/list" class="btn btn-success">管理画面へ</a>
+                </div>
+              </div>
+            </div>
+
+            <% if (session && session.user && session.user.store_id) { %>
+            <div class="col-md-6 col-lg-3">
+              <div class="card feature-card mb-4 h-100">
+                <div class="card-body text-center">
+                  <i class="bi bi-shop fs-1 text-info"></i>
+                  <h5 class="card-title mt-3">店舗プロフィール</h5>
+                  <p class="card-text">店舗情報や取扱商品の管理</p>
+                  <a
+                    href="/agencies/profile/<%= session.user.store_id %>"
+                    class="btn btn-info"
+                  >
+                    プロフィール表示
+                  </a>
+                </div>
+              </div>
+            </div>
+            <% } %>
+          </div>
+
+          <!-- 統計情報（店舗プロフィール設定済み時のみ表示） -->
+          <% if (session && session.user && session.user.store_id) { %>
+          <div class="row mb-4">
+            <div class="col-lg-8">
+              <div class="card">
+                <div class="card-header bg-primary text-white">
+                  <h5 class="mb-0">
+                    <i class="bi bi-graph-up"></i> 店舗統計情報
+                  </h5>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="card stats-card text-center">
+                        <div class="card-body">
+                          <i class="bi bi-people fs-1"></i>
+                          <h4 class="mt-2" id="customerCount">-</h4>
+                          <p class="mb-0">登録顧客数</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="card bg-success text-white text-center">
+                        <div class="card-body">
+                          <i class="bi bi-currency-yen fs-1"></i>
+                          <h4 class="mt-2" id="monthSales">-</h4>
+                          <p class="mb-0">今月の売上</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="card">
+                <div class="card-header">
+                  <h6 class="mb-0">
+                    <i class="bi bi-info-circle"></i> お知らせ
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <div class="alert alert-info">
+                    <small>
+                      <i class="bi bi-lightbulb"></i>
+                      新機能「顧客管理」が追加されました！
+                    </small>
+                  </div>
+                  <div class="alert alert-warning">
+                    <small>
+                      <i class="bi bi-calendar"></i>
+                      月末までに売上データの入力をお忘れなく
+                    </small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <% } %>
+
+          <!-- サポート情報 -->
+          <div class="card">
+            <div class="card-header">
+              <h5 class="mb-0">
+                <i class="bi bi-question-circle"></i> サポート・ヘルプ
+              </h5>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4">
+                  <div class="text-center">
+                    <i class="bi bi-chat-dots fs-1 text-success"></i>
+                    <h6 class="mt-2">公式LINE</h6>
+                    <p class="text-muted">困ったときはお気軽にご連絡ください</p>
+                    <div id="admin-url-card" style="display: none">
+                      <a
+                        href="#"
+                        id="admin-url-link"
+                        target="_blank"
+                        class="btn btn-success"
+                      >
+                        <i class="bi bi-chat-dots"></i> 公式LINEへ
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="text-center">
+                    <i class="bi bi-arrow-up-circle fs-1 text-warning"></i>
+                    <h6 class="mt-2">管理者昇格</h6>
+                    <p class="text-muted">管理者権限が必要な場合</p>
+                    <a href="/auth/promote" class="btn btn-warning">
+                      <i class="bi bi-arrow-up-circle"></i> 昇格申請
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- 統計情報の取得 -->
+    <% if (session && session.user && session.user.store_id) { %>
+    <script>
+      // 統計情報の取得
+      fetch("/api/store/statistics")
+        .then((response) => response.json())
+        .then((data) => {
+          // 顧客数を表示
+          document.getElementById("customerCount").textContent =
+            data.customerCount + "人";
+
+          // 今月の売上を表示
+          const salesAmount = data.currentMonthSales || 0;
+          document.getElementById("monthSales").textContent =
+            "¥" + salesAmount.toLocaleString();
+        })
+        .catch((error) => {
+          console.error("統計情報取得エラー:", error);
+          document.getElementById("customerCount").textContent = "0人";
+          document.getElementById("monthSales").textContent = "¥0";
+        });
+    </script>
+    <% } %>
+
+    <!-- 公式LINE URL取得・表示 -->
+    <script>
+      fetch("/settings/api/official-line-url")
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.url) {
+            const linkElement = document.getElementById("admin-url-link");
+            const cardElement = document.getElementById("admin-url-card");
+
+            if (linkElement && cardElement) {
+              linkElement.href = data.url;
+              cardElement.style.display = "block";
+            }
+          }
+        })
+        .catch((error) => {
+          console.log("公式LINE URL取得エラー:", error);
+        });
+    </script>
+  </body>
+</html>

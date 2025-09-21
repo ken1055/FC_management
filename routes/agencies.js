@@ -132,7 +132,7 @@ router.post("/test-email", requireRole(["admin"]), async (req, res) => {
 
 // 代理店一覧取得
 router.get("/", (req, res) => {
-  db.all("SELECT * FROM agencies", [], (err, rows) => {
+  db.all("SELECT * FROM stores", [], (err, rows) => {
     if (err) return res.status(500).send("DBエラー");
     res.json(rows);
   });
@@ -142,24 +142,22 @@ router.get("/", (req, res) => {
 function checkAgencyIdIntegrity(callback) {
   console.log("代理店ID整合性チェック開始...");
 
-  db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
+  db.all("SELECT id, name FROM stores ORDER BY name", [], (err, stores) => {
     if (err) {
       console.error("代理店ID整合性チェック - DB取得エラー:", err);
       return callback(err, null);
     }
 
-    console.log(
-      `代理店ID整合性チェック - 取得した代理店数: ${agencies.length}`
-    );
+    console.log(`代理店ID整合性チェック - 取得した代理店数: ${stores.length}`);
     console.log(
       "代理店一覧:",
-      agencies.map((a) => `ID:${a.id} Name:${a.name}`)
+      stores.map((a) => `ID:${a.id} Name:${a.name}`)
     );
 
     const issues = [];
     let expectedId = 1;
 
-    agencies.forEach((agency, index) => {
+    stores.forEach((agency, index) => {
       console.log(
         `チェック中: ID=${agency.id}, 期待値=${expectedId}, 名前=${agency.name}`
       );
@@ -177,7 +175,7 @@ function checkAgencyIdIntegrity(callback) {
     });
 
     const result = {
-      totalAgencies: agencies.length,
+      totalAgencies: stores.length,
       issues: issues,
       isIntegrityOk: issues.length === 0,
     };
@@ -199,26 +197,26 @@ function fixAgencyIds(callback) {
   console.log("- NODE_ENV:", process.env.NODE_ENV);
 
   // 現在の代理店を取得（nameでソート）
-  db.all("SELECT id, name FROM agencies ORDER BY name", [], (err, agencies) => {
+  db.all("SELECT id, name FROM stores ORDER BY name", [], (err, stores) => {
     if (err) {
       console.error("代理店取得エラー:", err);
       return callback(err);
     }
 
-    console.log(`取得した代理店数: ${agencies.length}`);
+    console.log(`取得した代理店数: ${stores.length}`);
     console.log(
       "代理店一覧:",
-      agencies.map((a) => `ID:${a.id} Name:${a.name}`)
+      stores.map((a) => `ID:${a.id} Name:${a.name}`)
     );
 
-    if (agencies.length === 0) {
+    if (stores.length === 0) {
       console.log("修正対象の代理店がありません");
       return callback(null);
     }
 
     // 修正が必要かチェック
     let needsFixing = false;
-    agencies.forEach((agency, index) => {
+    stores.forEach((agency, index) => {
       const expectedId = index + 1;
       if (agency.id !== expectedId) {
         console.log(
@@ -253,20 +251,20 @@ function fixAgencyIds(callback) {
     if (isPostgres) {
       console.log("PostgreSQL環境での修正を実行");
       // PostgreSQL用の修正処理
-      fixAgencyIdsPostgres(agencies, callback);
+      fixAgencyIdsPostgres(stores, callback);
     } else {
       console.log("SQLite環境での修正を実行");
       // SQLite用の修正処理
-      fixAgencyIdsSQLite(agencies, callback);
+      fixAgencyIdsSQLite(stores, callback);
     }
   });
 }
 
 // PostgreSQL用のID修正処理
-function fixAgencyIdsPostgres(agencies, callback) {
+function fixAgencyIdsPostgres(stores, callback) {
   console.log("=== PostgreSQL環境でのID修正開始 ===");
 
-  if (agencies.length === 0) {
+  if (stores.length === 0) {
     console.log("修正対象の代理店がありません");
     return callback(null);
   }
@@ -275,7 +273,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
   console.log("PostgreSQL環境でID修正を実行します");
 
   // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
-  db.run("CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies", (err) => {
+  db.run("CREATE TEMP TABLE temp_stores AS SELECT * FROM stores", (err) => {
     if (err) {
       console.error("一時テーブル作成エラー:", err);
       return callback(err);
@@ -294,7 +292,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
       }
 
       // 元の代理店データを削除
-      db.run("DELETE FROM agencies", (err) => {
+      db.run("DELETE FROM stores", (err) => {
         if (err) {
           console.error("代理店データ削除エラー:", err);
           // 制約を再有効化してからエラーを返す
@@ -310,14 +308,14 @@ function fixAgencyIdsPostgres(agencies, callback) {
         let completed = 0;
         let hasError = false;
 
-        agencies.forEach((agency, index) => {
+        stores.forEach((agency, index) => {
           if (hasError) return;
 
           const newId = index + 1;
           console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
           db.run(
-            "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date FROM temp_agencies WHERE id = ?",
+            "INSERT INTO stores (id, name, age, address, bank_info, experience_years, contract_date, start_date) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date FROM temp_stores WHERE id = ?",
             [newId, agency.id],
             function (err) {
               if (err) {
@@ -330,7 +328,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
                 `代理店 ${agency.name} のID修正完了: ${agency.id} → ${newId}`
               );
 
-              // 関連テーブルのagency_idも更新（順次処理）
+              // 関連テーブルのstore_idも更新（順次処理）
               updateRelatedTablesSequentiallyPostgres(
                 agency.id,
                 newId,
@@ -343,12 +341,12 @@ function fixAgencyIdsPostgres(agencies, callback) {
 
                   completed++;
                   console.log(
-                    `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
+                    `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${stores.length}]`
                   );
 
-                  if (completed === agencies.length && !hasError) {
+                  if (completed === stores.length && !hasError) {
                     // 一時テーブルを削除
-                    db.run("DROP TABLE temp_agencies", (err) => {
+                    db.run("DROP TABLE temp_stores", (err) => {
                       if (err) {
                         console.error("一時テーブル削除エラー:", err);
                       } else {
@@ -367,7 +365,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
                           }
 
                           // PostgreSQL用のシーケンスリセット（試行）
-                          resetPostgreSQLSequence(agencies.length, () => {
+                          resetPostgreSQLSequence(stores.length, () => {
                             console.log(
                               "=== 代理店ID修正完了（PostgreSQL） ==="
                             );
@@ -396,7 +394,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
 
     // 1. sales テーブル
     db.run(
-      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+      "UPDATE sales SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
       [newId, originalId],
       (err) => {
         if (err) {
@@ -407,7 +405,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
 
         // 2. materials テーブル
         db.run(
-          "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+          "UPDATE materials SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
           [newId, originalId],
           (err) => {
             if (err) {
@@ -416,35 +414,35 @@ function fixAgencyIdsPostgres(agencies, callback) {
             }
             console.log(`materials テーブル更新完了: ${originalId} → ${newId}`);
 
-            // 3. group_agency テーブル
+            // 3. group_store テーブル
             db.run(
-              "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+              "UPDATE group_store SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
               [newId, originalId],
               (err) => {
                 if (err) {
-                  console.error("group_agency テーブル更新エラー:", err);
+                  console.error("group_store テーブル更新エラー:", err);
                   return callback(err);
                 }
                 console.log(
-                  `group_agency テーブル更新完了: ${originalId} → ${newId}`
+                  `group_store テーブル更新完了: ${originalId} → ${newId}`
                 );
 
-                // 4. agency_products テーブル
+                // 4. store_products テーブル
                 db.run(
-                  "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  "UPDATE store_products SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
                   [newId, originalId],
                   (err) => {
                     if (err) {
-                      console.error("agency_products テーブル更新エラー:", err);
+                      console.error("store_products テーブル更新エラー:", err);
                       return callback(err);
                     }
                     console.log(
-                      `agency_products テーブル更新完了: ${originalId} → ${newId}`
+                      `store_products テーブル更新完了: ${originalId} → ${newId}`
                     );
 
                     // 5. users テーブル
                     db.run(
-                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      "UPDATE users SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
                       [newId, originalId],
                       (err) => {
                         if (err) {
@@ -457,7 +455,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
 
                         // 6. product_files テーブル
                         db.run(
-                          "UPDATE product_files SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                          "UPDATE product_files SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
                           [newId, originalId],
                           (err) => {
                             if (err) {
@@ -500,7 +498,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
       // 方法1: 現在の最大IDを取得してシーケンスをリセット
       () => {
         db.get(
-          "SELECT COALESCE(MAX(id), 0) as max_id FROM agencies",
+          "SELECT COALESCE(MAX(id), 0) as max_id FROM stores",
           [],
           (err, row) => {
             if (err) {
@@ -513,7 +511,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
             console.log("現在の最大ID:", currentMaxId);
 
             db.run(
-              "SELECT setval((SELECT pg_get_serial_sequence('agencies', 'id')), ?, true)",
+              "SELECT setval((SELECT pg_get_serial_sequence('stores', 'id')), ?, true)",
               [currentMaxId],
               (err) => {
                 if (err) {
@@ -531,7 +529,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
       // 方法2: 固定シーケンス名で最大IDを使用
       () => {
         db.get(
-          "SELECT COALESCE(MAX(id), 0) as max_id FROM agencies",
+          "SELECT COALESCE(MAX(id), 0) as max_id FROM stores",
           [],
           (err, row) => {
             if (err) {
@@ -544,7 +542,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
             console.log("現在の最大ID:", currentMaxId);
 
             db.run(
-              "SELECT setval('agencies_id_seq', ?, true)",
+              "SELECT setval('stores_id_seq', ?, true)",
               [currentMaxId],
               (err) => {
                 if (err) {
@@ -561,7 +559,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
       },
       // 方法3: 指定されたmaxIdを使用
       () => {
-        db.run("SELECT setval('agencies_id_seq', ?, true)", [maxId], (err) => {
+        db.run("SELECT setval('stores_id_seq', ?, true)", [maxId], (err) => {
           if (err) {
             console.log("シーケンスリセット方法3失敗:", err.message);
             tryMethod4();
@@ -574,7 +572,7 @@ function fixAgencyIdsPostgres(agencies, callback) {
       // 方法4: SQLiteのシーケンステーブル更新（互換性のため）
       () => {
         db.run(
-          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
+          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'stores'",
           [maxId],
           (err) => {
             if (err) {
@@ -599,10 +597,10 @@ function fixAgencyIdsPostgres(agencies, callback) {
 }
 
 // SQLite用のID修正処理
-function fixAgencyIdsSQLite(agencies, callback) {
+function fixAgencyIdsSQLite(stores, callback) {
   console.log("=== SQLite環境でのID修正開始 ===");
 
-  if (agencies.length === 0) {
+  if (stores.length === 0) {
     console.log("修正対象の代理店がありません");
     return callback(null);
   }
@@ -611,7 +609,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
   console.log("SQLite環境でID修正を実行します");
 
   // 一時テーブルを作成
-  db.run("CREATE TEMP TABLE temp_agencies AS SELECT * FROM agencies", (err) => {
+  db.run("CREATE TEMP TABLE temp_stores AS SELECT * FROM stores", (err) => {
     if (err) {
       console.error("一時テーブル作成エラー:", err);
       return callback(err);
@@ -620,7 +618,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
     console.log("一時テーブル作成成功");
 
     // 元の代理店データを削除
-    db.run("DELETE FROM agencies", (err) => {
+    db.run("DELETE FROM stores", (err) => {
       if (err) {
         console.error("代理店データ削除エラー:", err);
         return callback(err);
@@ -632,14 +630,14 @@ function fixAgencyIdsSQLite(agencies, callback) {
       let completed = 0;
       let hasError = false;
 
-      agencies.forEach((agency, index) => {
+      stores.forEach((agency, index) => {
         if (hasError) return;
 
         const newId = index + 1;
         console.log(`代理店ID修正: ${agency.id} → ${newId} (${agency.name})`);
 
         db.run(
-          "INSERT INTO agencies (id, name, age, address, bank_info, experience_years, contract_date, start_date) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date FROM temp_agencies WHERE id = ?",
+          "INSERT INTO stores (id, name, age, address, bank_info, experience_years, contract_date, start_date) SELECT ?, name, age, address, bank_info, experience_years, contract_date, start_date FROM temp_stores WHERE id = ?",
           [newId, agency.id],
           function (err) {
             if (err) {
@@ -652,7 +650,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
               `代理店 ${agency.name} のID修正完了: ${agency.id} → ${newId}`
             );
 
-            // 関連テーブルのagency_idも更新（順次処理）
+            // 関連テーブルのstore_idも更新（順次処理）
             updateRelatedTablesSequentially(agency.id, newId, (updateErr) => {
               if (updateErr) {
                 console.error("関連テーブル更新エラー:", updateErr);
@@ -662,12 +660,12 @@ function fixAgencyIdsSQLite(agencies, callback) {
 
               completed++;
               console.log(
-                `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${agencies.length}]`
+                `代理店ID修正完了: ${agency.id} → ${newId} (${agency.name}) [${completed}/${stores.length}]`
               );
 
-              if (completed === agencies.length && !hasError) {
+              if (completed === stores.length && !hasError) {
                 // 一時テーブルを削除
-                db.run("DROP TABLE temp_agencies", (err) => {
+                db.run("DROP TABLE temp_stores", (err) => {
                   if (err) {
                     console.error("一時テーブル削除エラー:", err);
                   } else {
@@ -678,14 +676,14 @@ function fixAgencyIdsSQLite(agencies, callback) {
                   const forceSQLite = process.env.FORCE_SQLITE === "true";
                   if (forceSQLite) {
                     db.run(
-                      "UPDATE sqlite_sequence SET seq = ? WHERE name = 'agencies'",
-                      [agencies.length],
+                      "UPDATE sqlite_sequence SET seq = ? WHERE name = 'stores'",
+                      [stores.length],
                       (err) => {
                         if (err) {
                           console.error("シーケンスリセットエラー:", err);
                         } else {
                           console.log(
-                            `代理店シーケンスを${agencies.length}にリセット`
+                            `代理店シーケンスを${stores.length}にリセット`
                           );
                         }
                         console.log("=== 代理店ID修正完了（SQLite） ===");
@@ -711,7 +709,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
 
     // 1. sales テーブル
     db.run(
-      "UPDATE sales SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+      "UPDATE sales SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
       [newId, originalId],
       (err) => {
         if (err) {
@@ -722,7 +720,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
 
         // 2. materials テーブル
         db.run(
-          "UPDATE materials SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+          "UPDATE materials SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
           [newId, originalId],
           (err) => {
             if (err) {
@@ -731,35 +729,35 @@ function fixAgencyIdsSQLite(agencies, callback) {
             }
             console.log(`materials テーブル更新完了: ${originalId} → ${newId}`);
 
-            // 3. group_agency テーブル
+            // 3. group_store テーブル
             db.run(
-              "UPDATE group_agency SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+              "UPDATE group_store SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
               [newId, originalId],
               (err) => {
                 if (err) {
-                  console.error("group_agency テーブル更新エラー:", err);
+                  console.error("group_store テーブル更新エラー:", err);
                   return callback(err);
                 }
                 console.log(
-                  `group_agency テーブル更新完了: ${originalId} → ${newId}`
+                  `group_store テーブル更新完了: ${originalId} → ${newId}`
                 );
 
-                // 4. agency_products テーブル
+                // 4. store_products テーブル
                 db.run(
-                  "UPDATE agency_products SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                  "UPDATE store_products SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
                   [newId, originalId],
                   (err) => {
                     if (err) {
-                      console.error("agency_products テーブル更新エラー:", err);
+                      console.error("store_products テーブル更新エラー:", err);
                       return callback(err);
                     }
                     console.log(
-                      `agency_products テーブル更新完了: ${originalId} → ${newId}`
+                      `store_products テーブル更新完了: ${originalId} → ${newId}`
                     );
 
                     // 5. users テーブル
                     db.run(
-                      "UPDATE users SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                      "UPDATE users SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
                       [newId, originalId],
                       (err) => {
                         if (err) {
@@ -772,7 +770,7 @@ function fixAgencyIdsSQLite(agencies, callback) {
 
                         // 6. product_files テーブル
                         db.run(
-                          "UPDATE product_files SET agency_id = ? WHERE agency_id = (SELECT id FROM temp_agencies WHERE id = ?)",
+                          "UPDATE product_files SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
                           [newId, originalId],
                           (err) => {
                             if (err) {
@@ -869,10 +867,10 @@ function renderAgenciesList(
           ? "STRING_AGG(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ' ORDER BY ap.product_name) as product_names"
           : "GROUP_CONCAT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ') as product_names"
       }
-    FROM agencies a 
-    LEFT JOIN group_agency ga ON a.id = ga.agency_id 
+    FROM stores a 
+    LEFT JOIN group_store ga ON a.id = ga.store_id 
     LEFT JOIN groups g ON ga.group_id = g.id
-    LEFT JOIN agency_products ap ON a.id = ap.agency_id
+    LEFT JOIN store_products ap ON a.id = ap.store_id
   `;
     let params = [];
     let conditions = [];
@@ -906,16 +904,16 @@ function renderAgenciesList(
       query += " GROUP BY a.id ORDER BY a.id";
     }
 
-    db.all(query, params, (err, agencies) => {
+    db.all(query, params, (err, stores) => {
       if (err) {
         console.error("代理店一覧取得エラー:", err);
         return res.status(500).send("DBエラー: " + err.message);
       }
 
-      console.log("代理店一覧取得完了:", agencies.length, "件");
+      console.log("代理店一覧取得完了:", stores.length, "件");
 
-      res.render("agencies_list", {
-        agencies,
+      res.render("stores_list", {
+        stores,
         groups,
         selectedGroupId: groupId,
         searchQuery,
@@ -933,21 +931,21 @@ router.get("/new", requireRole(["admin"]), (req, res) => {
   res.render("agencies_form", {
     agency: null,
     session: req.session,
-    title: "代理店新規登録",
+    title: "店舗新規登録",
   });
 });
 
 // 編集フォーム
 router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
   db.get(
-    "SELECT * FROM agencies WHERE id = ?",
+    "SELECT * FROM stores WHERE id = ?",
     [req.params.id],
     (err, agency) => {
       if (err || !agency) return res.status(404).send("データがありません");
 
       // 取り扱い商品を取得（新旧データベース構造対応）
       db.all(
-        "SELECT product_name FROM agency_products WHERE agency_id = ?",
+        "SELECT product_name FROM store_products WHERE store_id = ?",
         [req.params.id],
         (err, products) => {
           if (err) {
@@ -965,7 +963,7 @@ router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
           res.render("agencies_form", {
             agency,
             session: req.session,
-            title: "代理店編集",
+            title: "店舗編集",
           });
         }
       );
@@ -985,16 +983,8 @@ router.post("/", (req, res) => {
     start_date,
   } = req.body;
   db.run(
-    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [
-      name,
-      age,
-      address,
-      bank_info,
-      experience_years,
-      contract_date,
-      start_date,
-    ],
+    "INSERT INTO stores (name, address, bank_info, contract_date, start_date) VALUES (?, ?, ?, ?, ?)",
+    [name, address, bank_info, contract_date, start_date],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
       res.json({ id: this.lastID });
@@ -1014,17 +1004,8 @@ router.put("/:id", (req, res) => {
     start_date,
   } = req.body;
   db.run(
-    "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=? WHERE id=?",
-    [
-      name,
-      age,
-      address,
-      bank_info,
-      experience_years,
-      contract_date,
-      start_date,
-      req.params.id,
-    ],
+    "UPDATE stores SET name=?, address=?, bank_info=?, contract_date=?, start_date=? WHERE id=?",
+    [name, address, bank_info, contract_date, start_date, req.params.id],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
       res.send("更新完了");
@@ -1040,16 +1021,32 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
   try {
     const {
       name,
-      age,
-      address,
-      bank_info,
-      experience_years,
-      contract_date,
-      start_date,
-      product_names,
-      product_details,
-      product_urls,
-      products, // 旧形式との互換性のため残す
+      // 店舗基本情報
+      business_address,
+      main_phone,
+      manager_name,
+      mobile_phone,
+      representative_email,
+      // 契約基本情報
+      contract_type,
+      contract_start_date,
+      royalty_rate,
+      // 請求基本情報
+      invoice_number,
+      bank_name,
+      branch_name,
+      account_type,
+      account_number,
+      account_holder,
+      // 許認可情報
+      license_status,
+      license_type,
+      license_number,
+      license_file_path,
+      // 連携ID
+      line_official_id,
+      representative_gmail,
+      // ユーザーアカウント情報
       email,
       password,
       password_confirm,
@@ -1057,19 +1054,18 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
     // 必須フィールドのチェック
     if (!name || name.trim() === "") {
-      return res.status(400).send("代理店名は必須です");
+      return res.status(400).send("店舗名は必須です");
     }
 
-    // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
-    const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
-    const processedExperienceYears =
-      experience_years && experience_years.trim() !== ""
-        ? parseInt(experience_years)
+    // データ処理: 空文字列をNULLに変換
+    const processedRoyaltyRate =
+      royalty_rate && royalty_rate.trim() !== ""
+        ? parseFloat(royalty_rate)
+        : 5.0;
+    const processedContractStartDate =
+      contract_start_date && contract_start_date.trim() !== ""
+        ? contract_start_date
         : null;
-    const processedContractDate =
-      contract_date && contract_date.trim() !== "" ? contract_date : null;
-    const processedStartDate =
-      start_date && start_date.trim() !== "" ? start_date : null;
 
     // パスワード確認
     if (email && password && password !== password_confirm) {
@@ -1103,24 +1099,47 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
     function createAgencyOnly() {
       db.run(
-        "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO stores (
+          name, business_address, main_phone, manager_name, mobile_phone, representative_email,
+          contract_type, contract_start_date, royalty_rate,
+          invoice_number, bank_name, branch_name, account_type, account_number, account_holder,
+          license_status, license_type, license_number, license_file_path,
+          line_official_id, representative_gmail
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
-          processedAge,
-          address,
-          bank_info,
-          processedExperienceYears,
-          processedContractDate,
-          processedStartDate,
+          business_address,
+          main_phone,
+          manager_name,
+          mobile_phone,
+          representative_email,
+          contract_type,
+          processedContractStartDate,
+          processedRoyaltyRate,
+          invoice_number,
+          bank_name,
+          branch_name,
+          account_type,
+          account_number,
+          account_holder,
+          license_status || "none",
+          license_type,
+          license_number,
+          license_file_path,
+          line_official_id,
+          representative_gmail,
         ],
         function (err) {
           if (err) {
-            console.error("代理店作成エラー:", err);
-            return res.status(500).send(`代理店作成エラー: ${err.message}`);
+            console.error("店舗作成エラー:", err);
+            return res.status(500).send(`店舗作成エラー: ${err.message}`);
           }
 
           const agencyId = this.lastID;
-          saveProducts(agencyId);
+          console.log(`店舗作成完了: ID=${agencyId}, 名前=${name}`);
+          res.redirect(
+            "/stores/list?message=" + encodeURIComponent("店舗を作成しました")
+          );
         }
       );
     }
@@ -1130,29 +1149,49 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
       bcrypt.hash(password, 10, (err, hashedPassword) => {
         if (err) return res.status(500).send("パスワードハッシュ化エラー");
 
-        // 代理店を作成
+        // 店舗を作成
         db.run(
-          "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          `INSERT INTO stores (
+            name, business_address, main_phone, manager_name, mobile_phone, representative_email,
+            contract_type, contract_start_date, royalty_rate,
+            invoice_number, bank_name, branch_name, account_type, account_number, account_holder,
+            license_status, license_type, license_number, license_file_path,
+            line_official_id, representative_gmail
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             name,
-            processedAge,
-            address,
-            bank_info,
-            processedExperienceYears,
-            processedContractDate,
-            processedStartDate,
+            business_address,
+            main_phone,
+            manager_name,
+            mobile_phone,
+            representative_email,
+            contract_type,
+            processedContractStartDate,
+            processedRoyaltyRate,
+            invoice_number,
+            bank_name,
+            branch_name,
+            account_type,
+            account_number,
+            account_holder,
+            license_status || "none",
+            license_type,
+            license_number,
+            license_file_path,
+            line_official_id,
+            representative_gmail,
           ],
           function (err) {
             if (err) {
-              console.error("代理店作成エラー:", err);
-              return res.status(500).send(`代理店作成エラー: ${err.message}`);
+              console.error("店舗作成エラー:", err);
+              return res.status(500).send(`店舗作成エラー: ${err.message}`);
             }
 
             const agencyId = this.lastID;
 
             // ユーザーアカウントを作成
             db.run(
-              "INSERT INTO users (email, password, agency_id) VALUES (?, ?, ?)",
+              "INSERT INTO users (email, password, store_id) VALUES (?, ?, ?)",
               [email, hashedPassword, agencyId],
               function (err) {
                 if (err) {
@@ -1176,112 +1215,17 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
                 }
 
                 console.log(
-                  `代理店ユーザーアカウント作成: ${email} (agency_id: ${agencyId})`
+                  `店舗ユーザーアカウント作成: ${email} (store_id: ${agencyId})`
                 );
-                saveProducts(agencyId);
+                res.redirect(
+                  "/stores/list?message=" +
+                    encodeURIComponent("店舗とユーザーアカウントを作成しました")
+                );
               }
             );
           }
         );
       });
-    }
-
-    function saveProducts(agencyId) {
-      console.log("=== saveProducts開始 ===");
-      console.log("agencyId:", agencyId);
-      console.log("product_names:", product_names);
-      console.log("product_details:", product_details);
-      console.log("product_urls:", product_urls);
-
-      // 新形式: 配列形式での商品データ処理
-      if (
-        product_names &&
-        Array.isArray(product_names) &&
-        product_names.length > 0
-      ) {
-        console.log("新形式の商品データを処理");
-        product_names.forEach((productName, index) => {
-          if (productName && productName.trim() !== "") {
-            db.run(
-              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
-              [agencyId, productName.trim()],
-              (err) => {
-                if (err) console.error("商品保存エラー:", err);
-              }
-            );
-          }
-        });
-      }
-      // 旧形式: JSON文字列での商品データ処理（互換性のため）
-      else if (products) {
-        console.log("旧形式の商品データを処理");
-        const productList = Array.isArray(products) ? products : [products];
-        console.log("保存する商品:", productList);
-
-        productList.forEach((productStr) => {
-          try {
-            const product = JSON.parse(productStr);
-            // 既存のテーブル構造に合わせて product_name のみ保存
-            db.run(
-              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
-              [agencyId, product.product_name],
-              (err) => {
-                if (err) console.error("商品保存エラー:", err);
-              }
-            );
-          } catch (parseErr) {
-            console.error("商品データパースエラー:", parseErr);
-            // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
-            db.run(
-              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
-              [agencyId, productStr],
-              (err) => {
-                if (err) console.error("商品保存エラー（文字列）:", err);
-              }
-            );
-          }
-        });
-      }
-
-      // 代理店登録完了後にメール通知を送信
-      const agencyData = {
-        id: agencyId,
-        name,
-        age,
-        address,
-        bank_info,
-        experience_years,
-        contract_date,
-        start_date,
-        email: email || null, // ユーザーアカウントのメールアドレス
-      };
-
-      const adminUser = {
-        email: req.session.user.email,
-        id: req.session.user.id,
-      };
-
-      console.log("メール通知送信開始");
-      // 非同期でメール送信（エラーがあってもリダイレクトは継続）
-      sendAgencyRegistrationNotification(agencyData, adminUser, !!email).catch(
-        (error) => {
-          console.error("代理店登録通知メール送信エラー:", error);
-        }
-      );
-
-      console.log("代理店登録完了、リダイレクト実行: /agencies/list");
-
-      try {
-        res.redirect(
-          "/agencies/list?success=" +
-            encodeURIComponent(`代理店「${name}」を登録しました`)
-        );
-      } catch (redirectError) {
-        console.error("リダイレクトエラー:", redirectError);
-        res
-          .status(500)
-          .send("登録は完了しましたが、リダイレクトでエラーが発生しました");
-      }
     }
   } catch (error) {
     console.error("新規登録エラー:", error);
@@ -1317,13 +1261,11 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=? WHERE id=?",
+    "UPDATE stores SET name=?, address=?, bank_info=?, contract_date=?, start_date=? WHERE id=?",
     [
       name,
-      processedAge,
       address,
       bank_info,
-      processedExperienceYears,
       processedContractDate,
       processedStartDate,
       req.params.id,
@@ -1333,7 +1275,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
 
       // 既存の商品を削除
       db.run(
-        "DELETE FROM agency_products WHERE agency_id = ?",
+        "DELETE FROM store_products WHERE store_id = ?",
         [req.params.id],
         (err) => {
           if (err) console.error("商品削除エラー:", err);
@@ -1348,7 +1290,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
             product_names.forEach((productName, index) => {
               if (productName && productName.trim() !== "") {
                 db.run(
-                  "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                  "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                   [req.params.id, productName.trim()],
                   (err) => {
                     if (err) console.error("商品保存エラー:", err);
@@ -1365,7 +1307,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
               try {
                 const product = JSON.parse(productStr);
                 db.run(
-                  "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                  "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                   [req.params.id, product.product_name],
                   (err) => {
                     if (err) console.error("商品保存エラー:", err);
@@ -1375,7 +1317,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
                 console.error("商品データパースエラー:", parseErr);
                 // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
                 db.run(
-                  "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                  "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                   [req.params.id, productStr],
                   (err) => {
                     if (err) console.error("商品保存エラー（文字列）:", err);
@@ -1388,7 +1330,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
       );
 
       res.redirect(
-        "/agencies/list?success=" +
+        "/stores/list?success=" +
           encodeURIComponent(`代理店「${name}」を更新しました`)
       );
     }
@@ -1400,189 +1342,181 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
   const agencyId = req.params.id;
 
   // 代理店情報を取得
-  db.get(
-    "SELECT name FROM agencies WHERE id = ?",
-    [agencyId],
-    (err, agency) => {
-      if (err) return res.status(500).send("DBエラー");
-      if (!agency) {
-        return res.redirect(
-          "/agencies/list?error=" +
-            encodeURIComponent("指定された代理店が見つかりません")
-        );
-      }
-
-      // 関連するユーザーアカウントを確認
-      db.all(
-        "SELECT id, email FROM users WHERE agency_id = ?",
-        [agencyId],
-        (err, relatedUsers) => {
-          if (err) {
-            console.error("関連ユーザー確認エラー:", err);
-            relatedUsers = [];
-          }
-
-          if (relatedUsers.length > 0) {
-            console.log(
-              `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウント:`,
-              relatedUsers
-            );
-            console.log("これらのユーザーアカウントも削除されます");
-          } else {
-            console.log(
-              `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウントはありません`
-            );
-          }
-
-          // 改善されたトランザクション型削除処理
-          const deleteRelatedDataSafely = (callback) => {
-            console.log(
-              `代理店ID ${agencyId} の関連データ削除を開始（トランザクション処理）`
-            );
-
-            // PostgreSQL環境ではBEGINでトランザクション開始
-            const isPostgres = !!process.env.DATABASE_URL;
-            const startTransaction = isPostgres ? "BEGIN" : "BEGIN TRANSACTION";
-
-            db.run(startTransaction, (err) => {
-              if (err) {
-                console.error("トランザクション開始エラー:", err);
-                return callback(err);
-              }
-
-              console.log("トランザクション開始完了");
-
-              // 削除対象テーブルの配列（削除順序重要：外部キー制約を考慮）
-              const deleteQueries = [
-                {
-                  name: "ユーザーアカウント",
-                  query: "DELETE FROM users WHERE agency_id = ?",
-                },
-                {
-                  name: "売上データ",
-                  query: "DELETE FROM sales WHERE agency_id = ?",
-                },
-                {
-                  name: "商品資料",
-                  query: "DELETE FROM materials WHERE agency_id = ?",
-                },
-                {
-                  name: "グループ所属",
-                  query: "DELETE FROM group_agency WHERE agency_id = ?",
-                },
-                {
-                  name: "取り扱い商品",
-                  query: "DELETE FROM agency_products WHERE agency_id = ?",
-                },
-                {
-                  name: "製品ファイル",
-                  query: "DELETE FROM product_files WHERE agency_id = ?",
-                },
-              ];
-
-              let completed = 0;
-              let hasError = false;
-
-              const executeDelete = (index) => {
-                if (hasError || index >= deleteQueries.length) {
-                  if (hasError) {
-                    console.log("エラーが発生したためロールバック実行");
-                    db.run("ROLLBACK", () => {
-                      callback(
-                        new Error("関連データ削除中にエラーが発生しました")
-                      );
-                    });
-                  } else {
-                    console.log("すべての関連データ削除完了、コミット実行");
-                    db.run("COMMIT", (commitErr) => {
-                      if (commitErr) {
-                        console.error("コミットエラー:", commitErr);
-                        return callback(commitErr);
-                      }
-                      console.log("トランザクション正常完了");
-                      callback();
-                    });
-                  }
-                  return;
-                }
-
-                const deleteInfo = deleteQueries[index];
-                console.log(`${deleteInfo.name}を削除中...`);
-
-                db.run(deleteInfo.query, [agencyId], function (deleteErr) {
-                  if (deleteErr) {
-                    console.error(`${deleteInfo.name}削除エラー:`, deleteErr);
-                    hasError = true;
-                    return executeDelete(index + 1);
-                  }
-
-                  console.log(
-                    `${deleteInfo.name}削除完了 (削除件数: ${this.changes})`
-                  );
-
-                  // 特別処理：ユーザーアカウント削除時の詳細ログ
-                  if (index === 0 && relatedUsers.length > 0) {
-                    relatedUsers.forEach((user) => {
-                      console.log(
-                        `削除されたユーザー: ID=${user.id}, Email=${user.email}`
-                      );
-                    });
-                  }
-
-                  executeDelete(index + 1);
-                });
-              };
-
-              executeDelete(0);
-            });
-          };
-
-          // 関連データを削除してから代理店本体を削除
-          deleteRelatedDataSafely((err) => {
-            if (err) {
-              console.error("関連データ削除エラー:", err);
-              return res.redirect(
-                "/agencies/list?error=" +
-                  encodeURIComponent("関連データ削除中にエラーが発生しました")
-              );
-            }
-            db.run(
-              "DELETE FROM agencies WHERE id = ?",
-              [agencyId],
-              function (err) {
-                if (err) {
-                  console.error("代理店削除エラー:", err);
-                  return res.redirect(
-                    "/agencies/list?error=" +
-                      encodeURIComponent("削除中にエラーが発生しました")
-                  );
-                }
-
-                console.log(
-                  `代理店「${agency.name}」(ID: ${agencyId}) を削除しました`
-                );
-
-                // 削除後のID整合性チェックと自動修正を無効化（安全性のため）
-                console.log(
-                  "=== 削除後のID自動修正は安全性のため無効化されています ==="
-                );
-                console.log(
-                  "他の代理店データの整合性を保つため、ID修正は手動で実行してください"
-                );
-
-                res.redirect(
-                  "/agencies/list?success=" +
-                    encodeURIComponent(
-                      `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                    )
-                );
-              }
-            );
-          });
-        }
+  db.get("SELECT name FROM stores WHERE id = ?", [agencyId], (err, agency) => {
+    if (err) return res.status(500).send("DBエラー");
+    if (!agency) {
+      return res.redirect(
+        "/stores/list?error=" +
+          encodeURIComponent("指定された代理店が見つかりません")
       );
     }
-  );
+
+    // 関連するユーザーアカウントを確認
+    db.all(
+      "SELECT id, email FROM users WHERE store_id = ?",
+      [agencyId],
+      (err, relatedUsers) => {
+        if (err) {
+          console.error("関連ユーザー確認エラー:", err);
+          relatedUsers = [];
+        }
+
+        if (relatedUsers.length > 0) {
+          console.log(
+            `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウント:`,
+            relatedUsers
+          );
+          console.log("これらのユーザーアカウントも削除されます");
+        } else {
+          console.log(
+            `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウントはありません`
+          );
+        }
+
+        // 改善されたトランザクション型削除処理
+        const deleteRelatedDataSafely = (callback) => {
+          console.log(
+            `代理店ID ${agencyId} の関連データ削除を開始（トランザクション処理）`
+          );
+
+          // PostgreSQL環境ではBEGINでトランザクション開始
+          const isPostgres = !!process.env.DATABASE_URL;
+          const startTransaction = isPostgres ? "BEGIN" : "BEGIN TRANSACTION";
+
+          db.run(startTransaction, (err) => {
+            if (err) {
+              console.error("トランザクション開始エラー:", err);
+              return callback(err);
+            }
+
+            console.log("トランザクション開始完了");
+
+            // 削除対象テーブルの配列（削除順序重要：外部キー制約を考慮）
+            const deleteQueries = [
+              {
+                name: "ユーザーアカウント",
+                query: "DELETE FROM users WHERE store_id = ?",
+              },
+              {
+                name: "売上データ",
+                query: "DELETE FROM sales WHERE store_id = ?",
+              },
+              {
+                name: "商品資料",
+                query: "DELETE FROM materials WHERE store_id = ?",
+              },
+              {
+                name: "グループ所属",
+                query: "DELETE FROM group_store WHERE store_id = ?",
+              },
+              {
+                name: "取り扱い商品",
+                query: "DELETE FROM store_products WHERE store_id = ?",
+              },
+              {
+                name: "製品ファイル",
+                query: "DELETE FROM product_files WHERE store_id = ?",
+              },
+            ];
+
+            let completed = 0;
+            let hasError = false;
+
+            const executeDelete = (index) => {
+              if (hasError || index >= deleteQueries.length) {
+                if (hasError) {
+                  console.log("エラーが発生したためロールバック実行");
+                  db.run("ROLLBACK", () => {
+                    callback(
+                      new Error("関連データ削除中にエラーが発生しました")
+                    );
+                  });
+                } else {
+                  console.log("すべての関連データ削除完了、コミット実行");
+                  db.run("COMMIT", (commitErr) => {
+                    if (commitErr) {
+                      console.error("コミットエラー:", commitErr);
+                      return callback(commitErr);
+                    }
+                    console.log("トランザクション正常完了");
+                    callback();
+                  });
+                }
+                return;
+              }
+
+              const deleteInfo = deleteQueries[index];
+              console.log(`${deleteInfo.name}を削除中...`);
+
+              db.run(deleteInfo.query, [agencyId], function (deleteErr) {
+                if (deleteErr) {
+                  console.error(`${deleteInfo.name}削除エラー:`, deleteErr);
+                  hasError = true;
+                  return executeDelete(index + 1);
+                }
+
+                console.log(
+                  `${deleteInfo.name}削除完了 (削除件数: ${this.changes})`
+                );
+
+                // 特別処理：ユーザーアカウント削除時の詳細ログ
+                if (index === 0 && relatedUsers.length > 0) {
+                  relatedUsers.forEach((user) => {
+                    console.log(
+                      `削除されたユーザー: ID=${user.id}, Email=${user.email}`
+                    );
+                  });
+                }
+
+                executeDelete(index + 1);
+              });
+            };
+
+            executeDelete(0);
+          });
+        };
+
+        // 関連データを削除してから代理店本体を削除
+        deleteRelatedDataSafely((err) => {
+          if (err) {
+            console.error("関連データ削除エラー:", err);
+            return res.redirect(
+              "/stores/list?error=" +
+                encodeURIComponent("関連データ削除中にエラーが発生しました")
+            );
+          }
+          db.run("DELETE FROM stores WHERE id = ?", [agencyId], function (err) {
+            if (err) {
+              console.error("代理店削除エラー:", err);
+              return res.redirect(
+                "/stores/list?error=" +
+                  encodeURIComponent("削除中にエラーが発生しました")
+              );
+            }
+
+            console.log(
+              `代理店「${agency.name}」(ID: ${agencyId}) を削除しました`
+            );
+
+            // 削除後のID整合性チェックと自動修正を無効化（安全性のため）
+            console.log(
+              "=== 削除後のID自動修正は安全性のため無効化されています ==="
+            );
+            console.log(
+              "他の代理店データの整合性を保つため、ID修正は手動で実行してください"
+            );
+
+            res.redirect(
+              "/stores/list?success=" +
+                encodeURIComponent(
+                  `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+                )
+            );
+          });
+        });
+      }
+    );
+  });
 });
 
 // 代理店プロフィール表示
@@ -1591,17 +1525,17 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
 
   // 代理店ユーザーは自分のプロフィールのみ閲覧可能
   if (req.session.user.role === "agency") {
-    if (req.session.user.agency_id !== parseInt(agencyId)) {
+    if (req.session.user.store_id !== parseInt(agencyId)) {
       return res.status(403).send("自分のプロフィールのみ閲覧可能です");
     }
   }
 
-  db.get("SELECT * FROM agencies WHERE id = ?", [agencyId], (err, agency) => {
+  db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, agency) => {
     if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
     // 取り扱い商品を取得（既存データベース構造対応）
     db.all(
-      "SELECT product_name FROM agency_products WHERE agency_id = ?",
+      "SELECT product_name FROM store_products WHERE store_id = ?",
       [agencyId],
       (err, products) => {
         if (err) {
@@ -1613,9 +1547,9 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
         db.get(
           `
         SELECT g.name as group_name 
-        FROM group_agency ga 
+        FROM group_store ga 
         LEFT JOIN groups g ON ga.group_id = g.id 
-        WHERE ga.agency_id = ?
+        WHERE ga.store_id = ?
       `,
           [agencyId],
           (err, groupInfo) => {
@@ -1653,17 +1587,17 @@ router.get(
 
     // 代理店ユーザーは自分のプロフィールのみ編集可能
     if (req.session.user.role === "agency") {
-      if (req.session.user.agency_id !== parseInt(agencyId)) {
+      if (req.session.user.store_id !== parseInt(agencyId)) {
         return res.status(403).send("自分のプロフィールのみ編集可能です");
       }
     }
 
-    db.get("SELECT * FROM agencies WHERE id = ?", [agencyId], (err, agency) => {
+    db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, agency) => {
       if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
       // 取り扱い商品を取得（既存データベース構造対応）
       db.all(
-        "SELECT product_name FROM agency_products WHERE agency_id = ?",
+        "SELECT product_name FROM store_products WHERE store_id = ?",
         [agencyId],
         (err, products) => {
           if (err) {
@@ -1699,7 +1633,7 @@ router.post(
 
     // 代理店ユーザーは自分のプロフィールのみ編集可能
     if (req.session.user.role === "agency") {
-      if (req.session.user.agency_id !== parseInt(agencyId)) {
+      if (req.session.user.store_id !== parseInt(agencyId)) {
         return res.status(403).send("自分のプロフィールのみ編集可能です");
       }
     }
@@ -1730,13 +1664,11 @@ router.post(
       start_date && start_date.trim() !== "" ? start_date : null;
 
     db.run(
-      "UPDATE agencies SET name=?, age=?, address=?, bank_info=?, experience_years=?, contract_date=?, start_date=? WHERE id=?",
+      "UPDATE stores SET name=?, address=?, bank_info=?, contract_date=?, start_date=? WHERE id=?",
       [
         name,
-        processedAge,
         address,
         bank_info,
-        processedExperienceYears,
         processedContractDate,
         processedStartDate,
         agencyId,
@@ -1746,7 +1678,7 @@ router.post(
 
         // 既存の商品を削除
         db.run(
-          "DELETE FROM agency_products WHERE agency_id = ?",
+          "DELETE FROM store_products WHERE store_id = ?",
           [agencyId],
           (err) => {
             if (err) console.error("商品削除エラー:", err);
@@ -1761,7 +1693,7 @@ router.post(
               product_names.forEach((productName, index) => {
                 if (productName && productName.trim() !== "") {
                   db.run(
-                    "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                     [agencyId, productName.trim()],
                     (err) => {
                       if (err) console.error("商品保存エラー:", err);
@@ -1780,7 +1712,7 @@ router.post(
                 try {
                   const product = JSON.parse(productStr);
                   db.run(
-                    "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                     [agencyId, product.product_name],
                     (err) => {
                       if (err) console.error("商品保存エラー:", err);
@@ -1790,7 +1722,7 @@ router.post(
                   console.error("商品データパースエラー:", parseErr);
                   // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
                   db.run(
-                    "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                     [agencyId, productStr],
                     (err) => {
                       if (err) console.error("商品保存エラー（文字列）:", err);
@@ -1820,7 +1752,7 @@ router.post(
           });
         }
 
-        res.redirect("/agencies/profile/" + agencyId);
+        res.redirect("/stores/profile/" + agencyId);
       }
     );
   }
@@ -1829,14 +1761,14 @@ router.post(
 // 代理店プロフィール作成フォーム（代理店ユーザー用）
 router.get("/create-profile", requireRole(["agency"]), (req, res) => {
   // 既にプロフィールが存在する場合はリダイレクト
-  if (req.session.user.agency_id) {
-    return res.redirect("/agencies/profile/" + req.session.user.agency_id);
+  if (req.session.user.store_id) {
+    return res.redirect("/stores/profile/" + req.session.user.store_id);
   }
 
   res.render("agencies_form", {
     agency: null,
     session: req.session,
-    title: "代理店プロフィール作成",
+    title: "店舗プロフィール作成",
     isCreateProfile: true,
   });
 });
@@ -1844,7 +1776,7 @@ router.get("/create-profile", requireRole(["agency"]), (req, res) => {
 // 代理店プロフィール作成（代理店ユーザー用）
 router.post("/create-profile", requireRole(["agency"]), (req, res) => {
   // 既にプロフィールが存在する場合はエラー
-  if (req.session.user.agency_id) {
+  if (req.session.user.store_id) {
     return res.status(400).send("既にプロフィールが存在します");
   }
 
@@ -1874,16 +1806,8 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "INSERT INTO agencies (name, age, address, bank_info, experience_years, contract_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [
-      name,
-      processedAge,
-      address,
-      bank_info,
-      processedExperienceYears,
-      processedContractDate,
-      processedStartDate,
-    ],
+    "INSERT INTO stores (name, address, bank_info, contract_date, start_date) VALUES (?, ?, ?, ?, ?)",
+    [name, address, bank_info, processedContractDate, processedStartDate],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
 
@@ -1899,7 +1823,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
         product_names.forEach((productName, index) => {
           if (productName && productName.trim() !== "") {
             db.run(
-              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
               [agencyId, productName.trim()],
               (err) => {
                 if (err) console.error("商品保存エラー:", err);
@@ -1916,7 +1840,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
           try {
             const product = JSON.parse(productStr);
             db.run(
-              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
               [agencyId, product.product_name],
               (err) => {
                 if (err) console.error("商品保存エラー:", err);
@@ -1926,7 +1850,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
             console.error("商品データパースエラー:", parseErr);
             // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
             db.run(
-              "INSERT INTO agency_products (agency_id, product_name) VALUES (?, ?)",
+              "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
               [agencyId, productStr],
               (err) => {
                 if (err) console.error("商品保存エラー（文字列）:", err);
@@ -1936,7 +1860,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
         });
       }
 
-      // ユーザーテーブルのagency_idを更新
+      // ユーザーテーブルのstore_idを更新
       console.log("=== アカウント連携開始 ===");
       console.log("agencyId:", agencyId, "type:", typeof agencyId);
       console.log(
@@ -1951,15 +1875,15 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
       // PostgreSQL環境でのパラメータ形式を調整
       const isPostgres = !!process.env.DATABASE_URL;
       const updateQuery = isPostgres
-        ? "UPDATE users SET agency_id = $1 WHERE id = $2"
-        : "UPDATE users SET agency_id = ? WHERE id = ?";
+        ? "UPDATE users SET store_id = $1 WHERE id = $2"
+        : "UPDATE users SET store_id = ? WHERE id = ?";
 
       db.run(
         updateQuery,
         [parseInt(agencyId), parseInt(req.session.user.id)],
         function (err) {
           if (err) {
-            console.error("=== ユーザーのagency_id更新エラー ===");
+            console.error("=== ユーザーのstore_id更新エラー ===");
             console.error("エラー詳細:", err);
             console.error("エラーコード:", err.code);
             console.error("エラーメッセージ:", err.message);
@@ -1975,8 +1899,8 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
           console.log("=== アカウント連携成功 ===");
           console.log("更新された行数:", this.changes || "不明");
 
-          // セッションのagency_idも更新
-          req.session.user.agency_id = agencyId;
+          // セッションのstore_idも更新
+          req.session.user.store_id = agencyId;
 
           // プロフィール作成時のメール通知を送信
           const agencyData = {
@@ -2002,7 +1926,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
             }
           );
 
-          res.redirect("/agencies/profile/" + agencyId);
+          res.redirect("/stores/profile/" + agencyId);
         }
       );
     }

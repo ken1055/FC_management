@@ -1,3 +1,6 @@
+// 環境変数を読み込み
+require("dotenv").config();
+
 const express = require("express");
 const session = require("express-session");
 const MemoryStore = require("memorystore")(session);
@@ -72,7 +75,7 @@ if (!disableLayouts) {
 
     // デフォルト変数の設定
     app.use((req, res, next) => {
-      res.locals.title = res.locals.title || "代理店管理システム";
+      res.locals.title = res.locals.title || "FC店舗管理システム";
       res.locals.session = req.session || {};
       next();
     });
@@ -86,7 +89,7 @@ if (!disableLayouts) {
 
   // レイアウト無効時のデフォルト変数設定
   app.use((req, res, next) => {
-    res.locals.title = res.locals.title || "代理店管理システム";
+    res.locals.title = res.locals.title || "FC店舗管理システム";
     res.locals.session = req.session || {};
     res.locals.layout = false;
     next();
@@ -300,10 +303,11 @@ try {
 }
 
 try {
-  app.use("/agencies", require("./routes/agencies"));
-  console.log("agencies ルート読み込み完了");
+  app.use("/stores", require("./routes/agencies"));
+  app.use("/agencies", require("./routes/agencies")); // 後方互換性のため
+  console.log("stores ルート読み込み完了");
 } catch (error) {
-  console.error("agencies ルート読み込みエラー:", error);
+  console.error("stores ルート読み込みエラー:", error);
 }
 
 try {
@@ -320,12 +324,7 @@ try {
   console.error("groups ルート読み込みエラー:", error);
 }
 
-try {
-  app.use("/materials", require("./routes/materials"));
-  console.log("materials ルート読み込み完了");
-} catch (error) {
-  console.error("materials ルート読み込みエラー:", error);
-}
+// materials ルートは削除されました
 
 try {
   app.use("/settings", require("./routes/settings"));
@@ -334,7 +333,74 @@ try {
   console.error("settings ルート読み込みエラー:", error);
 }
 
+try {
+  app.use("/customers", require("./routes/customers"));
+  console.log("customers ルート読み込み完了");
+} catch (error) {
+  console.error("customers ルート読み込みエラー:", error);
+}
+
+try {
+  app.use("/royalty", require("./routes/royalty"));
+  console.log("royalty ルート読み込み完了");
+} catch (error) {
+  console.error("royalty ルート読み込みエラー:", error);
+}
+
 console.log("全ルート読み込み処理完了");
+
+// 店舗統計情報API
+app.get("/api/store/statistics", (req, res) => {
+  if (!req.session || !req.session.user || req.session.user.role !== "agency") {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+
+  const storeId = req.session.user.store_id;
+  if (!storeId) {
+    return res.status(400).json({ error: "Store ID not found" });
+  }
+
+  const db = require("./db");
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1;
+
+  // 顧客数を取得
+  const customerCountQuery =
+    "SELECT COUNT(*) as count FROM customers WHERE store_id = ?";
+
+  // 今月の売上を取得
+  const currentMonthSalesQuery = `
+    SELECT SUM(amount) as total 
+    FROM sales 
+    WHERE store_id = ? AND year = ? AND month = ?
+  `;
+
+  db.get(customerCountQuery, [storeId], (err, customerResult) => {
+    if (err) {
+      console.error("顧客数取得エラー:", err);
+      return res.status(500).json({ error: "Failed to fetch customer count" });
+    }
+
+    db.get(
+      currentMonthSalesQuery,
+      [storeId, currentYear, currentMonth],
+      (err, salesResult) => {
+        if (err) {
+          console.error("売上取得エラー:", err);
+          return res.status(500).json({ error: "Failed to fetch sales data" });
+        }
+
+        res.json({
+          customerCount: customerResult?.count || 0,
+          currentMonthSales: salesResult?.total || 0,
+          year: currentYear,
+          month: currentMonth,
+        });
+      }
+    );
+  });
+});
 
 // メインページ（簡素化・安全化）- 最優先でルート定義
 app.get("/", (req, res) => {
@@ -385,25 +451,25 @@ app.get("/", (req, res) => {
       if (disableLayouts) {
         return res.render("admin_index_standalone", {
           session: req.session,
-          title: "管理者ダッシュボード",
+          title: "FC本部管理者ダッシュボード",
         });
       } else {
         return res.render("admin_index", {
           session: req.session,
-          title: "管理者ダッシュボード",
+          title: "FC本部管理者ダッシュボード",
         });
       }
     } else {
-      console.log("代理店ダッシュボードをレンダリング");
+      console.log("店舗ダッシュボードをレンダリング");
       if (disableLayouts) {
-        return res.render("agency_index_standalone", {
+        return res.render("store_index_standalone", {
           session: req.session,
-          title: "代理店ダッシュボード",
+          title: "FC店舗ダッシュボード",
         });
       } else {
         return res.render("index", {
           session: req.session,
-          title: "代理店管理システム",
+          title: "FC店舗管理システム",
         });
       }
     }
