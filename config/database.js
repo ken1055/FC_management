@@ -31,83 +31,148 @@ async function executeQuery(query, params = []) {
 async function executeSupabaseQuery(supabase, query, params) {
   console.log("Supabaseクエリ実行:", query, params);
 
+  const originalQuery = query;
+  const lower = query.toLowerCase().trim();
+
   try {
-    // Supabaseでは生のSQLクエリを実行するためにrpc関数を使用
-    // ただし、Supabaseの制限により、複雑なクエリは制限される場合がある
-    
-    // 簡単なSELECT文の場合
-    if (query.toLowerCase().trim().startsWith("select")) {
+    // SELECT
+    if (lower.startsWith("select")) {
       const tableName = extractTableName(query);
-      if (tableName) {
-        let queryBuilder = supabase.from(tableName).select("*");
-        
-        // WHERE条件の処理
-        if (query.toLowerCase().includes("where")) {
-          // WHERE句を解析して適切なカラムと値を設定
-          const whereMatch = query.match(/WHERE\s+(\w+)\s*=\s*\?/i);
-          if (whereMatch && params.length > 0) {
-            const columnName = whereMatch[1];
-            const paramValue = params[0];
-            queryBuilder = queryBuilder.eq(columnName, paramValue);
-          }
-        }
-        
-        const { data, error } = await queryBuilder;
-        if (error) throw error;
-        return { rows: data || [] };
+      if (!tableName) throw new Error("テーブル名を特定できません");
+
+      let qb = supabase.from(tableName).select("*");
+
+      if (lower.includes(" where ")) {
+        const { filters } = parseWhereEqConditions(originalQuery, params, 0);
+        filters.forEach(({ column, value }) => {
+          qb = qb.eq(column, value);
+        });
       }
+
+      const { data, error } = await qb;
+      if (error) throw error;
+      return { rows: data || [] };
     }
-    
-    // INSERT文の場合
-    if (query.toLowerCase().trim().startsWith("insert")) {
+
+    // INSERT / INSERT OR REPLACE
+    if (lower.startsWith("insert")) {
       const tableName = extractTableName(query);
-      if (tableName) {
-        // INSERT文からカラムと値を抽出（簡単な例）
-        const insertMatch = query.match(/INSERT INTO \w+ \((.+?)\) VALUES \((.+?)\)/i);
-        if (insertMatch) {
-          const columns = insertMatch[1].split(',').map(col => col.trim());
-          const values = insertMatch[2].split(',').map(val => val.trim().replace(/['"]/g, ''));
-          
-          const insertData = {};
-          columns.forEach((col, index) => {
-            if (values[index] !== '?') {
-              insertData[col] = values[index];
-            } else if (params[index] !== undefined) {
-              insertData[col] = params[index];
-            }
-          });
-          
-          const { data, error } = await supabase.from(tableName).insert(insertData).select();
-          if (error) throw error;
-          return { rows: data || [], lastID: data?.[0]?.id || null, changes: data?.length || 0 };
+      if (!tableName) throw new Error("テーブル名を特定できません");
+
+      // カラム配列を抽出
+      const colsMatch = query.match(
+        /insert\s+(?:or\s+replace\s+)?into\s+\w+\s*\(([^)]+)\)/i
+      );
+      const valsMatch = query.match(/values\s*\(([^)]+)\)/i);
+      if (!colsMatch || !valsMatch)
+        throw new Error("INSERTのカラム/値を解析できません");
+
+      const columns = colsMatch[1].split(",").map((c) => c.trim());
+      const valueTokens = valsMatch[1].split(",").map((v) => v.trim());
+      if (columns.length !== valueTokens.length)
+        throw new Error("INSERTのカラム数と値数が一致しません");
+
+      const insertData = {};
+      let p = 0;
+      for (let i = 0; i < columns.length; i++) {
+        const token = valueTokens[i];
+        if (token === "?") {
+          insertData[columns[i]] = params[p++];
+        } else {
+          insertData[columns[i]] = token.replace(/^['"]|['"]$/g, "");
         }
       }
-    }
-    
-    // UPDATE文の場合
-    if (query.toLowerCase().trim().startsWith("update")) {
-      const tableName = extractTableName(query);
-      if (tableName) {
-        // UPDATE文の処理（簡単な例）
-        const { data, error } = await supabase.from(tableName).update({}).eq("id", params[0] || 1);
+
+      // insert or replace → upsert 対応（既知テーブルのみ）
+      const isReplace = /insert\s+or\s+replace/i.test(query);
+      if (isReplace && tableName === "royalty_calculations") {
+        const { data, error } = await supabase
+          .from(tableName)
+          .upsert(insertData, {
+            onConflict: "store_id,calculation_year,calculation_month",
+          })
+          .select();
         if (error) throw error;
-        return { rows: data || [], changes: data?.length || 0 };
+        return {
+          rows: data || [],
+          lastID: data?.[0]?.id || null,
+          changes: data?.length || 0,
+        };
       }
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .insert(insertData)
+        .select();
+      if (error) throw error;
+      return {
+        rows: data || [],
+        lastID: data?.[0]?.id || null,
+        changes: data?.length || 0,
+      };
     }
-    
-    // DELETE文の場合
-    if (query.toLowerCase().trim().startsWith("delete")) {
+
+    // UPDATE
+    if (lower.startsWith("update")) {
       const tableName = extractTableName(query);
-      if (tableName) {
-        const { data, error } = await supabase.from(tableName).delete().eq("id", params[0] || 1);
-        if (error) throw error;
-        return { rows: data || [], changes: data?.length || 0 };
+      if (!tableName) throw new Error("テーブル名を特定できません");
+
+      const setMatch = query.match(/set\s+(.+?)\s+(where|$)/i);
+      if (!setMatch) throw new Error("UPDATEのSET句を解析できません");
+
+      const setClause = setMatch[1];
+      const setPairs = setClause.split(",");
+      const updateData = {};
+
+      let paramIndex = 0;
+      for (const pair of setPairs) {
+        const m = pair.match(/(\w+)\s*=\s*\?/);
+        if (m) {
+          updateData[m[1]] = params[paramIndex++];
+        } else {
+          const m2 = pair.match(/(\w+)\s*=\s*(['"])(.*?)\2/);
+          if (m2) updateData[m2[1]] = m2[3];
+        }
       }
+
+      let qb = supabase.from(tableName).update(updateData);
+
+      if (lower.includes(" where ")) {
+        const { filters, usedParams } = parseWhereEqConditions(
+          originalQuery,
+          params,
+          paramIndex
+        );
+        filters.forEach(({ column, value }) => {
+          qb = qb.eq(column, value);
+        });
+        paramIndex += usedParams;
+      }
+
+      const { data, error } = await qb.select();
+      if (error) throw error;
+      return { rows: data || [], changes: data?.length || 0 };
     }
-    
-    // その他のクエリはエラー
+
+    // DELETE
+    if (lower.startsWith("delete")) {
+      const tableName = extractTableName(query);
+      if (!tableName) throw new Error("テーブル名を特定できません");
+
+      let qb = supabase.from(tableName).delete();
+      if (lower.includes(" where ")) {
+        const { filters } = parseWhereEqConditions(originalQuery, params, 0);
+        filters.forEach(({ column, value }) => {
+          qb = qb.eq(column, value);
+        });
+      }
+
+      const { data, error } = await qb.select();
+      if (error) throw error;
+      return { rows: data || [], changes: data?.length || 0 };
+    }
+
     throw new Error(`未対応のクエリタイプ: ${query.substring(0, 50)}...`);
-    
   } catch (error) {
     console.error("Supabaseクエリ実行エラー:", error);
     throw error;
@@ -136,20 +201,44 @@ function extractTableName(query) {
   // SELECT文の場合
   let match = query.match(/from\s+(\w+)/i);
   if (match) return match[1];
-  
+
   // INSERT文の場合
-  match = query.match(/insert\s+into\s+(\w+)/i);
+  match = query.match(/insert\s+(?:or\s+replace\s+)?into\s+(\w+)/i);
   if (match) return match[1];
-  
+
   // UPDATE文の場合
   match = query.match(/update\s+(\w+)/i);
   if (match) return match[1];
-  
+
   // DELETE文の場合
   match = query.match(/delete\s+from\s+(\w+)/i);
   if (match) return match[1];
-  
+
   return null;
+}
+
+// WHERE句の単純な col = ? AND col2 = ? を解析
+function parseWhereEqConditions(query, params, startIndex) {
+  const whereMatch = query.match(/where\s+(.+?)(order\s+by|limit|$)/i);
+  const filters = [];
+  let usedParams = 0;
+  if (whereMatch) {
+    const condStr = whereMatch[1];
+    const parts = condStr.split(/\s+and\s+/i);
+    for (const part of parts) {
+      const mQ = part.match(/(\w+)\s*=\s*\?/);
+      if (mQ) {
+        filters.push({ column: mQ[1], value: params[startIndex + usedParams] });
+        usedParams += 1;
+        continue;
+      }
+      const mL = part.match(/(\w+)\s*=\s*(['"])(.*?)\2/);
+      if (mL) {
+        filters.push({ column: mL[1], value: mL[3] });
+      }
+    }
+  }
+  return { filters, usedParams };
 }
 
 // db.queryの代替メソッド
@@ -160,13 +249,13 @@ async function query(sql, params = []) {
 // db.getの代替メソッド
 async function get(sql, params = []) {
   const dbType = getDatabaseType();
-  
+
   if (dbType === "supabase") {
     const supabase = getSupabaseClient();
     if (!supabase) {
       throw new Error("Supabase接続が初期化されていません");
     }
-    
+
     try {
       const result = await executeSupabaseQuery(supabase, sql, params);
       return result.rows && result.rows.length > 0 ? result.rows[0] : null;
@@ -191,13 +280,13 @@ async function get(sql, params = []) {
 // db.runの代替メソッド
 async function run(sql, params = []) {
   const dbType = getDatabaseType();
-  
+
   if (dbType === "supabase") {
     const supabase = getSupabaseClient();
     if (!supabase) {
       throw new Error("Supabase接続が初期化されていません");
     }
-    
+
     try {
       const result = await executeSupabaseQuery(supabase, sql, params);
       return { lastID: result.lastID || null, changes: result.changes || 0 };
@@ -207,7 +296,7 @@ async function run(sql, params = []) {
     }
   } else {
     return new Promise((resolve, reject) => {
-      db.run(sql, params, function(err) {
+      db.run(sql, params, function (err) {
         if (err) {
           console.error("SQLite run実行エラー:", err);
           reject(err);
