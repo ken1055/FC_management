@@ -5,6 +5,7 @@ const {
   getSupabaseClient,
   isSupabaseConfigured,
 } = require("./config/supabase");
+const { query, get, run, all } = require("./config/database");
 
 // パスワードハッシュ化関数
 function hashPassword(password) {
@@ -292,7 +293,7 @@ async function initializePostgresDatabase() {
     // テーブルを順番に作成
     for (const sql of tables) {
       console.log("テーブル作成中:", sql.substring(0, 50) + "...");
-      await db.query(sql);
+      await query(sql);
     }
 
     // 外部キー制約を後で追加（エラーを無視）
@@ -313,7 +314,7 @@ async function initializePostgresDatabase() {
 
     for (const fkSql of foreignKeys) {
       try {
-        await db.query(fkSql);
+        await query(fkSql);
       } catch (fkError) {
         // 外部キー制約が既に存在する場合は無視
         if (fkError.code !== "42710") {
@@ -326,7 +327,7 @@ async function initializePostgresDatabase() {
     const adminPassword =
       process.env.NODE_ENV === "production" ? hashPassword("admin") : "admin";
 
-    await db.query(
+    await run(
       `INSERT INTO admins (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`,
       ["admin", adminPassword]
     );
@@ -334,7 +335,7 @@ async function initializePostgresDatabase() {
     // 既存のagenciesテーブルからstoresテーブルへのデータ移行
     console.log("既存の代理店データをFC店舗データに移行中...");
     try {
-      const existingAgencies = await db.query("SELECT * FROM agencies");
+      const existingAgencies = await query("SELECT * FROM agencies");
 
       if (existingAgencies.rows && existingAgencies.rows.length > 0) {
         console.log(
@@ -342,7 +343,7 @@ async function initializePostgresDatabase() {
         );
 
         for (const agency of existingAgencies.rows) {
-          await db.query(
+          await run(
             `INSERT INTO stores (id, name, owner_name, address, bank_info, contract_date, start_date, royalty_rate, created_at, updated_at) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
              ON CONFLICT (id) DO NOTHING`,
@@ -373,7 +374,7 @@ async function initializePostgresDatabase() {
     console.log("既存の管理者データを移行中...");
     try {
       // 既存のusersテーブルから管理者を取得
-      const existingAdmins = await db.query(
+      const existingAdmins = await query(
         "SELECT id, email, password FROM users WHERE role = 'admin'"
       );
 
@@ -383,7 +384,7 @@ async function initializePostgresDatabase() {
         );
 
         for (const admin of existingAdmins.rows) {
-          await db.query(
+          await run(
             "INSERT INTO admins (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING",
             [admin.email, admin.password]
           );
@@ -391,7 +392,7 @@ async function initializePostgresDatabase() {
         }
 
         // 移行後、usersテーブルから管理者データを削除
-        await db.query("DELETE FROM users WHERE role = 'admin'");
+        await run("DELETE FROM users WHERE role = 'admin'");
         console.log("usersテーブルから管理者データを削除完了");
       }
     } catch (migrationError) {
@@ -405,13 +406,13 @@ async function initializePostgresDatabase() {
     console.log("usersテーブルのagency_id → store_idの移行中...");
     try {
       // agency_idカラムが存在するかチェックし、存在する場合は移行
-      await db.query(
+      await run(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER"
       );
-      await db.query(
+      await run(
         "UPDATE users SET store_id = agency_id WHERE agency_id IS NOT NULL AND store_id IS NULL"
       );
-      await db.query("ALTER TABLE users DROP COLUMN IF EXISTS agency_id");
+      await run("ALTER TABLE users DROP COLUMN IF EXISTS agency_id");
       console.log("usersテーブルのカラム移行完了");
     } catch (columnError) {
       console.log("usersテーブルカラム移行スキップ:", columnError.message);
@@ -422,13 +423,13 @@ async function initializePostgresDatabase() {
     for (const table of tablesToMigrate) {
       try {
         console.log(`${table}テーブルのagency_id → store_idの移行中...`);
-        await db.query(
+        await run(
           `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS store_id INTEGER`
         );
-        await db.query(
+        await run(
           `UPDATE ${table} SET store_id = agency_id WHERE agency_id IS NOT NULL AND store_id IS NULL`
         );
-        await db.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS agency_id`);
+        await run(`ALTER TABLE ${table} DROP COLUMN IF EXISTS agency_id`);
         console.log(`${table}テーブルのカラム移行完了`);
       } catch (tableError) {
         console.log(`${table}テーブルカラム移行スキップ:`, tableError.message);
@@ -437,7 +438,7 @@ async function initializePostgresDatabase() {
 
     // usersテーブルからroleカラムを削除（PostgreSQL）
     try {
-      await db.query("ALTER TABLE users DROP COLUMN IF EXISTS role");
+      await run("ALTER TABLE users DROP COLUMN IF EXISTS role");
       console.log("usersテーブルからroleカラムを削除完了");
     } catch (alterError) {
       console.log("roleカラム削除スキップ:", alterError.message);
