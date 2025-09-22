@@ -41,11 +41,14 @@ async function executeSupabaseQuery(supabase, query, params) {
       if (tableName) {
         let queryBuilder = supabase.from(tableName).select("*");
         
-        // WHERE条件の処理（簡単な例）
+        // WHERE条件の処理
         if (query.toLowerCase().includes("where")) {
-          // パラメータに基づいて条件を追加
-          if (params.length > 0) {
-            queryBuilder = queryBuilder.eq("id", params[0]);
+          // WHERE句を解析して適切なカラムと値を設定
+          const whereMatch = query.match(/WHERE\s+(\w+)\s*=\s*\?/i);
+          if (whereMatch && params.length > 0) {
+            const columnName = whereMatch[1];
+            const paramValue = params[0];
+            queryBuilder = queryBuilder.eq(columnName, paramValue);
           }
         }
         
