@@ -19,7 +19,7 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
       g.name, 
       COUNT(ga.store_id) as agency_count
     FROM groups g 
-    LEFT JOIN group_store ga ON g.id = ga.group_id 
+    LEFT JOIN group_members ga ON g.id = ga.group_id 
     GROUP BY g.id, g.name 
     ORDER BY g.name`,
     [],
@@ -142,7 +142,7 @@ router.get("/manage/:id", requireRole(["admin"]), (req, res) => {
     db.all(
       `SELECT a.id, a.name 
        FROM stores a 
-       INNER JOIN group_store ga ON a.id = ga.store_id 
+       INNER JOIN group_members ga ON a.id = ga.store_id 
        WHERE ga.group_id = ? 
        ORDER BY a.name`,
       [groupId],
@@ -155,7 +155,7 @@ router.get("/manage/:id", requireRole(["admin"]), (req, res) => {
            FROM stores a 
            WHERE a.id NOT IN (
              SELECT ga.store_id 
-             FROM group_store ga 
+             FROM group_members ga 
              WHERE ga.group_id = ?
            ) 
            ORDER BY a.name`,
@@ -190,7 +190,7 @@ router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
 
   // 既存の関連をチェック
   db.get(
-    "SELECT * FROM group_store WHERE group_id = ? AND store_id = ?",
+    "SELECT * FROM group_members WHERE group_id = ? AND store_id = ?",
     [groupId, store_id],
     (err, existing) => {
       if (err) {
@@ -205,7 +205,7 @@ router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
 
       // 新しい関連を作成
       db.run(
-        "INSERT INTO group_store (group_id, store_id) VALUES (?, ?)",
+        "INSERT INTO group_members (group_id, store_id) VALUES (?, ?)",
         [groupId, store_id],
         function (err) {
           if (err) {
@@ -228,7 +228,7 @@ router.post(
     const { groupId, agencyId } = req.params;
 
     db.run(
-      "DELETE FROM group_store WHERE group_id = ? AND store_id = ?",
+      "DELETE FROM group_members WHERE group_id = ? AND store_id = ?",
       [groupId, agencyId],
       function (err) {
         if (err) return res.status(500).send("DBエラー");

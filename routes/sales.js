@@ -143,8 +143,8 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
       `SELECT 
           a.id, 
           a.name,
-          COUNT(s.id) as sales_count,
-          SUM(s.amount) as total_sales
+          COALESCE(COUNT(s.id), 0) as sales_count,
+          COALESCE(SUM(s.amount), 0) as total_sales
         FROM stores a 
         LEFT JOIN sales s ON a.id = s.store_id 
         GROUP BY a.id, a.name 
