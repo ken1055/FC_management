@@ -145,7 +145,7 @@ async function initializePostgresDatabase() {
   const tables = [
     // FC店舗情報テーブル（旧agencies）
     `CREATE TABLE IF NOT EXISTS stores (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       -- 店舗基本情報
       name TEXT NOT NULL,
       business_address TEXT,
@@ -179,7 +179,7 @@ async function initializePostgresDatabase() {
     )`,
     // 顧客情報管理テーブル（新規追加）
     `CREATE TABLE IF NOT EXISTS customers (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       store_id INTEGER,
       customer_code TEXT UNIQUE,
       name TEXT NOT NULL,
@@ -199,7 +199,7 @@ async function initializePostgresDatabase() {
     )`,
     // ロイヤリティ設定テーブル（新規追加）
     `CREATE TABLE IF NOT EXISTS royalty_settings (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       store_id INTEGER,
       royalty_rate DECIMAL(5,2) NOT NULL,
       effective_date DATE NOT NULL,
@@ -207,7 +207,7 @@ async function initializePostgresDatabase() {
     )`,
     // ロイヤリティ計算結果テーブル（新規追加）
     `CREATE TABLE IF NOT EXISTS royalty_calculations (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       store_id INTEGER,
       year INTEGER NOT NULL,
       month INTEGER NOT NULL,
@@ -221,40 +221,40 @@ async function initializePostgresDatabase() {
       UNIQUE(store_id, year, month)
     )`,
     `CREATE TABLE IF NOT EXISTS groups (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       name TEXT NOT NULL
     )`,
     // 管理者アカウント専用テーブル
     `CREATE TABLE IF NOT EXISTS admins (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     // 店舗アカウント専用テーブル（roleフィールドを削除）
     `CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       store_id INTEGER,
       FOREIGN KEY (store_id) REFERENCES stores(id)
     )`,
     `CREATE TABLE IF NOT EXISTS store_products (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       store_id INTEGER,
       product_name TEXT,
       product_detail TEXT,
       product_url TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS product_files (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       store_id INTEGER,
       product_name TEXT,
       file_path TEXT,
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS sales (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       store_id INTEGER,
       year INTEGER,
       month INTEGER,
@@ -272,7 +272,7 @@ async function initializePostgresDatabase() {
       PRIMARY KEY (group_id, admin_id)
     )`,
     `CREATE TABLE IF NOT EXISTS materials (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       filename TEXT NOT NULL,
       originalname TEXT NOT NULL,
       mimetype TEXT NOT NULL,
@@ -281,7 +281,7 @@ async function initializePostgresDatabase() {
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS settings (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
       key_name TEXT NOT NULL UNIQUE,
       value TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
