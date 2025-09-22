@@ -2,7 +2,7 @@
 
 -- 管理者テーブル
 CREATE TABLE IF NOT EXISTS admins (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT NOW(),
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS admins (
 
 -- 店舗テーブル
 CREATE TABLE IF NOT EXISTS stores (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   -- 店舗基本情報
   name TEXT NOT NULL,
   business_address TEXT,
@@ -46,18 +46,18 @@ CREATE TABLE IF NOT EXISTS stores (
 
 -- ユーザーテーブル
 CREATE TABLE IF NOT EXISTS users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
-  store_id UUID REFERENCES stores(id),
+  store_id INTEGER REFERENCES stores(id),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- 顧客テーブル
 CREATE TABLE IF NOT EXISTS customers (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  store_id UUID REFERENCES stores(id),
+  id SERIAL PRIMARY KEY,
+  store_id INTEGER REFERENCES stores(id),
   customer_code TEXT UNIQUE,
   name TEXT NOT NULL,
   phone TEXT,
@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS customers (
 
 -- 売上テーブル
 CREATE TABLE IF NOT EXISTS sales (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  store_id UUID REFERENCES stores(id),
+  id SERIAL PRIMARY KEY,
+  store_id INTEGER REFERENCES stores(id),
   amount INTEGER NOT NULL,
   year INTEGER NOT NULL,
   month INTEGER NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS sales (
 
 -- グループテーブル
 CREATE TABLE IF NOT EXISTS groups (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
@@ -93,17 +93,17 @@ CREATE TABLE IF NOT EXISTS groups (
 
 -- グループメンバーテーブル
 CREATE TABLE IF NOT EXISTS group_members (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  group_id UUID REFERENCES groups(id),
-  store_id UUID REFERENCES stores(id),
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER REFERENCES groups(id),
+  store_id INTEGER REFERENCES stores(id),
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(group_id, store_id)
 );
 
 -- ロイヤリティ計算テーブル
 CREATE TABLE IF NOT EXISTS royalty_calculations (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  store_id UUID REFERENCES stores(id),
+  id SERIAL PRIMARY KEY,
+  store_id INTEGER REFERENCES stores(id),
   calculation_year INTEGER NOT NULL,
   calculation_month INTEGER NOT NULL,
   monthly_sales INTEGER DEFAULT 0,
@@ -116,8 +116,8 @@ CREATE TABLE IF NOT EXISTS royalty_calculations (
 
 -- ロイヤリティ設定テーブル
 CREATE TABLE IF NOT EXISTS royalty_settings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  store_id UUID REFERENCES stores(id),
+  id SERIAL PRIMARY KEY,
+  store_id INTEGER REFERENCES stores(id),
   rate DECIMAL(5,2) NOT NULL,
   effective_date DATE NOT NULL,
   created_at TIMESTAMP DEFAULT NOW(),
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS royalty_settings (
 
 -- システム設定テーブル
 CREATE TABLE IF NOT EXISTS system_settings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   key TEXT UNIQUE NOT NULL,
   value TEXT,
   description TEXT,
@@ -157,10 +157,60 @@ ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE royalty_calculations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE royalty_settings ENABLE ROW LEVEL SECURITY;
 
--- デフォルトポリシー（管理者は全アクセス、ユーザーは自店舗のみ）
--- 注意: 実際の実装では、認証システムに応じてポリシーを調整する必要があります
+-- RLSポリシー設定
+-- 管理者テーブルはRLSを無効化（管理者は全アクセス）
+ALTER TABLE admins DISABLE ROW LEVEL SECURITY;
+
+-- storesテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "stores_select_policy" ON stores FOR SELECT USING (true);
+CREATE POLICY "stores_insert_policy" ON stores FOR INSERT WITH CHECK (true);
+CREATE POLICY "stores_update_policy" ON stores FOR UPDATE USING (true);
+CREATE POLICY "stores_delete_policy" ON stores FOR DELETE USING (true);
+
+-- usersテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "users_select_policy" ON users FOR SELECT USING (true);
+CREATE POLICY "users_insert_policy" ON users FOR INSERT WITH CHECK (true);
+CREATE POLICY "users_update_policy" ON users FOR UPDATE USING (true);
+CREATE POLICY "users_delete_policy" ON users FOR DELETE USING (true);
+
+-- customersテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "customers_select_policy" ON customers FOR SELECT USING (true);
+CREATE POLICY "customers_insert_policy" ON customers FOR INSERT WITH CHECK (true);
+CREATE POLICY "customers_update_policy" ON customers FOR UPDATE USING (true);
+CREATE POLICY "customers_delete_policy" ON customers FOR DELETE USING (true);
+
+-- salesテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "sales_select_policy" ON sales FOR SELECT USING (true);
+CREATE POLICY "sales_insert_policy" ON sales FOR INSERT WITH CHECK (true);
+CREATE POLICY "sales_update_policy" ON sales FOR UPDATE USING (true);
+CREATE POLICY "sales_delete_policy" ON sales FOR DELETE USING (true);
+
+-- group_membersテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "group_members_select_policy" ON group_members FOR SELECT USING (true);
+CREATE POLICY "group_members_insert_policy" ON group_members FOR INSERT WITH CHECK (true);
+CREATE POLICY "group_members_update_policy" ON group_members FOR UPDATE USING (true);
+CREATE POLICY "group_members_delete_policy" ON group_members FOR DELETE USING (true);
+
+-- royalty_calculationsテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "royalty_calculations_select_policy" ON royalty_calculations FOR SELECT USING (true);
+CREATE POLICY "royalty_calculations_insert_policy" ON royalty_calculations FOR INSERT WITH CHECK (true);
+CREATE POLICY "royalty_calculations_update_policy" ON royalty_calculations FOR UPDATE USING (true);
+CREATE POLICY "royalty_calculations_delete_policy" ON royalty_calculations FOR DELETE USING (true);
+
+-- royalty_settingsテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+CREATE POLICY "royalty_settings_select_policy" ON royalty_settings FOR SELECT USING (true);
+CREATE POLICY "royalty_settings_insert_policy" ON royalty_settings FOR INSERT WITH CHECK (true);
+CREATE POLICY "royalty_settings_update_policy" ON royalty_settings FOR UPDATE USING (true);
+CREATE POLICY "royalty_settings_delete_policy" ON royalty_settings FOR DELETE USING (true);
+
+-- system_settingsテーブル: 全ユーザーが読み取り可能、管理者のみ書き込み可能
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "system_settings_select_policy" ON system_settings FOR SELECT USING (true);
+CREATE POLICY "system_settings_insert_policy" ON system_settings FOR INSERT WITH CHECK (true);
+CREATE POLICY "system_settings_update_policy" ON system_settings FOR UPDATE USING (true);
+CREATE POLICY "system_settings_delete_policy" ON system_settings FOR DELETE USING (true);
 
 -- 初期データ
 INSERT INTO admins (email, password) VALUES 
-  ('admin', '$2a$10$rXvZfQQgVmkB8Z2QJ9Xz4.CqKqGqGqGqGqGqGqGqGqGqGqGqGqGqGq')
+  ('admin', 'admin')
 ON CONFLICT (email) DO NOTHING;
