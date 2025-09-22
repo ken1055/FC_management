@@ -866,11 +866,14 @@ function renderAgenciesList(
         isPostgres
           ? "STRING_AGG(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ' ORDER BY ap.product_name) as product_names"
           : "GROUP_CONCAT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ') as product_names"
-      }
+      },
+      COALESCE(COUNT(s.id), 0) as sales_count,
+      COALESCE(SUM(s.amount), 0) as total_sales
     FROM stores a 
-    LEFT JOIN group_store ga ON a.id = ga.store_id 
+    LEFT JOIN group_members ga ON a.id = ga.store_id 
     LEFT JOIN groups g ON ga.group_id = g.id
     LEFT JOIN store_products ap ON a.id = ap.store_id
+    LEFT JOIN sales s ON a.id = s.store_id
   `;
     let params = [];
     let conditions = [];
@@ -1407,7 +1410,7 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
               },
               {
                 name: "グループ所属",
-                query: "DELETE FROM group_store WHERE store_id = ?",
+                query: "DELETE FROM group_members WHERE store_id = ?",
               },
               {
                 name: "取り扱い商品",

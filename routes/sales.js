@@ -45,9 +45,7 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
 
   // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
   const processedAgencyId =
-    store_id && store_id.toString().trim() !== ""
-      ? parseInt(store_id)
-      : null;
+    store_id && store_id.toString().trim() !== "" ? parseInt(store_id) : null;
   const processedYear =
     year && year.toString().trim() !== "" ? parseInt(year) : null;
   const processedMonth =
@@ -168,40 +166,36 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
   const agencyId = req.params.id;
 
   // 代理店情報を取得
-  db.get(
-    "SELECT name FROM stores WHERE id = ?",
-    [agencyId],
-    (err, agency) => {
-      if (err || !agency) return res.status(404).send("代理店が見つかりません");
+  db.get("SELECT name FROM stores WHERE id = ?", [agencyId], (err, agency) => {
+    if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
-      // 売上データを取得
-      db.all(
-        "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
-        [agencyId],
-        (err, sales) => {
-          if (err) return res.status(500).send("DBエラー");
+    // 売上データを取得
+    db.all(
+      "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
+      [agencyId],
+      (err, sales) => {
+        if (err) return res.status(500).send("DBエラー");
 
-          // 月間売上推移データを作成
-          const chartData = sales.reverse().map((s) => ({
-            period: `${s.year}年${s.month}月`,
-            amount: s.amount,
-          }));
+        // 月間売上推移データを作成
+        const chartData = sales.reverse().map((s) => ({
+          period: `${s.year}年${s.month}月`,
+          amount: s.amount,
+        }));
 
-          res.render("sales_list", {
-            sales: sales.reverse(),
-            chartData: JSON.stringify(chartData),
-            agencyName: agency.name,
-            agencyId: agencyId,
-            groups: [],
-            selectedGroupId: null,
-            session: req.session,
-            title: `${agency.name}の売上管理`,
-            isAdmin: true,
-          });
-        }
-      );
-    }
-  );
+        res.render("sales_list", {
+          sales: sales.reverse(),
+          chartData: JSON.stringify(chartData),
+          agencyName: agency.name,
+          agencyId: agencyId,
+          groups: [],
+          selectedGroupId: null,
+          session: req.session,
+          title: `${agency.name}の売上管理`,
+          isAdmin: true,
+        });
+      }
+    );
+  });
 });
 
 // 売上登録フォーム
@@ -296,22 +290,18 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
           );
         } else {
           // 管理者は代理店一覧を取得
-          db.all(
-            "SELECT * FROM stores ORDER BY name",
-            [],
-            (err, stores) => {
-              if (err) return res.status(500).send("DBエラー");
+          db.all("SELECT * FROM stores ORDER BY name", [], (err, stores) => {
+            if (err) return res.status(500).send("DBエラー");
 
-              return res.render("sales_form", {
-                session: req.session,
-                stores,
-                agencyName: null,
-                title: "売上登録",
-                sale: null, // sale変数を追加
-                error: "同じ年月の売上データが既に存在します",
-              });
-            }
-          );
+            return res.render("sales_form", {
+              session: req.session,
+              stores,
+              agencyName: null,
+              title: "売上登録",
+              sale: null, // sale変数を追加
+              error: "同じ年月の売上データが既に存在します",
+            });
+          });
         }
         return; // 重複データが存在する場合は、ここで処理を終了
       }

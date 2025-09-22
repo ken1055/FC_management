@@ -260,10 +260,10 @@ async function initializePostgresDatabase() {
       month INTEGER,
       amount INTEGER
     )`,
-    `CREATE TABLE IF NOT EXISTS group_store (
-      group_id INTEGER,
-      store_id INTEGER,
-      PRIMARY KEY (group_id, store_id),
+    `CREATE TABLE IF NOT EXISTS group_members (
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      group_id INTEGER NOT NULL,
+      store_id INTEGER NOT NULL,
       UNIQUE (group_id, store_id)
     )`,
     `CREATE TABLE IF NOT EXISTS group_admin (
@@ -305,8 +305,8 @@ async function initializePostgresDatabase() {
       `ALTER TABLE store_products ADD CONSTRAINT fk_store_products_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
       `ALTER TABLE product_files ADD CONSTRAINT fk_product_files_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
       `ALTER TABLE sales ADD CONSTRAINT fk_sales_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
-      `ALTER TABLE group_store ADD CONSTRAINT fk_group_store_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
-      `ALTER TABLE group_store ADD CONSTRAINT fk_group_store_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
+      `ALTER TABLE group_members ADD CONSTRAINT fk_group_members_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
+      `ALTER TABLE group_members ADD CONSTRAINT fk_group_members_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
       `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_group FOREIGN KEY (group_id) REFERENCES groups(id)`,
       `ALTER TABLE group_admin ADD CONSTRAINT fk_group_admin_admin FOREIGN KEY (admin_id) REFERENCES admins(id)`,
       `ALTER TABLE materials ADD CONSTRAINT fk_materials_store FOREIGN KEY (store_id) REFERENCES stores(id)`,
