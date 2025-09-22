@@ -29,27 +29,86 @@ async function executeQuery(query, params = []) {
 
 // Supabaseクエリ実行
 async function executeSupabaseQuery(supabase, query, params) {
-  // SQLクエリをSupabaseのクエリビルダーに変換
-  // この部分は具体的なクエリに応じて実装
   console.log("Supabaseクエリ実行:", query, params);
 
-  // 例: SELECT文の場合
-  if (query.toLowerCase().includes("select")) {
-    const tableName = extractTableName(query);
-    let queryBuilder = supabase.from(tableName).select("*");
-
-    // WHERE条件の処理
-    if (query.toLowerCase().includes("where")) {
-      // 簡単な例 - 実際はより複雑な解析が必要
-      queryBuilder = queryBuilder.eq("id", params[0]);
+  try {
+    // Supabaseでは生のSQLクエリを実行するためにrpc関数を使用
+    // ただし、Supabaseの制限により、複雑なクエリは制限される場合がある
+    
+    // 簡単なSELECT文の場合
+    if (query.toLowerCase().trim().startsWith("select")) {
+      const tableName = extractTableName(query);
+      if (tableName) {
+        let queryBuilder = supabase.from(tableName).select("*");
+        
+        // WHERE条件の処理（簡単な例）
+        if (query.toLowerCase().includes("where")) {
+          // パラメータに基づいて条件を追加
+          if (params.length > 0) {
+            queryBuilder = queryBuilder.eq("id", params[0]);
+          }
+        }
+        
+        const { data, error } = await queryBuilder;
+        if (error) throw error;
+        return { rows: data || [] };
+      }
     }
-
-    const { data, error } = await queryBuilder;
-    if (error) throw error;
-    return data;
+    
+    // INSERT文の場合
+    if (query.toLowerCase().trim().startsWith("insert")) {
+      const tableName = extractTableName(query);
+      if (tableName) {
+        // INSERT文からカラムと値を抽出（簡単な例）
+        const insertMatch = query.match(/INSERT INTO \w+ \((.+?)\) VALUES \((.+?)\)/i);
+        if (insertMatch) {
+          const columns = insertMatch[1].split(',').map(col => col.trim());
+          const values = insertMatch[2].split(',').map(val => val.trim().replace(/['"]/g, ''));
+          
+          const insertData = {};
+          columns.forEach((col, index) => {
+            if (values[index] !== '?') {
+              insertData[col] = values[index];
+            } else if (params[index] !== undefined) {
+              insertData[col] = params[index];
+            }
+          });
+          
+          const { data, error } = await supabase.from(tableName).insert(insertData).select();
+          if (error) throw error;
+          return { rows: data || [], lastID: data?.[0]?.id || null, changes: data?.length || 0 };
+        }
+      }
+    }
+    
+    // UPDATE文の場合
+    if (query.toLowerCase().trim().startsWith("update")) {
+      const tableName = extractTableName(query);
+      if (tableName) {
+        // UPDATE文の処理（簡単な例）
+        const { data, error } = await supabase.from(tableName).update({}).eq("id", params[0] || 1);
+        if (error) throw error;
+        return { rows: data || [], changes: data?.length || 0 };
+      }
+    }
+    
+    // DELETE文の場合
+    if (query.toLowerCase().trim().startsWith("delete")) {
+      const tableName = extractTableName(query);
+      if (tableName) {
+        const { data, error } = await supabase.from(tableName).delete().eq("id", params[0] || 1);
+        if (error) throw error;
+        return { rows: data || [], changes: data?.length || 0 };
+      }
+    }
+    
+    // その他のクエリはエラー
+    throw new Error(`未対応のクエリタイプ: ${query.substring(0, 50)}...`);
+    
+  } catch (error) {
+    console.error("Supabaseクエリ実行エラー:", error);
+    throw error;
   }
-
-  throw new Error("未対応のクエリタイプ");
 }
 
 // SQLiteクエリ実行
@@ -69,10 +128,25 @@ function executeSQLiteQuery(query, params) {
   });
 }
 
-// テーブル名を抽出する簡単な関数
+// テーブル名を抽出する関数
 function extractTableName(query) {
-  const match = query.match(/from\s+(\w+)/i);
-  return match ? match[1] : null;
+  // SELECT文の場合
+  let match = query.match(/from\s+(\w+)/i);
+  if (match) return match[1];
+  
+  // INSERT文の場合
+  match = query.match(/insert\s+into\s+(\w+)/i);
+  if (match) return match[1];
+  
+  // UPDATE文の場合
+  match = query.match(/update\s+(\w+)/i);
+  if (match) return match[1];
+  
+  // DELETE文の場合
+  match = query.match(/delete\s+from\s+(\w+)/i);
+  if (match) return match[1];
+  
+  return null;
 }
 
 // db.queryの代替メソッド
@@ -91,18 +165,8 @@ async function get(sql, params = []) {
     }
     
     try {
-      const tableName = extractTableName(sql);
-      let queryBuilder = supabase.from(tableName).select("*");
-      
-      // WHERE条件の処理
-      if (sql.toLowerCase().includes("where")) {
-        // 簡単な例 - 実際はより複雑な解析が必要
-        queryBuilder = queryBuilder.eq("id", params[0]);
-      }
-      
-      const { data, error } = await queryBuilder;
-      if (error) throw error;
-      return data && data.length > 0 ? data[0] : null;
+      const result = await executeSupabaseQuery(supabase, sql, params);
+      return result.rows && result.rows.length > 0 ? result.rows[0] : null;
     } catch (error) {
       console.error("Supabase get実行エラー:", error);
       throw error;
@@ -132,23 +196,8 @@ async function run(sql, params = []) {
     }
     
     try {
-      const tableName = extractTableName(sql);
-      
-      if (sql.toLowerCase().includes("insert")) {
-        const { data, error } = await supabase.from(tableName).insert(params);
-        if (error) throw error;
-        return { lastID: data?.insertId || null, changes: data?.affectedRows || 0 };
-      } else if (sql.toLowerCase().includes("update")) {
-        const { data, error } = await supabase.from(tableName).update(params).eq("id", params[0]);
-        if (error) throw error;
-        return { lastID: null, changes: data?.affectedRows || 0 };
-      } else if (sql.toLowerCase().includes("delete")) {
-        const { data, error } = await supabase.from(tableName).delete().eq("id", params[0]);
-        if (error) throw error;
-        return { lastID: null, changes: data?.affectedRows || 0 };
-      }
-      
-      throw new Error("未対応のクエリタイプ");
+      const result = await executeSupabaseQuery(supabase, sql, params);
+      return { lastID: result.lastID || null, changes: result.changes || 0 };
     } catch (error) {
       console.error("Supabase run実行エラー:", error);
       throw error;

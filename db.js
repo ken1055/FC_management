@@ -1098,16 +1098,11 @@ const dbWrapper = {
     waitForInitialization(async (err) => {
       if (err) return callback(err);
 
-      if (isPostgres) {
-        try {
-          const convertedSql = convertSqlToPostgres(sql);
-          const result = await db.query(convertedSql, params);
-          callback(null, result.rows[0] || null);
-        } catch (error) {
-          callback(error);
-        }
-      } else {
-        db.get(sql, params, callback);
+      try {
+        const result = await get(sql, params);
+        callback(null, result);
+      } catch (error) {
+        callback(error);
       }
     });
   },
@@ -1116,43 +1111,17 @@ const dbWrapper = {
     waitForInitialization(async (err) => {
       if (err) return callback(err);
 
-      if (isPostgres) {
-        try {
-          let convertedSql = convertSqlToPostgres(sql);
-
-          // INSERT文の場合はRETURNING idを追加（idカラムが存在するテーブルのみ）
-          if (convertedSql.toLowerCase().includes("insert into")) {
-            // idカラムが存在しないテーブルのリスト
-            const tablesWithoutId = [
-              "group_agency",
-              "group_admin",
-              "agency_products",
-            ];
-
-            // テーブル名を抽出
-            const tableMatch = convertedSql.match(/insert\s+into\s+(\w+)/i);
-            const tableName = tableMatch ? tableMatch[1] : "";
-
-            // idカラムが存在するテーブルのみRETURNING idを追加
-            if (!tablesWithoutId.includes(tableName)) {
-              convertedSql += " RETURNING id";
-            }
-          }
-
-          const result = await db.query(convertedSql, params);
-
-          // SQLiteのthis.lastIDを模倣
-          const mockThis = {
-            lastID:
-              result.rows[0] && result.rows[0].id ? result.rows[0].id : null,
-            changes: result.rowCount,
-          };
-          callback.call(mockThis, null);
-        } catch (error) {
-          callback(error);
-        }
-      } else {
-        db.run(sql, params, callback);
+      try {
+        const result = await run(sql, params);
+        
+        // SQLiteのthis.lastIDを模倣
+        const mockThis = {
+          lastID: result.lastID,
+          changes: result.changes,
+        };
+        callback.call(mockThis, null);
+      } catch (error) {
+        callback(error);
       }
     });
   },
@@ -1161,16 +1130,11 @@ const dbWrapper = {
     waitForInitialization(async (err) => {
       if (err) return callback(err);
 
-      if (isPostgres) {
-        try {
-          const convertedSql = convertSqlToPostgres(sql);
-          const result = await db.query(convertedSql, params);
-          callback(null, result.rows);
-        } catch (error) {
-          callback(error);
-        }
-      } else {
-        db.all(sql, params, callback);
+      try {
+        const result = await query(sql, params);
+        callback(null, result.rows);
+      } catch (error) {
+        callback(error);
       }
     });
   },
