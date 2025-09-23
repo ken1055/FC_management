@@ -255,21 +255,13 @@ router.post("/calculate", requireAdmin, (req, res) => {
 
     // 各店舗のロイヤリティを計算
     salesData.forEach((sale) => {
-      // その店舗の有効なロイヤリティ設定を取得
-      const royaltyQuery = `
-        SELECT royalty_rate
-        FROM royalty_settings
-        WHERE store_id = ? AND effective_date <= ?
-        ORDER BY effective_date DESC
-        LIMIT 1
-      `;
-
-      const targetDate = `${year}-${String(month).padStart(2, "0")}-01`;
+      // 店舗テーブルのロイヤリティ率を参照
+      const royaltyQuery = `SELECT royalty_rate FROM stores WHERE id = ?`;
 
       db.get(
         royaltyQuery,
-        [sale.store_id, targetDate],
-        (err, royaltySetting) => {
+        [sale.store_id],
+        (err, storeRow) => {
           if (err) {
             console.error("ロイヤリティ設定取得エラー:", err);
             errorCount++;
@@ -277,10 +269,11 @@ router.post("/calculate", requireAdmin, (req, res) => {
             return;
           }
 
-          // ロイヤリティ設定がない場合はデフォルト率を使用
-          const royaltyRate = royaltySetting
-            ? royaltySetting.royalty_rate
-            : 5.0;
+          // 店舗設定がない/空の場合はデフォルト率5%
+          const royaltyRate =
+            storeRow && storeRow.royalty_rate != null && storeRow.royalty_rate !== ''
+              ? parseFloat(storeRow.royalty_rate)
+              : 5.0;
           const royaltyAmount = Math.round(
             sale.total_sales * (royaltyRate / 100)
           );

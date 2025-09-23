@@ -74,7 +74,7 @@ async function executeSupabaseQuery(supabase, query, params) {
 
       const { data: stores, error: storesErr } = await supabase
         .from("stores")
-        .select("id,name")
+        .select("id,name,royalty_rate")
         .in("id", storeIds);
       if (storesErr) throw storesErr;
       const idToName = new Map((stores || []).map((s) => [s.id, s.name]));
@@ -85,6 +85,7 @@ async function executeSupabaseQuery(supabase, query, params) {
         month: targetMonth,
         total_sales: byStore.get(sid) || 0,
         store_name: idToName.get(sid) || null,
+        royalty_rate: (stores || []).find((s) => s.id === sid)?.royalty_rate ?? null,
       }));
 
       return { rows };
