@@ -921,6 +921,24 @@ function renderAgenciesList(
         return res.status(500).send("DBエラー: " + err.message);
       }
 
+      if (stores && stores.length > 0) {
+        const sample = stores[0];
+        console.log("stores_list 表示用フィールド確認:", Object.keys(sample));
+        console.log(
+          "sample:",
+          {
+            id: sample.id,
+            name: sample.name,
+            manager_name: sample.manager_name,
+            business_address: sample.business_address,
+            main_phone: sample.main_phone,
+            contract_type: sample.contract_type,
+            contract_start_date: sample.contract_start_date,
+            royalty_rate: sample.royalty_rate,
+          }
+        );
+      }
+
       console.log("代理店一覧取得完了:", stores.length, "件");
 
       res.render("stores_list", {
@@ -1288,9 +1306,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
 
   // データ処理: 空文字列をNULLに変換
   const processedRoyaltyRate =
-    royalty_rate && royalty_rate.trim() !== ""
-      ? parseFloat(royalty_rate)
-      : 5.0;
+    royalty_rate && royalty_rate.trim() !== "" ? parseFloat(royalty_rate) : 5.0;
   const processedContractStartDate =
     contract_start_date && contract_start_date.trim() !== ""
       ? contract_start_date
@@ -1307,13 +1323,28 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
       representative_gmail=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
-      name, business_address, main_phone, manager_name,
-      mobile_phone, representative_email, contract_type,
-      processedContractStartDate, processedRoyaltyRate, invoice_number,
-      bank_name, branch_name, account_type, account_number,
-      account_holder, license_status || 'none', license_type,
-      license_number, license_file_path, line_official_id,
-      representative_gmail, req.params.id
+      name,
+      business_address,
+      main_phone,
+      manager_name,
+      mobile_phone,
+      representative_email,
+      contract_type,
+      processedContractStartDate,
+      processedRoyaltyRate,
+      invoice_number,
+      bank_name,
+      branch_name,
+      account_type,
+      account_number,
+      account_holder,
+      license_status || "none",
+      license_type,
+      license_number,
+      license_file_path,
+      line_official_id,
+      representative_gmail,
+      req.params.id,
     ],
     function (err) {
       if (err) {
