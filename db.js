@@ -922,7 +922,9 @@ function initializeLocalDatabase() {
              SELECT group_id, store_id FROM group_store`,
             function (e) {
               if (!e && this.changes > 0) {
-                console.log(`group_store から group_members へ ${this.changes} 件を移行しました`);
+                console.log(
+                  `group_store から group_members へ ${this.changes} 件を移行しました`
+                );
               }
             }
           );

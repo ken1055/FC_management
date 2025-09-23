@@ -133,6 +133,12 @@ CREATE TABLE IF NOT EXISTS system_settings (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS group_members (
+  id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  UNIQUE (group_id, store_id)
+);
 
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_stores_status ON stores(status);

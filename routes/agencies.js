@@ -924,19 +924,16 @@ function renderAgenciesList(
       if (stores && stores.length > 0) {
         const sample = stores[0];
         console.log("stores_list 表示用フィールド確認:", Object.keys(sample));
-        console.log(
-          "sample:",
-          {
-            id: sample.id,
-            name: sample.name,
-            manager_name: sample.manager_name,
-            business_address: sample.business_address,
-            main_phone: sample.main_phone,
-            contract_type: sample.contract_type,
-            contract_start_date: sample.contract_start_date,
-            royalty_rate: sample.royalty_rate,
-          }
-        );
+        console.log("sample:", {
+          id: sample.id,
+          name: sample.name,
+          manager_name: sample.manager_name,
+          business_address: sample.business_address,
+          main_phone: sample.main_phone,
+          contract_type: sample.contract_type,
+          contract_start_date: sample.contract_start_date,
+          royalty_rate: sample.royalty_rate,
+        });
       }
 
       console.log("代理店一覧取得完了:", stores.length, "件");

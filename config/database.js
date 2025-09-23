@@ -77,6 +77,27 @@ async function executeSupabaseQuery(supabase, query, params) {
         .select("id,name,royalty_rate")
         .in("id", storeIds);
       if (storesErr) throw storesErr;
+
+      // ロイヤリティ設定テーブルから最新の設定を取得
+      const { data: royaltySettings, error: settingsErr } = await supabase
+        .from("royalty_settings")
+        .select("store_id,rate,effective_date")
+        .in("store_id", storeIds)
+        .lte(
+          "effective_date",
+          `${targetYear}-${targetMonth.toString().padStart(2, "0")}-01`
+        )
+        .order("effective_date", { ascending: false });
+      if (settingsErr) throw settingsErr;
+
+      // 店舗ごとの最新のロイヤリティ設定を取得
+      const latestSettings = new Map();
+      for (const setting of royaltySettings || []) {
+        if (!latestSettings.has(setting.store_id)) {
+          latestSettings.set(setting.store_id, setting.rate);
+        }
+      }
+
       const idToName = new Map((stores || []).map((s) => [s.id, s.name]));
 
       const rows = storeIds.map((sid) => ({
@@ -86,7 +107,9 @@ async function executeSupabaseQuery(supabase, query, params) {
         total_sales: byStore.get(sid) || 0,
         store_name: idToName.get(sid) || null,
         royalty_rate:
-          (stores || []).find((s) => s.id === sid)?.royalty_rate ?? null,
+          latestSettings.get(sid) ??
+          (stores || []).find((s) => s.id === sid)?.royalty_rate ??
+          null,
       }));
 
       return { rows };
@@ -133,7 +156,11 @@ async function executeSupabaseQuery(supabase, query, params) {
           return an.localeCompare(bn);
         });
 
-      console.log("ロイヤリティ設定JOINエミュレーション完了:", rows.length, "件");
+      console.log(
+        "ロイヤリティ設定JOINエミュレーション完了:",
+        rows.length,
+        "件"
+      );
       return { rows };
     }
 
