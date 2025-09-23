@@ -395,7 +395,7 @@ router.post("/create", requireAuth, (req, res) => {
       INSERT INTO customers (
         store_id, customer_code, name, kana, email, phone, 
         address, birth_date, gender, notes, registration_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -409,6 +409,7 @@ router.post("/create", requireAuth, (req, res) => {
       birth_date || null,
       gender || null,
       notes || null,
+      new Date().toISOString().slice(0, 10),
     ];
 
     db.run(query, params, function (err) {

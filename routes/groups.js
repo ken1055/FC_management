@@ -112,7 +112,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
 router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
   // まず関連する代理店の割り当てを削除
   db.run(
-    "DELETE FROM group_store WHERE group_id = ?",
+    "DELETE FROM group_members WHERE group_id = ?",
     [req.params.id],
     (err) => {
       if (err) return res.status(500).send("DBエラー");
