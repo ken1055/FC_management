@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const { isSupabaseConfigured } = require("../config/database");
 
 // 認証チェック関数
 function requireAuth(req, res, next) {
@@ -391,26 +392,47 @@ router.post("/create", requireAuth, (req, res) => {
   }
 
   function insertCustomer() {
-    const query = `
+    const useSupabase = isSupabaseConfigured();
+    const query = useSupabase
+      ? `
+      INSERT INTO customers (
+        store_id, customer_code, name, kana, email, phone,
+        address, birth_date, notes, registration_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+      : `
       INSERT INTO customers (
         store_id, customer_code, name, kana, email, phone, 
         address, birth_date, gender, notes, registration_date
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    const params = [
-      finalStoreId,
-      customer_code || null,
-      name,
-      kana || null,
-      email || null,
-      phone || null,
-      address || null,
-      birth_date || null,
-      gender || null,
-      notes || null,
-      new Date().toISOString().slice(0, 10),
-    ];
+    const params = isSupabaseConfigured()
+      ? [
+          finalStoreId,
+          customer_code || null,
+          name,
+          kana || null,
+          email || null,
+          phone || null,
+          address || null,
+          birth_date || null,
+          notes || null,
+          new Date().toISOString().slice(0, 10),
+        ]
+      : [
+          finalStoreId,
+          customer_code || null,
+          name,
+          kana || null,
+          email || null,
+          phone || null,
+          address || null,
+          birth_date || null,
+          gender || null,
+          notes || null,
+          new Date().toISOString().slice(0, 10),
+        ];
 
     db.run(query, params, function (err) {
       if (err) {
@@ -510,7 +532,16 @@ router.post("/update/:id", requireAuth, (req, res) => {
     }
 
     function updateCustomer() {
-      const query = `
+    const useSupabase = isSupabaseConfigured();
+    const query = useSupabase
+      ? `
+        UPDATE customers SET 
+          store_id = ?, customer_code = ?, name = ?, kana = ?, 
+          email = ?, phone = ?, address = ?, birth_date = ?, 
+          notes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `
+      : `
         UPDATE customers SET 
           store_id = ?, customer_code = ?, name = ?, kana = ?, 
           email = ?, phone = ?, address = ?, birth_date = ?, 
@@ -518,19 +549,32 @@ router.post("/update/:id", requireAuth, (req, res) => {
         WHERE id = ?
       `;
 
-      const params = [
-        finalStoreId,
-        customer_code || null,
-        name,
-        kana || null,
-        email || null,
-        phone || null,
-        address || null,
-        birth_date || null,
-        gender || null,
-        notes || null,
-        customerId,
-      ];
+    const params = isSupabaseConfigured()
+      ? [
+          finalStoreId,
+          customer_code || null,
+          name,
+          kana || null,
+          email || null,
+          phone || null,
+          address || null,
+          birth_date || null,
+          notes || null,
+          customerId,
+        ]
+      : [
+          finalStoreId,
+          customer_code || null,
+          name,
+          kana || null,
+          email || null,
+          phone || null,
+          address || null,
+          birth_date || null,
+          gender || null,
+          notes || null,
+          customerId,
+        ];
 
       db.run(query, params, function (err) {
         if (err) {
