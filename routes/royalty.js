@@ -256,60 +256,72 @@ router.post("/calculate", requireAdmin, (req, res) => {
 
     // 各店舗のロイヤリティを計算
     salesData.forEach((sale) => {
-      const royaltyRate =
-        sale.royalty_rate != null && sale.royalty_rate !== ""
-          ? parseFloat(sale.royalty_rate)
-          : 5.0;
-      const royaltyAmount = Math.round(
-        sale.total_sales * (royaltyRate / 100)
-      );
+      // JOINで取れた率を優先。不正/未設定なら店舗テーブルで再取得→最終的に5%へフォールバック
+      const hasJoinRate =
+        sale.royalty_rate != null && sale.royalty_rate !== "" && !isNaN(parseFloat(sale.royalty_rate));
 
-      // ロイヤリティ計算結果を保存
-      const insertQuery = `
-        INSERT OR REPLACE INTO royalty_calculations 
-        (store_id, calculation_year, calculation_month, monthly_sales, royalty_rate, royalty_amount, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'calculated')
-      `;
+      const persist = (finalRate) => {
+        const usedRate = finalRate != null ? finalRate : 5.0;
+        const royaltyAmount = Math.round(sale.total_sales * (usedRate / 100));
 
-      db.run(
-        insertQuery,
-        [
-          sale.store_id,
-          year,
-          month,
-          sale.total_sales,
-          royaltyRate,
-          royaltyAmount,
-        ],
-        function (err) {
-          if (err) {
-            console.error("ロイヤリティ計算保存エラー:", err);
-            errorCount++;
-            calculationResults.push({
-              store_id: sale.store_id,
-              store_name: sale.store_name || `店舗ID ${sale.store_id}`,
-              success: false,
-              error: err.message,
-            });
-          } else {
-            processedCount++;
-            calculationResults.push({
-              store_id: sale.store_id,
-              store_name: sale.store_name || `店舗ID ${sale.store_id}`,
-              success: true,
-              sales: sale.total_sales,
-              royalty_rate: royaltyRate,
-              royalty_amount: royaltyAmount,
-            });
-            console.log(
-              `店舗「${
-                sale.store_name || sale.store_id
-              }」のロイヤリティ計算完了: 売上¥${sale.total_sales.toLocaleString()} → ロイヤリティ¥${royaltyAmount.toLocaleString()} (${royaltyRate}%)`
-            );
+        const insertQuery = `
+          INSERT OR REPLACE INTO royalty_calculations 
+          (store_id, calculation_year, calculation_month, monthly_sales, royalty_rate, royalty_amount, status)
+          VALUES (?, ?, ?, ?, ?, ?, 'calculated')
+        `;
+
+        db.run(
+          insertQuery,
+          [sale.store_id, year, month, sale.total_sales, usedRate, royaltyAmount],
+          function (err) {
+            if (err) {
+              console.error("ロイヤリティ計算保存エラー:", err);
+              errorCount++;
+              calculationResults.push({
+                store_id: sale.store_id,
+                store_name: sale.store_name || `店舗ID ${sale.store_id}`,
+                success: false,
+                error: err.message,
+              });
+            } else {
+              processedCount++;
+              calculationResults.push({
+                store_id: sale.store_id,
+                store_name: sale.store_name || `店舗ID ${sale.store_id}`,
+                success: true,
+                sales: sale.total_sales,
+                royalty_rate: usedRate,
+                royalty_amount: royaltyAmount,
+              });
+              console.log(
+                `店舗「${sale.store_name || sale.store_id}」 rate=${usedRate}% sales=¥${sale.total_sales.toLocaleString()} royalty=¥${royaltyAmount.toLocaleString()}`
+              );
+            }
+            checkCompletion();
           }
-          checkCompletion();
-        }
-      );
+        );
+      };
+
+      if (hasJoinRate) {
+        persist(parseFloat(sale.royalty_rate));
+      } else {
+        db.get(
+          "SELECT royalty_rate FROM stores WHERE id = ?",
+          [sale.store_id],
+          (err, row) => {
+            if (err) {
+              console.error("ロイヤリティ率フォールバック取得エラー:", err);
+              persist(null);
+              return;
+            }
+            const rate =
+              row && row.royalty_rate != null && row.royalty_rate !== "" && !isNaN(parseFloat(row.royalty_rate))
+                ? parseFloat(row.royalty_rate)
+                : null;
+            persist(rate);
+          }
+        );
+      }
     });
 
     function checkCompletion() {
