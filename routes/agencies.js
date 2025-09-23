@@ -1259,98 +1259,72 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
   const { isSupabaseConfigured } = require("../config/database");
   const {
     name,
-    age,
-    address,
-    bank_info,
-    experience_years,
-    contract_date,
-    start_date,
-    product_names,
-    product_details,
-    product_urls,
-    products, // 旧形式との互換性のため残す
+    // 店舗基本情報
+    business_address,
+    main_phone,
+    manager_name,
+    mobile_phone,
+    representative_email,
+    // 契約基本情報
+    contract_type,
+    contract_start_date,
+    royalty_rate,
+    // 請求基本情報
+    invoice_number,
+    bank_name,
+    branch_name,
+    account_type,
+    account_number,
+    account_holder,
+    // 許認可情報
+    license_status,
+    license_type,
+    license_number,
+    license_file_path,
+    // 連携ID
+    line_official_id,
+    representative_gmail,
   } = req.body;
 
-  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
-  const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
-  const processedExperienceYears =
-    experience_years && experience_years.trim() !== ""
-      ? parseInt(experience_years)
+  // データ処理: 空文字列をNULLに変換
+  const processedRoyaltyRate =
+    royalty_rate && royalty_rate.trim() !== ""
+      ? parseFloat(royalty_rate)
+      : 5.0;
+  const processedContractStartDate =
+    contract_start_date && contract_start_date.trim() !== ""
+      ? contract_start_date
       : null;
-  const processedContractDate =
-    contract_date && contract_date.trim() !== "" ? contract_date : null;
-  const processedStartDate =
-    start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
-    [name, address, processedContractDate, req.params.id],
+    `UPDATE stores SET 
+      name=?, business_address=?, main_phone=?, manager_name=?, 
+      mobile_phone=?, representative_email=?, contract_type=?, 
+      contract_start_date=?, royalty_rate=?, invoice_number=?, 
+      bank_name=?, branch_name=?, account_type=?, account_number=?, 
+      account_holder=?, license_status=?, license_type=?, 
+      license_number=?, license_file_path=?, line_official_id=?, 
+      representative_gmail=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id=?`,
+    [
+      name, business_address, main_phone, manager_name,
+      mobile_phone, representative_email, contract_type,
+      processedContractStartDate, processedRoyaltyRate, invoice_number,
+      bank_name, branch_name, account_type, account_number,
+      account_holder, license_status || 'none', license_type,
+      license_number, license_file_path, line_official_id,
+      representative_gmail, req.params.id
+    ],
     function (err) {
-      if (err) return res.status(500).send("DBエラー");
-
-      // Supabase環境では store_products を扱わない
-      if (isSupabaseConfigured && isSupabaseConfigured()) {
-        return res.redirect(
-          "/stores/list?success=" +
-            encodeURIComponent(`代理店「${name}」を更新しました`)
-        );
+      if (err) {
+        console.error("店舗更新エラー:", err);
+        return res.status(500).send("DBエラー: " + err.message);
       }
 
-      // 既存の商品を削除（ローカルSQLite等）
-      db.run(
-        "DELETE FROM store_products WHERE store_id = ?",
-        [req.params.id],
-        (err) => {
-          if (err) console.error("商品削除エラー:", err);
-
-          if (
-            product_names &&
-            Array.isArray(product_names) &&
-            product_names.length > 0
-          ) {
-            console.log("編集: 新形式の商品データを処理");
-            product_names.forEach((productName, index) => {
-              if (productName && productName.trim() !== "") {
-                db.run(
-                  "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                  [req.params.id, productName.trim()],
-                  (err) => {
-                    if (err) console.error("商品保存エラー:", err);
-                  }
-                );
-              }
-            });
-          } else if (products) {
-            console.log("編集: 旧形式の商品データを処理");
-            const productList = Array.isArray(products) ? products : [products];
-            productList.forEach((productStr) => {
-              try {
-                const product = JSON.parse(productStr);
-                db.run(
-                  "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                  [req.params.id, product.product_name],
-                  (err) => {
-                    if (err) console.error("商品保存エラー:", err);
-                  }
-                );
-              } catch (parseErr) {
-                console.error("商品データパースエラー:", parseErr);
-                db.run(
-                  "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                  [req.params.id, productStr],
-                  (err) => {
-                    if (err) console.error("商品保存エラー（文字列）:", err);
-                  }
-                );
-              }
-            });
-          }
-
-          res.redirect(
-            "/stores/list?success=" +
-              encodeURIComponent(`代理店「${name}」を更新しました`)
-          );
-        }
+      console.log(`店舗更新完了: ID=${req.params.id}, 名前=${name}`);
+      res.redirect(
+        "/stores/list?success=" +
+          encodeURIComponent(`店舗「${name}」を更新しました`)
       );
     }
   );

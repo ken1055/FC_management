@@ -198,16 +198,14 @@
       <thead class="table-dark">
         <tr>
           <th>ID</th>
-          <th>名前</th>
-          <th>年齢</th>
-          <th>住所</th>
-          <th>振込先情報</th>
-          <th>経験年数</th>
-          <th>契約日</th>
-          <th>活動開始日</th>
-          <th>取り扱い商品</th>
+          <th>店舗名</th>
+          <th>店長氏名</th>
+          <th>営業所住所</th>
+          <th>代表電話</th>
+          <th>契約形態</th>
+          <th>契約開始日</th>
+          <th>ロイヤリティ率</th>
           <th>グループ</th>
-          <th>商品資料格納庫</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -217,48 +215,31 @@
           <td><%= a.id %></td>
           <td>
             <a href="/stores/profile/<%= a.id %>" class="text-decoration-none fw-bold">
-              <i class="bi bi-person-circle text-primary me-1"></i>
+              <i class="bi bi-shop text-primary me-1"></i>
               <%= a.name %>
             </a>
           </td>
-          <td><%= a.age || '未設定' %></td>
-          <td><%= a.address || '未設定' %></td>
-          <td><%= a.bank_info || '未設定' %></td>
-          <td><%= a.experience_years || '未設定' %>年</td>
-          <td><%= a.contract_date || '未設定' %></td>
-          <td><%= a.start_date || '未設定' %></td>
+          <td><%= a.manager_name || '未設定' %></td>
+          <td><%= a.business_address || '未設定' %></td>
+          <td><%= a.main_phone || '未設定' %></td>
           <td>
-            <% if (a.product_count > 0) { %>
-              <div class="d-flex flex-column">
-                <span class="badge bg-primary mb-1"><%= a.product_count %>件</span>
-                <% if (a.product_names) { %>
-                  <small class="text-muted" style="font-size: 0.75rem;">
-                    <% 
-                      const maxLength = 30;
-                      let displayNames = a.product_names;
-                      if (displayNames.length > maxLength) {
-                        displayNames = displayNames.substring(0, maxLength) + '...';
-                      }
-                    %>
-                    <%= displayNames %>
-                  </small>
-                <% } %>
-              </div>
-            <% } else { %>
-              <span class="text-muted">未設定</span>
-            <% } %>
+            <% 
+              const contractTypeMap = {
+                'franchise': 'フランチャイズ',
+                'agency': '代理店', 
+                'direct': '直営'
+              };
+            %>
+            <%= contractTypeMap[a.contract_type] || '未設定' %>
           </td>
+          <td><%= a.contract_start_date || '未設定' %></td>
+          <td><%= a.royalty_rate ? a.royalty_rate + '%' : '未設定' %></td>
           <td>
             <% if (a.group_name) { %>
               <span class="badge bg-info"><%= a.group_name %></span>
             <% } else { %>
               <span class="text-muted">未設定</span>
             <% } %>
-          </td>
-          <td>
-            <a href="/materials/<%= a.id %>" class="btn btn-sm btn-success">
-              <i class="bi bi-folder"></i> 資料を見る
-            </a>
           </td>
           <td>
             <div class="btn-group-vertical" role="group">
