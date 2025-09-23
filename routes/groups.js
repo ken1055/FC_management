@@ -226,13 +226,37 @@ router.post(
   requireRole(["admin"]),
   (req, res) => {
     const { groupId, agencyId } = req.params;
+    console.log("グループ代理店削除: ", { groupId, agencyId });
 
     db.run(
       "DELETE FROM group_members WHERE group_id = ? AND store_id = ?",
       [groupId, agencyId],
       function (err) {
-        if (err) return res.status(500).send("DBエラー");
-        res.redirect(`/groups/manage/${groupId}`);
+        if (err) {
+          console.error("グループ代理店削除エラー:", err);
+          return res.status(500).send(`DBエラー: ${err.message}`);
+        }
+        console.log("削除件数:", this && this.changes);
+        // 変更がなければ、存在有無を追加チェック
+        if (!this || this.changes === 0) {
+          db.get(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND store_id = ?",
+            [groupId, agencyId],
+            (e, row) => {
+              if (e) {
+                console.error("削除後存在確認エラー:", e);
+              } else {
+                console.log(
+                  "削除後存在確認:",
+                  row ? "まだ存在します" : "存在しません"
+                );
+              }
+              return res.redirect(`/groups/manage/${groupId}`);
+            }
+          );
+        } else {
+          return res.redirect(`/groups/manage/${groupId}`);
+        }
       }
     );
   }
