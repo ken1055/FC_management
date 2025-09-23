@@ -225,11 +225,12 @@ router.post("/calculate", requireAdmin, (req, res) => {
 
   // 指定月の売上データを取得（店舗名も含める）
   const salesQuery = `
-    SELECT s.store_id, s.year, s.month, SUM(s.amount) as total_sales, st.name as store_name
+    SELECT s.store_id, s.year, s.month, SUM(s.amount) as total_sales,
+           st.name as store_name, st.royalty_rate as royalty_rate
     FROM sales s
     LEFT JOIN stores st ON s.store_id = st.id
     WHERE s.year = ? AND s.month = ?
-    GROUP BY s.store_id, s.year, s.month, st.name
+    GROUP BY s.store_id, s.year, s.month, st.name, st.royalty_rate
   `;
 
   db.all(salesQuery, [year, month], (err, salesData) => {
@@ -255,75 +256,58 @@ router.post("/calculate", requireAdmin, (req, res) => {
 
     // 各店舗のロイヤリティを計算
     salesData.forEach((sale) => {
-      // 店舗テーブルのロイヤリティ率を参照
-      const royaltyQuery = `SELECT royalty_rate FROM stores WHERE id = ?`;
+      const royaltyRate =
+        sale.royalty_rate != null && sale.royalty_rate !== ""
+          ? parseFloat(sale.royalty_rate)
+          : 5.0;
+      const royaltyAmount = Math.round(
+        sale.total_sales * (royaltyRate / 100)
+      );
 
-      db.get(
-        royaltyQuery,
-        [sale.store_id],
-        (err, storeRow) => {
+      // ロイヤリティ計算結果を保存
+      const insertQuery = `
+        INSERT OR REPLACE INTO royalty_calculations 
+        (store_id, calculation_year, calculation_month, monthly_sales, royalty_rate, royalty_amount, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'calculated')
+      `;
+
+      db.run(
+        insertQuery,
+        [
+          sale.store_id,
+          year,
+          month,
+          sale.total_sales,
+          royaltyRate,
+          royaltyAmount,
+        ],
+        function (err) {
           if (err) {
-            console.error("ロイヤリティ設定取得エラー:", err);
+            console.error("ロイヤリティ計算保存エラー:", err);
             errorCount++;
-            checkCompletion();
-            return;
+            calculationResults.push({
+              store_id: sale.store_id,
+              store_name: sale.store_name || `店舗ID ${sale.store_id}`,
+              success: false,
+              error: err.message,
+            });
+          } else {
+            processedCount++;
+            calculationResults.push({
+              store_id: sale.store_id,
+              store_name: sale.store_name || `店舗ID ${sale.store_id}`,
+              success: true,
+              sales: sale.total_sales,
+              royalty_rate: royaltyRate,
+              royalty_amount: royaltyAmount,
+            });
+            console.log(
+              `店舗「${
+                sale.store_name || sale.store_id
+              }」のロイヤリティ計算完了: 売上¥${sale.total_sales.toLocaleString()} → ロイヤリティ¥${royaltyAmount.toLocaleString()} (${royaltyRate}%)`
+            );
           }
-
-          // 店舗設定がない/空の場合はデフォルト率5%
-          const royaltyRate =
-            storeRow && storeRow.royalty_rate != null && storeRow.royalty_rate !== ''
-              ? parseFloat(storeRow.royalty_rate)
-              : 5.0;
-          const royaltyAmount = Math.round(
-            sale.total_sales * (royaltyRate / 100)
-          );
-
-          // ロイヤリティ計算結果を保存
-          const insertQuery = `
-          INSERT OR REPLACE INTO royalty_calculations 
-          (store_id, calculation_year, calculation_month, monthly_sales, royalty_rate, royalty_amount, status)
-          VALUES (?, ?, ?, ?, ?, ?, 'calculated')
-        `;
-
-          db.run(
-            insertQuery,
-            [
-              sale.store_id,
-              year,
-              month,
-              sale.total_sales,
-              royaltyRate,
-              royaltyAmount,
-            ],
-            function (err) {
-              if (err) {
-                console.error("ロイヤリティ計算保存エラー:", err);
-                errorCount++;
-                calculationResults.push({
-                  store_id: sale.store_id,
-                  store_name: sale.store_name || `店舗ID ${sale.store_id}`,
-                  success: false,
-                  error: err.message,
-                });
-              } else {
-                processedCount++;
-                calculationResults.push({
-                  store_id: sale.store_id,
-                  store_name: sale.store_name || `店舗ID ${sale.store_id}`,
-                  success: true,
-                  sales: sale.total_sales,
-                  royalty_rate: royaltyRate,
-                  royalty_amount: royaltyAmount,
-                });
-                console.log(
-                  `店舗「${
-                    sale.store_name || sale.store_id
-                  }」のロイヤリティ計算完了: 売上¥${sale.total_sales.toLocaleString()} → ロイヤリティ¥${royaltyAmount.toLocaleString()} (${royaltyRate}%)`
-                );
-              }
-              checkCompletion();
-            }
-          );
+          checkCompletion();
         }
       );
     });
