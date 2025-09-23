@@ -414,17 +414,17 @@ function fixAgencyIdsPostgres(stores, callback) {
             }
             console.log(`materials テーブル更新完了: ${originalId} → ${newId}`);
 
-            // 3. group_store テーブル
+            // 3. group_members テーブル
             db.run(
-              "UPDATE group_store SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
+              "UPDATE group_members SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
               [newId, originalId],
               (err) => {
                 if (err) {
-                  console.error("group_store テーブル更新エラー:", err);
+                  console.error("group_members テーブル更新エラー:", err);
                   return callback(err);
                 }
                 console.log(
-                  `group_store テーブル更新完了: ${originalId} → ${newId}`
+                  `group_members テーブル更新完了: ${originalId} → ${newId}`
                 );
 
                 // 4. store_products テーブル
@@ -729,17 +729,17 @@ function fixAgencyIdsSQLite(stores, callback) {
             }
             console.log(`materials テーブル更新完了: ${originalId} → ${newId}`);
 
-            // 3. group_store テーブル
+            // 3. group_members テーブル
             db.run(
-              "UPDATE group_store SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
+              "UPDATE group_members SET store_id = ? WHERE store_id = (SELECT id FROM temp_stores WHERE id = ?)",
               [newId, originalId],
               (err) => {
                 if (err) {
-                  console.error("group_store テーブル更新エラー:", err);
+                  console.error("group_members テーブル更新エラー:", err);
                   return callback(err);
                 }
                 console.log(
-                  `group_store テーブル更新完了: ${originalId} → ${newId}`
+                  `group_members テーブル更新完了: ${originalId} → ${newId}`
                 );
 
                 // 4. store_products テーブル

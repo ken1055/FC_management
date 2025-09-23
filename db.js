@@ -406,9 +406,7 @@ async function initializePostgresDatabase() {
     console.log("usersテーブルのagency_id → store_idの移行中...");
     try {
       // agency_idカラムが存在するかチェックし、存在する場合は移行
-      await run(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER"
-      );
+      await run("ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER");
       await run(
         "UPDATE users SET store_id = agency_id WHERE agency_id IS NOT NULL AND store_id IS NULL"
       );
@@ -901,16 +899,36 @@ function initializeLocalDatabase() {
       )
     `);
 
-    // グループ-店舗関連テーブル（旧group_agency）
+    // グループ-店舗関連テーブル（group_membersに統一）
     db.run(`
-      CREATE TABLE IF NOT EXISTS group_store (
-        group_id INTEGER,
-        store_id INTEGER,
-        PRIMARY KEY (group_id, store_id),
+      CREATE TABLE IF NOT EXISTS group_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL,
+        store_id INTEGER NOT NULL,
+        UNIQUE (group_id, store_id),
         FOREIGN KEY (group_id) REFERENCES groups(id),
         FOREIGN KEY (store_id) REFERENCES stores(id)
       )
     `);
+
+    // 互換: 旧group_storeが存在する場合はデータ移行
+    db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='group_store'",
+      [],
+      (err, row) => {
+        if (!err && row) {
+          db.run(
+            `INSERT OR IGNORE INTO group_members (group_id, store_id)
+             SELECT group_id, store_id FROM group_store`,
+            function (e) {
+              if (!e && this.changes > 0) {
+                console.log(`group_store から group_members へ ${this.changes} 件を移行しました`);
+              }
+            }
+          );
+        }
+      }
+    );
 
     // グループ-管理者関連テーブル
     db.run(`
@@ -1113,7 +1131,7 @@ const dbWrapper = {
 
       try {
         const result = await run(sql, params);
-        
+
         // SQLiteのthis.lastIDを模倣
         const mockThis = {
           lastID: result.lastID,
