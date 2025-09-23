@@ -174,6 +174,34 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows };
     }
 
+    // 0.2) システム設定: settings → system_settings へのマッピング（SELECT）
+    if (
+      lower.startsWith("select") &&
+      /from\s+settings/i.test(lower)
+    ) {
+      // WHERE句の解析（key_name を key にマップ）
+      const { filters } = parseWhereEqConditions(originalQuery, params, 0);
+      let qb = supabase
+        .from("system_settings")
+        .select("key,value,description,created_at,updated_at");
+      filters.forEach(({ column, value }) => {
+        const mappedColumn = column === "key_name" ? "key" : column;
+        qb = qb.eq(mappedColumn, value);
+      });
+
+      const { data, error } = await qb;
+      if (error) throw error;
+      // settings互換のキー名に変換（key → key_name）
+      const rows = (data || []).map((r) => ({
+        key_name: r.key,
+        value: r.value,
+        description: r.description,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      }));
+      return { rows };
+    }
+
     // A) ロイヤリティ設定一覧: royalty_settings ←→ stores のJOINをエミュレート
     if (
       lower.startsWith("select") &&
@@ -368,7 +396,7 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows: data || [] };
     }
 
-    // INSERT / INSERT OR REPLACE
+    // INSERT / INSERT OR REPLACE（settings → system_settings のUPSERT対応）
     if (lower.startsWith("insert")) {
       const tableName = extractTableName(query);
       if (!tableName) throw new Error("テーブル名を特定できません");
@@ -395,6 +423,26 @@ async function executeSupabaseQuery(supabase, query, params) {
         } else {
           insertData[columns[i]] = token.replace(/^['"]|['"]$/g, "");
         }
+      }
+
+      // settingsテーブルのUPSERTをsystem_settingsへマッピング
+      if (/\bsettings\b/i.test(tableName)) {
+        const mapped = {
+          key: insertData.key_name ?? insertData.key,
+          value: insertData.value ?? null,
+          description: insertData.description ?? null,
+          updated_at: new Date().toISOString(),
+        };
+        const { data, error } = await supabase
+          .from("system_settings")
+          .upsert(mapped, { onConflict: "key" })
+          .select();
+        if (error) throw error;
+        return {
+          rows: data || [],
+          lastID: null,
+          changes: data?.length || 0,
+        };
       }
 
       // insert or replace → upsert 対応（既知テーブルのみ）
@@ -426,7 +474,7 @@ async function executeSupabaseQuery(supabase, query, params) {
       };
     }
 
-    // UPDATE
+    // UPDATE（settings → system_settings のUPDATE対応）
     if (lower.startsWith("update")) {
       const tableName = extractTableName(query);
       if (!tableName) throw new Error("テーブル名を特定できません");
@@ -463,7 +511,18 @@ async function executeSupabaseQuery(supabase, query, params) {
         }
       }
 
-      let qb = supabase.from(tableName).update(updateData);
+      // settingsはsystem_settingsへマッピング
+      const targetTable = /\bsettings\b/i.test(tableName)
+        ? "system_settings"
+        : tableName;
+
+      // キー名のマッピング（key_name → key）
+      if (targetTable === "system_settings" && updateData.key_name) {
+        updateData.key = updateData.key_name;
+        delete updateData.key_name;
+      }
+
+      let qb = supabase.from(targetTable).update(updateData);
 
       if (lower.includes(" where ")) {
         const { filters, usedParams } = parseWhereEqConditions(
@@ -472,7 +531,11 @@ async function executeSupabaseQuery(supabase, query, params) {
           paramIndex
         );
         filters.forEach(({ column, value }) => {
-          qb = qb.eq(column, value);
+          const mappedColumn =
+            targetTable === "system_settings" && column === "key_name"
+              ? "key"
+              : column;
+          qb = qb.eq(mappedColumn, value);
         });
         paramIndex += usedParams;
       }
@@ -482,16 +545,24 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows: data || [], changes: data?.length || 0 };
     }
 
-    // DELETE
+    // DELETE（settings → system_settings のDELETE対応）
     if (lower.startsWith("delete")) {
       const tableName = extractTableName(query);
       if (!tableName) throw new Error("テーブル名を特定できません");
 
-      let qb = supabase.from(tableName).delete();
+      const targetTable = /\bsettings\b/i.test(tableName)
+        ? "system_settings"
+        : tableName;
+
+      let qb = supabase.from(targetTable).delete();
       if (lower.includes(" where ")) {
         const { filters } = parseWhereEqConditions(originalQuery, params, 0);
         filters.forEach(({ column, value }) => {
-          qb = qb.eq(column, value);
+          const mappedColumn =
+            targetTable === "system_settings" && column === "key_name"
+              ? "key"
+              : column;
+          qb = qb.eq(mappedColumn, value);
         });
       }
 
