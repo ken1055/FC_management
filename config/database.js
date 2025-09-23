@@ -96,17 +96,18 @@ async function executeSupabaseQuery(supabase, query, params) {
     if (
       lower.startsWith("select") &&
       /from\s+royalty_settings\s+rs/i.test(lower) &&
-      /left\s+join\s+stores\s+s\s+on\s+rs\.store_id\s*=\s*s\.id/i.test(
-        lower
-      )
+      /left\s+join\s+stores\s+s\s+on\s+rs\.store_id\s*=\s*s\.id/i.test(lower)
     ) {
+      console.log("ロイヤリティ設定JOINエミュレーション実行");
       const { data: settings, error: rErr } = await supabase
         .from("royalty_settings")
         .select("id,store_id,royalty_rate,effective_date,created_at,updated_at")
         .order("effective_date", { ascending: false });
       if (rErr) throw rErr;
 
-      const storeIds = Array.from(new Set((settings || []).map((r) => r.store_id).filter(Boolean)));
+      const storeIds = Array.from(
+        new Set((settings || []).map((r) => r.store_id).filter(Boolean))
+      );
       let idToName = new Map();
       if (storeIds.length > 0) {
         const { data: stores, error: sErr } = await supabase
@@ -127,11 +128,12 @@ async function executeSupabaseQuery(supabase, query, params) {
           const ad = new Date(a.effective_date).getTime() || 0;
           const bd = new Date(b.effective_date).getTime() || 0;
           if (ad !== bd) return bd - ad; // DESC
-          const an = (a.store_name || "");
-          const bn = (b.store_name || "");
+          const an = a.store_name || "";
+          const bn = b.store_name || "";
           return an.localeCompare(bn);
         });
 
+      console.log("ロイヤリティ設定JOINエミュレーション完了:", rows.length, "件");
       return { rows };
     }
 
@@ -261,7 +263,7 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows: filtered };
     }
 
-    // SELECT（単純）
+    // SELECT（単純）- 特殊ケースでない場合のみ
     if (lower.startsWith("select")) {
       const tableName = extractTableName(query);
       if (!tableName) throw new Error("テーブル名を特定できません");
