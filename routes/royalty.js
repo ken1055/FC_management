@@ -263,8 +263,36 @@ router.post("/calculate", requireAdmin, (req, res) => {
 
     let processedCount = 0;
     let errorCount = 0;
-    const totalStores = salesData.length;
     const calculationResults = [];
+
+    // 売上が無い店舗も計算対象に含めるため、全店舗を取得して不足分を0売上で補完
+    let allStores = [];
+    try {
+      allStores = await new Promise((resolve, reject) => {
+        db.all("SELECT id, name, royalty_rate FROM stores ORDER BY name", [], (e, rows) => {
+          if (e) reject(e);
+          else resolve(rows || []);
+        });
+      });
+    } catch (e) {
+      console.error("店舗一覧取得エラー(計算補完用):", e);
+    }
+
+    const hadSalesStoreIds = new Set((salesData || []).map((s) => s.store_id));
+    const missingStores = (allStores || []).filter((st) => !hadSalesStoreIds.has(st.id));
+
+    const zeroSaleRows = missingStores.map((st) => ({
+      store_id: st.id,
+      year: Number(year),
+      month: Number(month),
+      total_sales: 0,
+      store_name: st.name,
+      // 売上が無い店舗については店舗テーブルの率をそのまま使用（設定がある場合は後段の再取得で上書きされる）
+      royalty_rate: st.royalty_rate,
+    }));
+
+    const allSaleRows = [...salesData, ...zeroSaleRows];
+    const totalStores = allSaleRows.length;
 
     // ロイヤリティ計算処理を実行する関数
     const processSaleWithRate = (sale, usedRate) => {
@@ -336,7 +364,7 @@ router.post("/calculate", requireAdmin, (req, res) => {
     };
 
     // 各店舗のロイヤリティを計算
-    for (const sale of salesData) {
+    for (const sale of allSaleRows) {
       let usedRate = 5.0; // デフォルトのフォールバック率
 
       // JOINで取れた率を優先（royalty_settingsまたはstoresテーブルから）
