@@ -1004,8 +1004,8 @@ router.post("/", (req, res) => {
     start_date,
   } = req.body;
   db.run(
-    "INSERT INTO stores (name, address, bank_info, contract_date, start_date) VALUES (?, ?, ?, ?, ?)",
-    [name, address, bank_info, contract_date, start_date],
+    "INSERT INTO stores (name, business_address, contract_start_date) VALUES (?, ?, ?)",
+    [name, address, contract_date || null],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
       res.json({ id: this.lastID });
@@ -1025,8 +1025,8 @@ router.put("/:id", (req, res) => {
     start_date,
   } = req.body;
   db.run(
-    "UPDATE stores SET name=?, address=?, bank_info=?, contract_date=?, start_date=? WHERE id=?",
-    [name, address, bank_info, contract_date, start_date, req.params.id],
+    "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
+    [name, address, contract_date || null, req.params.id],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
       res.send("更新完了");
@@ -1283,15 +1283,8 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "UPDATE stores SET name=?, address=?, bank_info=?, contract_date=?, start_date=? WHERE id=?",
-    [
-      name,
-      address,
-      bank_info,
-      processedContractDate,
-      processedStartDate,
-      req.params.id,
-    ],
+    "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
+    [name, address, processedContractDate, req.params.id],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
 
