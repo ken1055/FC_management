@@ -119,7 +119,7 @@ router.post("/settings/save", requireAdmin, (req, res) => {
     // 更新
     const query = `
       UPDATE royalty_settings 
-      SET store_id = ?, rate = ?, effective_date = ?
+      SET store_id = ?, royalty_rate = ?, effective_date = ?
       WHERE id = ?
     `;
 
@@ -138,7 +138,7 @@ router.post("/settings/save", requireAdmin, (req, res) => {
   } else {
     // 新規作成
     const query = `
-      INSERT INTO royalty_settings (store_id, rate, effective_date)
+      INSERT INTO royalty_settings (store_id, royalty_rate, effective_date)
       VALUES (?, ?, ?)
     `;
 
@@ -227,18 +227,22 @@ router.post("/calculate", requireAdmin, (req, res) => {
   const salesQuery = `
     SELECT 
       s.store_id, s.year, s.month, SUM(s.amount) as total_sales, 
-      st.name as store_name, 
-      COALESCE(rs.royalty_rate, st.royalty_rate) as royalty_rate
+      st.name as store_name,
+      COALESCE(
+        (
+          SELECT rs1.royalty_rate
+          FROM royalty_settings rs1
+          WHERE rs1.store_id = s.store_id
+            AND rs1.effective_date <= DATE('${year}-${month}-01')
+          ORDER BY rs1.effective_date DESC
+          LIMIT 1
+        ),
+        st.royalty_rate
+      ) AS royalty_rate
     FROM sales s
     LEFT JOIN stores st ON s.store_id = st.id
-    LEFT JOIN (
-      SELECT store_id, royalty_rate as royalty_rate, 
-             ROW_NUMBER() OVER (PARTITION BY store_id ORDER BY effective_date DESC) as rn
-      FROM royalty_settings 
-      WHERE effective_date <= DATE('${year}-${month}-01')
-    ) rs ON st.id = rs.store_id AND rs.rn = 1
     WHERE s.year = ? AND s.month = ?
-    GROUP BY s.store_id, s.year, s.month, st.name, COALESCE(rs.royalty_rate, st.royalty_rate)
+    GROUP BY s.store_id, s.year, s.month, st.name
   `;
 
   db.all(salesQuery, [year, month], async (err, salesData) => {
