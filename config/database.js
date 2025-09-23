@@ -93,6 +93,61 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows };
     }
 
+    // 3) グループ管理: 所属中の店舗一覧
+    //   SELECT a.id, a.name FROM stores a INNER JOIN group_members ga ON a.id = ga.store_id WHERE ga.group_id = ? ORDER BY a.name
+    if (
+      lower.startsWith("select") &&
+      /from\s+stores\s+a/i.test(query) &&
+      /inner\s+join\s+group_members/i.test(query) &&
+      /where\s+ga\.group_id\s*=\s*\?/i.test(query)
+    ) {
+      const groupIdParamIndex = 0; // 本クエリは?が1つのみ
+      const groupId = params[groupIdParamIndex];
+      const { data: members, error: mErr } = await supabase
+        .from("group_members")
+        .select("store_id")
+        .eq("group_id", Number(groupId));
+      if (mErr) throw mErr;
+      const storeIds = (members || []).map((m) => m.store_id);
+      if (storeIds.length === 0) return { rows: [] };
+      const { data: stores, error: sErr } = await supabase
+        .from("stores")
+        .select("id,name")
+        .in("id", storeIds)
+        .order("name", { ascending: true });
+      if (sErr) throw sErr;
+      return { rows: stores || [] };
+    }
+
+    // 4) グループ管理: 未所属の店舗一覧
+    //   SELECT a.id, a.name FROM stores a WHERE a.id NOT IN (
+    //     SELECT ga.store_id FROM group_members ga WHERE ga.group_id = ?
+    //   ) ORDER BY a.name
+    if (
+      lower.startsWith("select") &&
+      /from\s+stores\s+a/i.test(query) &&
+      /not\s+in\s*\(\s*select\s+ga\.store_id\s+from\s+group_members/i.test(
+        lower
+      )
+    ) {
+      const groupIdParamIndex = 0; // サブクエリの?が1つ
+      const groupId = params[groupIdParamIndex];
+      const { data: allStores, error: sErr } = await supabase
+        .from("stores")
+        .select("id,name");
+      if (sErr) throw sErr;
+      const { data: members, error: mErr } = await supabase
+        .from("group_members")
+        .select("store_id")
+        .eq("group_id", Number(groupId));
+      if (mErr) throw mErr;
+      const memberIds = new Set((members || []).map((m) => m.store_id));
+      const filtered = (allStores || [])
+        .filter((s) => !memberIds.has(s.id))
+        .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      return { rows: filtered };
+    }
+
     // SELECT（単純）
     if (lower.startsWith("select")) {
       const tableName = extractTableName(query);
