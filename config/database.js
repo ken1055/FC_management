@@ -92,6 +92,49 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows };
     }
 
+    // A) ロイヤリティ設定一覧: royalty_settings ←→ stores のJOINをエミュレート
+    if (
+      lower.startsWith("select") &&
+      /from\s+royalty_settings\s+rs/i.test(lower) &&
+      /left\s+join\s+stores\s+s\s+on\s+rs\.store_id\s*=\s*s\.id/i.test(
+        lower
+      )
+    ) {
+      const { data: settings, error: rErr } = await supabase
+        .from("royalty_settings")
+        .select("id,store_id,royalty_rate,effective_date,created_at,updated_at")
+        .order("effective_date", { ascending: false });
+      if (rErr) throw rErr;
+
+      const storeIds = Array.from(new Set((settings || []).map((r) => r.store_id).filter(Boolean)));
+      let idToName = new Map();
+      if (storeIds.length > 0) {
+        const { data: stores, error: sErr } = await supabase
+          .from("stores")
+          .select("id,name")
+          .in("id", storeIds);
+        if (sErr) throw sErr;
+        idToName = new Map((stores || []).map((s) => [s.id, s.name]));
+      }
+
+      // ORDER BY rs.effective_date DESC, s.name 相当の並び替え
+      const rows = (settings || [])
+        .map((r) => ({
+          ...r,
+          store_name: idToName.get(r.store_id) || null,
+        }))
+        .sort((a, b) => {
+          const ad = new Date(a.effective_date).getTime() || 0;
+          const bd = new Date(b.effective_date).getTime() || 0;
+          if (ad !== bd) return bd - ad; // DESC
+          const an = (a.store_name || "");
+          const bn = (b.store_name || "");
+          return an.localeCompare(bn);
+        });
+
+      return { rows };
+    }
+
     // SELECT（特殊ケース: 集計/JOIN をSupabaseでエミュレート）
     // 1) グループ一覧: groups ←→ group_members の所属数集計
     if (
