@@ -396,9 +396,8 @@ router.post("/create", requireAuth, (req, res) => {
     const query = useSupabase
       ? `
       INSERT INTO customers (
-        store_id, customer_code, name, kana, email, phone,
-        address, birth_date, notes, registration_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        store_id, name, registration_date
+      ) VALUES (?, ?, ?)
     `
       : `
       INSERT INTO customers (
@@ -410,14 +409,7 @@ router.post("/create", requireAuth, (req, res) => {
     const params = isSupabaseConfigured()
       ? [
           finalStoreId,
-          customer_code || null,
           name,
-          kana || null,
-          email || null,
-          phone || null,
-          address || null,
-          birth_date || null,
-          notes || null,
           new Date().toISOString().slice(0, 10),
         ]
       : [
@@ -536,9 +528,7 @@ router.post("/update/:id", requireAuth, (req, res) => {
     const query = useSupabase
       ? `
         UPDATE customers SET 
-          store_id = ?, customer_code = ?, name = ?, kana = ?, 
-          email = ?, phone = ?, address = ?, birth_date = ?, 
-          notes = ?, updated_at = CURRENT_TIMESTAMP
+          store_id = ?, name = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `
       : `
@@ -552,29 +542,22 @@ router.post("/update/:id", requireAuth, (req, res) => {
     const params = isSupabaseConfigured()
       ? [
           finalStoreId,
-          customer_code || null,
           name,
-          kana || null,
-          email || null,
-          phone || null,
-          address || null,
-          birth_date || null,
-          notes || null,
           customerId,
         ]
-      : [
-          finalStoreId,
-          customer_code || null,
-          name,
-          kana || null,
-          email || null,
-          phone || null,
-          address || null,
-          birth_date || null,
-          gender || null,
-          notes || null,
-          customerId,
-        ];
+        : [
+            finalStoreId,
+            customer_code || null,
+            name,
+            kana || null,
+            email || null,
+            phone || null,
+            address || null,
+            birth_date || null,
+            gender || null,
+            notes || null,
+            customerId,
+          ];
 
       db.run(query, params, function (err) {
         if (err) {
