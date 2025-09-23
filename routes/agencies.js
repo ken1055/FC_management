@@ -910,7 +910,7 @@ function renderAgenciesList(
     // PostgreSQLでは、SELECTで選択するすべての非集約列をGROUP BYに含める必要がある
     if (!useSupabase && isPostgres) {
       query +=
-        " GROUP BY a.id, a.name, a.age, a.address, a.bank_info, a.experience_years, a.contract_date, a.start_date, g.name ORDER BY a.id";
+        " GROUP BY a.id, a.name, a.business_address, a.main_phone, a.manager_name, a.mobile_phone, a.representative_email, a.contract_type, a.contract_start_date, a.royalty_rate, a.invoice_number, a.bank_name, a.branch_name, a.account_type, a.account_number, a.account_holder, a.license_status, a.license_type, a.license_number, a.license_file_path, a.line_official_id, a.representative_gmail, g.name ORDER BY a.id";
     } else {
       query += " GROUP BY a.id ORDER BY a.id";
     }
