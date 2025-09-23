@@ -854,25 +854,28 @@ function renderAgenciesList(
       return res.status(500).send("DBエラー: " + err.message);
     }
 
-    // データベースタイプに応じた集約関数を選択（商品数をカウント）
+    // データベースタイプに応じて store_products 参照を制御
+    const { isSupabaseConfigured } = require("../config/database");
     const isPostgres = !!process.env.DATABASE_URL;
+    const useSupabase = isSupabaseConfigured && isSupabaseConfigured();
 
     let query = `
     SELECT 
       a.*,
       g.name as group_name,
-      COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count,
       ${
-        isPostgres
-          ? "STRING_AGG(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ' ORDER BY ap.product_name) as product_names"
-          : "GROUP_CONCAT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ') as product_names"
+        useSupabase
+          ? "NULL as product_count, NULL as product_names"
+          : isPostgres
+          ? "COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count, STRING_AGG(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ' ORDER BY ap.product_name) as product_names"
+          : "COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count, GROUP_CONCAT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ') as product_names"
       },
       COALESCE(COUNT(s.id), 0) as sales_count,
       COALESCE(SUM(s.amount), 0) as total_sales
     FROM stores a 
     LEFT JOIN group_members ga ON a.id = ga.store_id 
     LEFT JOIN groups g ON ga.group_id = g.id
-    LEFT JOIN store_products ap ON a.id = ap.store_id
+    ${useSupabase ? "" : "LEFT JOIN store_products ap ON a.id = ap.store_id"}
     LEFT JOIN sales s ON a.id = s.store_id
   `;
     let params = [];
@@ -884,15 +887,20 @@ function renderAgenciesList(
     }
 
     if (searchQuery) {
-      conditions.push(
-        "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR ap.product_name LIKE ?)"
-      );
-      params.push(
-        `%${searchQuery}%`,
-        `%${searchQuery}%`,
-        `%${searchQuery}%`,
-        `%${searchQuery}%`
-      );
+      if (useSupabase) {
+        conditions.push("(a.name LIKE ?)");
+        params.push(`%${searchQuery}%`);
+      } else {
+        conditions.push(
+          "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR ap.product_name LIKE ?)"
+        );
+        params.push(
+          `%${searchQuery}%`,
+          `%${searchQuery}%`,
+          `%${searchQuery}%`,
+          `%${searchQuery}%`
+        );
+      }
     }
 
     if (conditions.length > 0) {
@@ -900,7 +908,7 @@ function renderAgenciesList(
     }
 
     // PostgreSQLでは、SELECTで選択するすべての非集約列をGROUP BYに含める必要がある
-    if (isPostgres) {
+    if (!useSupabase && isPostgres) {
       query +=
         " GROUP BY a.id, a.name, a.age, a.address, a.bank_info, a.experience_years, a.contract_date, a.start_date, g.name ORDER BY a.id";
     } else {
