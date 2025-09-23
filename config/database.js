@@ -85,7 +85,8 @@ async function executeSupabaseQuery(supabase, query, params) {
         month: targetMonth,
         total_sales: byStore.get(sid) || 0,
         store_name: idToName.get(sid) || null,
-        royalty_rate: (stores || []).find((s) => s.id === sid)?.royalty_rate ?? null,
+        royalty_rate:
+          (stores || []).find((s) => s.id === sid)?.royalty_rate ?? null,
       }));
 
       return { rows };
@@ -286,7 +287,8 @@ async function executeSupabaseQuery(supabase, query, params) {
       const tableName = extractTableName(query);
       if (!tableName) throw new Error("テーブル名を特定できません");
 
-      const setMatch = query.match(/set\s+(.+?)\s+(where|$)/i);
+      // 改行を含むSET句を安全に抽出
+      const setMatch = query.match(/set\s+([\s\S]+?)\s+(where|$)/i);
       if (!setMatch) throw new Error("UPDATEのSET句を解析できません");
 
       const setClause = setMatch[1];
@@ -294,13 +296,26 @@ async function executeSupabaseQuery(supabase, query, params) {
       const updateData = {};
 
       let paramIndex = 0;
-      for (const pair of setPairs) {
+      for (const raw of setPairs) {
+        const pair = raw.trim();
+        if (!pair) continue;
+        // column = ?
         const m = pair.match(/(\w+)\s*=\s*\?/);
         if (m) {
           updateData[m[1]] = params[paramIndex++];
-        } else {
-          const m2 = pair.match(/(\w+)\s*=\s*(['"])(.*?)\2/);
-          if (m2) updateData[m2[1]] = m2[3];
+          continue;
+        }
+        // column = 'literal' or "literal"
+        const m2 = pair.match(/(\w+)\s*=\s*(['"])(.*?)\2/);
+        if (m2) {
+          updateData[m2[1]] = m2[3];
+          continue;
+        }
+        // column = CURRENT_TIMESTAMP / NOW()
+        const m3 = pair.match(/(\w+)\s*=\s*(current_timestamp|now\(\))/i);
+        if (m3) {
+          updateData[m3[1]] = new Date().toISOString();
+          continue;
         }
       }
 
