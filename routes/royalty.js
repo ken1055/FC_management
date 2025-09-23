@@ -552,10 +552,10 @@ router.get("/invoice/:calculationId", requireAdmin, (req, res) => {
     SELECT 
       rc.*,
       s.name as store_name,
-      s.owner_name,
-      s.address as store_address,
-      s.phone as store_phone,
-      s.email as store_email
+      s.manager_name as owner_name,
+      s.business_address as store_address,
+      s.main_phone as store_phone,
+      s.representative_email as store_email
     FROM royalty_calculations rc
     LEFT JOIN stores s ON rc.store_id = s.id
     WHERE rc.id = ?
@@ -637,10 +637,10 @@ router.post("/invoices/bulk", requireAdmin, (req, res) => {
     SELECT 
       rc.*,
       s.name as store_name,
-      s.owner_name,
-      s.address as store_address,
-      s.phone as store_phone,
-      s.email as store_email
+      s.manager_name as owner_name,
+      s.business_address as store_address,
+      s.main_phone as store_phone,
+      s.representative_email as store_email
     FROM royalty_calculations rc
     LEFT JOIN stores s ON rc.store_id = s.id
     WHERE rc.calculation_year = ? AND rc.calculation_month = ? AND rc.invoice_generated = FALSE

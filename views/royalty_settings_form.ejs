@@ -64,7 +64,10 @@
             </div>
           <% } %>
 
-          <form method="POST" action="<% if (typeof setting !== 'undefined' && setting) { %>/royalty/settings/<%= setting.id %><% } else { %>/royalty/settings<% } %>">
+          <form method="POST" action="/royalty/settings/save">
+            <% if (typeof setting !== 'undefined' && setting) { %>
+              <input type="hidden" name="id" value="<%= setting.id %>">
+            <% } %>
             <div class="mb-3">
               <label for="store_id" class="form-label">対象店舗</label>
               <select class="form-select" id="store_id" name="store_id">
