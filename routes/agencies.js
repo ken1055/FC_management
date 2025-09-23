@@ -940,13 +940,24 @@ router.get("/new", requireRole(["admin"]), (req, res) => {
 
 // 編集フォーム
 router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
+  const { isSupabaseConfigured } = require("../config/database");
   db.get(
     "SELECT * FROM stores WHERE id = ?",
     [req.params.id],
     (err, agency) => {
       if (err || !agency) return res.status(404).send("データがありません");
 
-      // 取り扱い商品を取得（新旧データベース構造対応）
+      // Supabaseでは store_products は未使用のためスキップ
+      if (isSupabaseConfigured && isSupabaseConfigured()) {
+        agency.products = [];
+        return res.render("agencies_form", {
+          agency,
+          session: req.session,
+          title: "店舗編集",
+        });
+      }
+
+      // 取り扱い商品を取得（ローカルSQLite等）
       db.all(
         "SELECT product_name FROM store_products WHERE store_id = ?",
         [req.params.id],
@@ -956,7 +967,6 @@ router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
             products = [];
           }
 
-          // 既存データを新形式に変換
           agency.products = products.map((p) => ({
             product_name: p.product_name,
             product_detail: null,
@@ -1238,6 +1248,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
 // 編集（フォームPOST対応）
 router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
+  const { isSupabaseConfigured } = require("../config/database");
   const {
     name,
     age,
@@ -1276,14 +1287,21 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     function (err) {
       if (err) return res.status(500).send("DBエラー");
 
-      // 既存の商品を削除
+      // Supabase環境では store_products を扱わない
+      if (isSupabaseConfigured && isSupabaseConfigured()) {
+        return res.redirect(
+          "/stores/list?success=" +
+            encodeURIComponent(`代理店「${name}」を更新しました`)
+        );
+      }
+
+      // 既存の商品を削除（ローカルSQLite等）
       db.run(
         "DELETE FROM store_products WHERE store_id = ?",
         [req.params.id],
         (err) => {
           if (err) console.error("商品削除エラー:", err);
 
-          // 新形式: 配列形式での商品データ処理
           if (
             product_names &&
             Array.isArray(product_names) &&
@@ -1301,9 +1319,7 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
                 );
               }
             });
-          }
-          // 旧形式: JSON文字列での商品データ処理（互換性のため）
-          else if (products) {
+          } else if (products) {
             console.log("編集: 旧形式の商品データを処理");
             const productList = Array.isArray(products) ? products : [products];
             productList.forEach((productStr) => {
@@ -1318,7 +1334,6 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
                 );
               } catch (parseErr) {
                 console.error("商品データパースエラー:", parseErr);
-                // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
                 db.run(
                   "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
                   [req.params.id, productStr],
@@ -1329,12 +1344,12 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
               }
             });
           }
-        }
-      );
 
-      res.redirect(
-        "/stores/list?success=" +
-          encodeURIComponent(`代理店「${name}」を更新しました`)
+          res.redirect(
+            "/stores/list?success=" +
+              encodeURIComponent(`代理店「${name}」を更新しました`)
+          );
+        }
       );
     }
   );
