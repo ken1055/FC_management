@@ -283,6 +283,12 @@ document.getElementById('calculateForm').addEventListener('submit', async functi
 function showCalculationResult(result) {
   let alertClass = result.success ? 'alert-success' : 'alert-danger';
   let icon = result.success ? '✅' : '❌';
+  const yearFromResult = result?.summary?.year;
+  const monthFromResult = result?.summary?.month;
+  const fallbackYear = document.getElementById('calc_year')?.value;
+  const fallbackMonth = document.getElementById('calc_month')?.value;
+  const periodYear = yearFromResult ?? fallbackYear;
+  const periodMonth = monthFromResult ?? fallbackMonth;
   
   let detailsHtml = '';
   if (result.success && result.details && result.details.length > 0) {
@@ -315,7 +321,7 @@ function showCalculationResult(result) {
   
   const alertHtml = `
     <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
-      <h5>${icon} ${result.message}</h5>
+      <h5>${icon} ${periodYear}年${periodMonth}月: ${result.message}</h5>
       ${detailsHtml}
       <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
