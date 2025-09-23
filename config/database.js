@@ -35,7 +35,65 @@ async function executeSupabaseQuery(supabase, query, params) {
   const lower = query.toLowerCase().trim();
 
   try {
-    // SELECT
+    // SELECT（特殊ケース: 集計/JOIN をSupabaseでエミュレート）
+    // 1) グループ一覧: groups ←→ group_members の所属数集計
+    if (
+      lower.startsWith("select") &&
+      /from\s+groups/i.test(query) &&
+      /group_members/i.test(query) &&
+      /count\s*\(/i.test(query)
+    ) {
+      // groupsを取得
+      const { data: groups, error: gErr } = await supabase
+        .from("groups")
+        .select("id,name")
+        .order("name", { ascending: true });
+      if (gErr) throw gErr;
+
+      // 各グループの所属店舗数を取得
+      const results = [];
+      for (const g of groups || []) {
+        const { count, error: cErr } = await supabase
+          .from("group_members")
+          .select("id", { count: "exact", head: true })
+          .eq("group_id", g.id);
+        if (cErr) throw cErr;
+        results.push({ id: g.id, name: g.name, agency_count: count || 0 });
+      }
+      return { rows: results };
+    }
+
+    // 2) 管理者の売上一覧: stores ←→ sales の件数/合計集計
+    if (
+      lower.startsWith("select") &&
+      /from\s+stores/i.test(query) &&
+      /left\s+join\s+sales/i.test(query) &&
+      /group\s+by/i.test(query)
+    ) {
+      const { data: stores, error: sErr } = await supabase
+        .from("stores")
+        .select("id,name")
+        .order("name", { ascending: true });
+      if (sErr) throw sErr;
+
+      const rows = [];
+      for (const a of stores || []) {
+        const { data: saleRows, error: srErr } = await supabase
+          .from("sales")
+          .select("amount,id")
+          .eq("store_id", a.id);
+        if (srErr) throw srErr;
+        const sales_count = (saleRows || []).length;
+        const total_sales = (saleRows || []).reduce(
+          (sum, s) => sum + (Number(s.amount) || 0),
+          0
+        );
+        rows.push({ id: a.id, name: a.name, sales_count, total_sales });
+      }
+      return { rows };
+    }
+
+    // SELECT（単純）
     if (lower.startsWith("select")) {
       const tableName = extractTableName(query);
       if (!tableName) throw new Error("テーブル名を特定できません");
