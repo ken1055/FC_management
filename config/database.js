@@ -35,20 +35,16 @@ async function executeSupabaseQuery(supabase, query, params) {
   const lower = query.toLowerCase().trim();
 
   try {
-    // 0) ロイヤリティ計算用: 指定年月の売上を店舗別に集計し店舗名を付与
-    //    SELECT s.store_id, s.year, s.month, SUM(s.amount) as total_sales, st.name as store_name
-    //    FROM sales s LEFT JOIN stores st ON s.store_id = st.id
-    //    WHERE s.year = ? AND s.month = ?
-    //    GROUP BY s.store_id, s.year, s.month, st.name
+    // 0) ロイヤリティ計算用: 指定年月の売上を店舗別に集計し店舗名/率を付与（JOIN有無どちらも対応）
+    //    SELECT s.store_id, s.year, s.month, SUM(s.amount) as total_sales, ...
+    //    FROM sales s [LEFT JOIN stores st ...]
+    //    WHERE s.year = ? AND s.month = ? GROUP BY ...
     if (
       lower.startsWith("select") &&
       /from\s+sales\s+s/i.test(query) &&
-      /left\s+join\s+stores\s+st\s+on\s+s\.store_id\s*=\s*st\.id/i.test(
-        lower
-      ) &&
+      /where\s+s\.year\s*=\s*\?\s+and\s+s\.month\s*=\s*\?/i.test(lower) &&
       /sum\s*\(/i.test(lower) &&
-      /group\s+by/i.test(lower) &&
-      /where\s+s\.year\s*=\s*\?\s+and\s+s\.month\s*=\s*\?/i.test(lower)
+      /group\s+by/i.test(lower)
     ) {
       const targetYear = Number(params[0]);
       const targetMonth = Number(params[1]);
@@ -111,6 +107,69 @@ async function executeSupabaseQuery(supabase, query, params) {
           (stores || []).find((s) => s.id === sid)?.royalty_rate ??
           null,
       }));
+
+      return { rows };
+    }
+
+    // 0.1) ロイヤリティ計算結果一覧: royalty_calculations ←→ stores のJOINをエミュレート
+    //   SELECT rc.*, s.name as store_name FROM royalty_calculations rc LEFT JOIN stores s ON rc.store_id = s.id
+    if (
+      lower.startsWith("select") &&
+      /from\s+royalty_calculations\s+rc/i.test(lower) &&
+      /left\s+join\s+stores\s+s\s+on\s+rc\.store_id\s*=\s*s\.id/i.test(
+        lower
+      )
+    ) {
+      // パラメータ（年/月やid）の抽出
+      let yearParam = null;
+      let monthParam = null;
+      let idParam = null;
+      if (/where\s+rc\.calculation_year\s*=\s*\?\s+and\s+rc\.calculation_month\s*=\s*\?/i.test(lower)) {
+        yearParam = Number(params[0]);
+        monthParam = Number(params[1]);
+      } else if (/where\s+rc\.id\s*=\s*\?/i.test(lower)) {
+        idParam = Number(params[0]);
+      }
+
+      // rc取得
+      let rcQ = supabase.from("royalty_calculations").select("*");
+      if (idParam != null) {
+        rcQ = rcQ.eq("id", idParam);
+      }
+      if (yearParam != null) {
+        rcQ = rcQ.eq("calculation_year", yearParam).eq("calculation_month", monthParam);
+      }
+      const { data: rcRows, error: rcErr } = await rcQ;
+      if (rcErr) throw rcErr;
+
+      const storeIds = Array.from(new Set((rcRows || []).map((r) => r.store_id).filter(Boolean)));
+      let idToStore = new Map();
+      if (storeIds.length > 0) {
+        const { data: stores, error: sErr } = await supabase
+          .from("stores")
+          .select("id,name,manager_name,business_address,main_phone,representative_email")
+          .in("id", storeIds);
+        if (sErr) throw sErr;
+        idToStore = new Map((stores || []).map((s) => [s.id, s]));
+      }
+
+      // store_name付与、必要に応じて請求書用拡張フィールドも付与
+      let rows = (rcRows || []).map((r) => {
+        const st = idToStore.get(r.store_id) || {};
+        return {
+          ...r,
+          store_name: st.name || null,
+          owner_name: st.manager_name || null,
+          store_address: st.business_address || null,
+          store_phone: st.main_phone || null,
+          store_email: st.representative_email || null,
+        };
+      });
+
+      // ORDER BY s.name の簡易実装
+      if (/order\s+by\s+s\.name/i.test(lower)) {
+        rows = rows.sort((a, b) => (a.store_name || "").localeCompare(b.store_name || ""));
+      }
 
       return { rows };
     }
