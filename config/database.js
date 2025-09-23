@@ -35,6 +35,61 @@ async function executeSupabaseQuery(supabase, query, params) {
   const lower = query.toLowerCase().trim();
 
   try {
+    // 0) ロイヤリティ計算用: 指定年月の売上を店舗別に集計し店舗名を付与
+    //    SELECT s.store_id, s.year, s.month, SUM(s.amount) as total_sales, st.name as store_name
+    //    FROM sales s LEFT JOIN stores st ON s.store_id = st.id
+    //    WHERE s.year = ? AND s.month = ?
+    //    GROUP BY s.store_id, s.year, s.month, st.name
+    if (
+      lower.startsWith("select") &&
+      /from\s+sales\s+s/i.test(query) &&
+      /left\s+join\s+stores\s+st\s+on\s+s\.store_id\s*=\s*st\.id/i.test(
+        lower
+      ) &&
+      /sum\s*\(/i.test(lower) &&
+      /group\s+by/i.test(lower) &&
+      /where\s+s\.year\s*=\s*\?\s+and\s+s\.month\s*=\s*\?/i.test(lower)
+    ) {
+      const targetYear = Number(params[0]);
+      const targetMonth = Number(params[1]);
+
+      // 該当年月の売上取得
+      const { data: salesRows, error: salesErr } = await supabase
+        .from("sales")
+        .select("store_id,year,month,amount")
+        .eq("year", targetYear)
+        .eq("month", targetMonth);
+      if (salesErr) throw salesErr;
+
+      // 店舗別に集計
+      const byStore = new Map();
+      for (const r of salesRows || []) {
+        const sid = r.store_id;
+        const amount = Number(r.amount) || 0;
+        byStore.set(sid, (byStore.get(sid) || 0) + amount);
+      }
+
+      const storeIds = Array.from(byStore.keys());
+      if (storeIds.length === 0) return { rows: [] };
+
+      const { data: stores, error: storesErr } = await supabase
+        .from("stores")
+        .select("id,name")
+        .in("id", storeIds);
+      if (storesErr) throw storesErr;
+      const idToName = new Map((stores || []).map((s) => [s.id, s.name]));
+
+      const rows = storeIds.map((sid) => ({
+        store_id: sid,
+        year: targetYear,
+        month: targetMonth,
+        total_sales: byStore.get(sid) || 0,
+        store_name: idToName.get(sid) || null,
+      }));
+
+      return { rows };
+    }
+
     // SELECT（特殊ケース: 集計/JOIN をSupabaseでエミュレート）
     // 1) グループ一覧: groups ←→ group_members の所属数集計
     if (
