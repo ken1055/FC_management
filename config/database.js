@@ -129,7 +129,9 @@ async function executeSupabaseQuery(supabase, query, params) {
     ) {
       const { data: stores, error: sErr } = await supabase
         .from("stores")
-        .select("id,name")
+        .select(
+          "id,name,manager_name,business_address,main_phone,contract_type,contract_start_date,royalty_rate"
+        )
         .order("name", { ascending: true });
       if (sErr) throw sErr;
 
@@ -145,7 +147,18 @@ async function executeSupabaseQuery(supabase, query, params) {
           (sum, s) => sum + (Number(s.amount) || 0),
           0
         );
-        rows.push({ id: a.id, name: a.name, sales_count, total_sales });
+        rows.push({
+          id: a.id,
+          name: a.name,
+          manager_name: a.manager_name,
+          business_address: a.business_address,
+          main_phone: a.main_phone,
+          contract_type: a.contract_type,
+          contract_start_date: a.contract_start_date,
+          royalty_rate: a.royalty_rate,
+          sales_count,
+          total_sales,
+        });
       }
       return { rows };
     }
