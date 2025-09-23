@@ -19,7 +19,7 @@ function requireAdmin(req, res, next) {
 // ロイヤリティ設定一覧
 router.get("/settings", requireAdmin, (req, res) => {
   const query = `
-    SELECT rs.id, rs.store_id, rs.rate as royalty_rate, rs.effective_date, rs.created_at, rs.updated_at, s.name as store_name
+    SELECT rs.id, rs.store_id, rs.royalty_rate as royalty_rate, rs.effective_date, rs.created_at, s.name as store_name
     FROM royalty_settings rs
     LEFT JOIN stores s ON rs.store_id = s.id
     ORDER BY rs.effective_date DESC, s.name
@@ -232,7 +232,7 @@ router.post("/calculate", requireAdmin, (req, res) => {
     FROM sales s
     LEFT JOIN stores st ON s.store_id = st.id
     LEFT JOIN (
-      SELECT store_id, rate as royalty_rate, 
+      SELECT store_id, royalty_rate as royalty_rate, 
              ROW_NUMBER() OVER (PARTITION BY store_id ORDER BY effective_date DESC) as rn
       FROM royalty_settings 
       WHERE effective_date <= DATE('${year}-${month}-01')
@@ -352,7 +352,7 @@ router.post("/calculate", requireAdmin, (req, res) => {
       } else {
         // JOINで取得できなかった場合、ロイヤリティ設定テーブルから個別取得を試みる
         const settingsQuery = `
-          SELECT rate as royalty_rate 
+          SELECT royalty_rate 
           FROM royalty_settings 
           WHERE store_id = ? AND effective_date <= DATE('${year}-${month}-01')
           ORDER BY effective_date DESC 
@@ -433,7 +433,7 @@ router.post("/calculations/delete", requireAdmin, (req, res) => {
     });
   }
 
-  const query = "DELETE FROM royalty_calculations WHERE year = ? AND month = ?";
+  const query = "DELETE FROM royalty_calculations WHERE calculation_year = ? AND calculation_month = ?";
 
   db.run(query, [year, month], function (err) {
     if (err) {
@@ -576,8 +576,8 @@ router.get("/invoice/:calculationId", requireAdmin, (req, res) => {
     try {
       const pdfBuffer = await generateInvoicePDF(calculation);
       const fileName = `invoice_${calculation.store_name}_${
-        calculation.year
-      }_${String(calculation.month).padStart(2, "0")}.pdf`;
+        calculation.calculation_year
+      }_${String(calculation.calculation_month).padStart(2, "0")}.pdf`;
 
       // PDFファイルを保存
       const invoicesDir = path.join(__dirname, "../uploads/invoices");
