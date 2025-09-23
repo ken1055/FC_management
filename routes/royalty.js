@@ -673,8 +673,8 @@ router.post("/invoices/bulk", requireAdmin, (req, res) => {
         try {
           const pdfBuffer = await generateInvoicePDF(calculation);
           const fileName = `invoice_${calculation.store_name}_${
-            calculation.year
-          }_${String(calculation.month).padStart(2, "0")}.pdf`;
+            calculation.calculation_year
+          }_${String(calculation.calculation_month).padStart(2, "0")}.pdf`;
           const filePath = path.join(invoicesDir, fileName);
 
           fs.writeFileSync(filePath, pdfBuffer);
@@ -916,15 +916,15 @@ function generateInvoiceHTML(calculation) {
             <table>
                 <tr>
                     <th>請求書番号</th>
-                    <td>INV-${calculation.year}${String(
-    calculation.month
+                    <td>INV-${calculation.calculation_year}${String(
+    calculation.calculation_month
   ).padStart(2, "0")}-${String(calculation.store_id).padStart(3, "0")}</td>
                     <th>請求日</th>
                     <td>${invoiceDate.toLocaleDateString("ja-JP")}</td>
                 </tr>
                 <tr>
                     <th>対象期間</th>
-                    <td>${calculation.year}年${calculation.month}月</td>
+                    <td>${calculation.calculation_year}年${calculation.calculation_month}月</td>
                     <th>支払期限</th>
                     <td>${dueDate.toLocaleDateString("ja-JP")}</td>
                 </tr>
@@ -942,8 +942,8 @@ function generateInvoiceHTML(calculation) {
             </thead>
             <tbody>
                 <tr>
-                    <td class="item-name">${calculation.year}年${
-    calculation.month
+                    <td class="item-name">${calculation.calculation_year}年${
+    calculation.calculation_month
   }月 月間売上ロイヤリティ</td>
                     <td>¥${calculation.monthly_sales.toLocaleString()}</td>
                     <td>${calculation.royalty_rate}%</td>
