@@ -127,6 +127,9 @@ async function executeSupabaseQuery(supabase, query, params) {
       if (/where\s+rc\.calculation_year\s*=\s*\?\s+and\s+rc\.calculation_month\s*=\s*\?/i.test(lower)) {
         yearParam = Number(params[0]);
         monthParam = Number(params[1]);
+      } else if (/where\s+rc\.calculation_year\s*=\s*\?/i.test(lower)) {
+        // 年のみの条件（ロイヤリティレポート用）
+        yearParam = Number(params[0]);
       } else if (/where\s+rc\.id\s*=\s*\?/i.test(lower)) {
         idParam = Number(params[0]);
       }
@@ -137,7 +140,10 @@ async function executeSupabaseQuery(supabase, query, params) {
         rcQ = rcQ.eq("id", idParam);
       }
       if (yearParam != null) {
-        rcQ = rcQ.eq("calculation_year", yearParam).eq("calculation_month", monthParam);
+        rcQ = rcQ.eq("calculation_year", yearParam);
+        if (monthParam != null) {
+          rcQ = rcQ.eq("calculation_month", monthParam);
+        }
       }
       const { data: rcRows, error: rcErr } = await rcQ;
       if (rcErr) throw rcErr;
@@ -166,9 +172,16 @@ async function executeSupabaseQuery(supabase, query, params) {
         };
       });
 
-      // ORDER BY s.name の簡易実装
+      // ORDER BY の簡易実装
       if (/order\s+by\s+s\.name/i.test(lower)) {
         rows = rows.sort((a, b) => (a.store_name || "").localeCompare(b.store_name || ""));
+      } else if (/order\s+by\s+rc\.calculation_month,\s*s\.name/i.test(lower)) {
+        // ロイヤリティレポート用: 月、店舗名でソート
+        rows = rows.sort((a, b) => {
+          const monthDiff = (a.calculation_month || 0) - (b.calculation_month || 0);
+          if (monthDiff !== 0) return monthDiff;
+          return (a.store_name || "").localeCompare(b.store_name || "");
+        });
       }
 
       return { rows };
