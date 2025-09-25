@@ -202,6 +202,122 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows };
     }
 
+    // 0.3) 顧客一覧/詳細: customers c ←→ stores s のJOINをエミュレート
+    //   SELECT c.*, s.name as store_name FROM customers c LEFT JOIN stores s ON c.store_id = s.id ...
+    if (
+      lower.startsWith("select") &&
+      /from\s+customers\s+c/i.test(lower) &&
+      /left\s+join\s+stores\s+s\s+on\s+c\.store_id\s*=\s*s\.id/i.test(
+        lower
+      )
+    ) {
+      // パターン判定: 詳細 or 一覧
+      const isDetail = /where\s+c\.id\s*=\s*\?/i.test(lower);
+
+      if (isDetail) {
+        // c.id = ? [AND c.store_id = ?]
+        const customerId = Number(params[0]);
+        const storeIdFilter = /and\s+c\.store_id\s*=\s*\?/i.test(lower)
+          ? Number(params[1])
+          : null;
+
+        const { data: custRows, error: cErr } = await supabase
+          .from("customers")
+          .select(
+            "id,store_id,customer_code,name,kana,email,phone,address,birth_date,gender,notes,created_at,updated_at"
+          )
+          .eq("id", customerId)
+          .limit(1);
+        if (cErr) throw cErr;
+        let row = (custRows || [])[0] || null;
+        if (!row) return { rows: [] };
+        if (storeIdFilter != null && row.store_id !== storeIdFilter) {
+          return { rows: [] };
+        }
+
+        let storeName = null;
+        if (row.store_id) {
+          const { data: st, error: sErr } = await supabase
+            .from("stores")
+            .select("id,name")
+            .eq("id", row.store_id)
+            .limit(1);
+          if (sErr) throw sErr;
+          storeName = (st || [])[0]?.name || null;
+        }
+        return { rows: [{ ...row, store_name: storeName }] };
+      } else {
+        // 一覧: optional c.store_id = ? と optional LIKE 3つ
+        const hasStoreId = /where[\s\S]*c\.store_id\s*=\s*\?/i.test(lower);
+        const hasLike = /like\s*\?/i.test(lower);
+
+        let pIndex = 0;
+        let storeIdFilter = null;
+        if (hasStoreId) {
+          storeIdFilter = Number(params[pIndex++]);
+        }
+        let like1 = null,
+          like2 = null,
+          like3 = null;
+        if (hasLike) {
+          like1 = String(params[pIndex++] || "");
+          like2 = String(params[pIndex++] || "");
+          like3 = String(params[pIndex++] || "");
+        }
+
+        // 取得
+        let q = supabase
+          .from("customers")
+          .select(
+            "id,store_id,customer_code,name,kana,email,phone,address,birth_date,gender,notes,created_at,updated_at"
+          )
+          .order("created_at", { ascending: false });
+        if (storeIdFilter != null) q = q.eq("store_id", storeIdFilter);
+        const { data: custRows, error: cErr } = await q;
+        if (cErr) throw cErr;
+
+        // LIKE emulation（大文字小文字を区別せず、%を削除して部分一致）
+        const norm = (s) => (s || "").toString().toLowerCase();
+        const stripPct = (s) => (s || "").replace(/%/g, "").toLowerCase();
+        let filtered = custRows || [];
+        if (hasLike) {
+          const t1 = stripPct(like1);
+          const t2 = stripPct(like2);
+          const t3 = stripPct(like3);
+          filtered = filtered.filter((r) => {
+            const name = norm(r.name);
+            const code = norm(r.customer_code);
+            const email = norm(r.email);
+            return (
+              (t1 && name.includes(t1)) ||
+              (t2 && code.includes(t2)) ||
+              (t3 && email.includes(t3))
+            );
+          });
+        }
+
+        // store name mapping
+        const storeIds = Array.from(
+          new Set(filtered.map((r) => r.store_id).filter(Boolean))
+        );
+        let idToName = new Map();
+        if (storeIds.length > 0) {
+          const { data: stores, error: sErr } = await supabase
+            .from("stores")
+            .select("id,name")
+            .in("id", storeIds);
+          if (sErr) throw sErr;
+          idToName = new Map((stores || []).map((s) => [s.id, s.name]));
+        }
+
+        const rows = filtered.map((r) => ({
+          ...r,
+          store_name: idToName.get(r.store_id) || null,
+        }));
+        return { rows };
+      }
+    }
+
     // A) ロイヤリティ設定一覧: royalty_settings ←→ stores のJOINをエミュレート
     if (
       lower.startsWith("select") &&
