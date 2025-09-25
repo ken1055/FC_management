@@ -187,6 +187,61 @@ async function executeSupabaseQuery(supabase, query, params) {
       return { rows };
     }
 
+    // 0.1.1) ロイヤリティレポート集計: royalty_calculations の月別集計をエミュレート
+    //   SELECT rc.calculation_month, COUNT(rc.id) as store_count, SUM(...) FROM royalty_calculations rc WHERE rc.calculation_year = ? GROUP BY rc.calculation_month
+    if (
+      lower.startsWith("select") &&
+      /from\s+royalty_calculations\s+rc/i.test(lower) &&
+      /count\s*\(\s*rc\.id\s*\)/i.test(lower) &&
+      /group\s+by\s+rc\.calculation_month/i.test(lower) &&
+      /where\s+rc\.calculation_year\s*=\s*\?/i.test(lower)
+    ) {
+      const yearParam = Number(params[0]);
+      
+      // 指定年のロイヤリティ計算データを取得
+      const { data: rcRows, error: rcErr } = await supabase
+        .from("royalty_calculations")
+        .select("*")
+        .eq("calculation_year", yearParam);
+      if (rcErr) throw rcErr;
+
+      // 月別に集計
+      const monthlyData = {};
+      (rcRows || []).forEach(row => {
+        const month = row.calculation_month;
+        if (!monthlyData[month]) {
+          monthlyData[month] = {
+            calculation_month: month,
+            store_count: 0,
+            total_sales: 0,
+            total_royalty: 0,
+            royalty_rates: []
+          };
+        }
+        monthlyData[month].store_count += 1;
+        monthlyData[month].total_sales += row.monthly_sales || 0;
+        monthlyData[month].total_royalty += row.royalty_amount || 0;
+        monthlyData[month].royalty_rates.push(row.royalty_rate || 0);
+      });
+
+      // 平均ロイヤリティ率を計算して結果を生成
+      const rows = Object.values(monthlyData).map(data => ({
+        calculation_month: data.calculation_month,
+        store_count: data.store_count,
+        total_sales: data.total_sales,
+        total_royalty: data.total_royalty,
+        avg_royalty_rate: data.royalty_rates.length > 0 
+          ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) / data.royalty_rates.length 
+          : 0
+      }));
+
+      // 月順でソート
+      rows.sort((a, b) => a.calculation_month - b.calculation_month);
+
+      console.log("ロイヤリティレポート集計エミュレーション完了:", rows.length, "件");
+      return { rows };
+    }
+
     // 0.2) システム設定: settings → system_settings へのマッピング（SELECT）
     if (
       lower.startsWith("select") &&
