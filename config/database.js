@@ -224,7 +224,7 @@ async function executeSupabaseQuery(supabase, query, params) {
         const { data: custRows, error: cErr } = await supabase
           .from("customers")
           .select(
-            "id,store_id,customer_code,name,kana,email,phone,address,birth_date,gender,notes,created_at,updated_at"
+            "id,store_id,customer_code,name,email,phone,address,birth_date,gender,notes,created_at,updated_at"
           )
           .eq("id", customerId)
           .limit(1);
@@ -269,7 +269,7 @@ async function executeSupabaseQuery(supabase, query, params) {
         let q = supabase
           .from("customers")
           .select(
-            "id,store_id,customer_code,name,kana,email,phone,address,birth_date,gender,notes,created_at,updated_at"
+            "id,store_id,customer_code,name,email,phone,address,birth_date,gender,notes,created_at,updated_at"
           )
           .order("created_at", { ascending: false });
         if (storeIdFilter != null) q = q.eq("store_id", storeIdFilter);
