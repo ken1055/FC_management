@@ -360,6 +360,9 @@ router.post("/create", requireAuth, (req, res) => {
     gender,
     store_id,
     notes,
+    visit_count,
+    total_purchase_amount,
+    last_visit_date,
   } = req.body;
 
   const isAdmin = req.session.user.role === "admin";
@@ -413,14 +416,14 @@ router.post("/create", requireAuth, (req, res) => {
     const query = useSupabase
       ? `
       INSERT INTO customers (
-        store_id, customer_code, name, kana, email, phone, address, birth_date, gender, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        store_id, customer_code, name, kana, email, phone, address, birth_date, gender, notes, visit_count, total_purchase_amount, last_visit_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
       : `
       INSERT INTO customers (
         store_id, customer_code, name, kana, email, phone, 
-        address, birth_date, gender, notes, registration_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        address, birth_date, gender, notes, visit_count, total_purchase_amount, last_visit_date, registration_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const toNull = (v) => (v !== undefined && v !== null && String(v).trim() !== "" ? v : null);
@@ -437,6 +440,9 @@ router.post("/create", requireAuth, (req, res) => {
           toNull(birth_date),
           toNull(gender),
           toNull(notes),
+          parseInt(visit_count) || 0,
+          parseInt(total_purchase_amount) || 0,
+          toNull(last_visit_date),
         ]
       : [
           finalStoreId,
@@ -449,6 +455,9 @@ router.post("/create", requireAuth, (req, res) => {
           toNull(birth_date),
           toNull(gender),
           toNull(notes),
+          parseInt(visit_count) || 0,
+          parseInt(total_purchase_amount) || 0,
+          toNull(last_visit_date),
           new Date().toISOString().slice(0, 10),
         ];
 
@@ -484,6 +493,9 @@ router.post("/update/:id", requireAuth, (req, res) => {
     gender,
     store_id,
     notes,
+    visit_count,
+    total_purchase_amount,
+    last_visit_date,
   } = req.body;
 
   const isAdmin = req.session.user.role === "admin";
@@ -561,14 +573,14 @@ router.post("/update/:id", requireAuth, (req, res) => {
       const query = useSupabase
         ? `
         UPDATE customers SET 
-          store_id = ?, customer_code = ?, name = ?, kana = ?, email = ?, phone = ?, address = ?, birth_date = ?, gender = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+          store_id = ?, customer_code = ?, name = ?, kana = ?, email = ?, phone = ?, address = ?, birth_date = ?, gender = ?, notes = ?, visit_count = ?, total_purchase_amount = ?, last_visit_date = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `
         : `
         UPDATE customers SET 
           store_id = ?, customer_code = ?, name = ?, kana = ?, 
           email = ?, phone = ?, address = ?, birth_date = ?, 
-          gender = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+          gender = ?, notes = ?, visit_count = ?, total_purchase_amount = ?, last_visit_date = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
 
@@ -586,6 +598,9 @@ router.post("/update/:id", requireAuth, (req, res) => {
             toNull(birth_date),
             toNull(gender),
             toNull(notes),
+            parseInt(visit_count) || 0,
+            parseInt(total_purchase_amount) || 0,
+            toNull(last_visit_date),
             customerId,
           ]
         : [
@@ -599,6 +614,9 @@ router.post("/update/:id", requireAuth, (req, res) => {
             toNull(birth_date),
             toNull(gender),
             toNull(notes),
+            parseInt(visit_count) || 0,
+            parseInt(total_purchase_amount) || 0,
+            toNull(last_visit_date),
             customerId,
           ];
 

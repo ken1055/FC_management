@@ -178,25 +178,31 @@
                                               placeholder="顧客に関する特記事項があれば入力してください"><%= customer ? (customer.notes || '') : '' %></textarea>
                                 </div>
 
-                                <!-- 購入履歴情報（編集時のみ表示） -->
-                                <% if (customer) { %>
+                                <!-- 購入履歴情報 -->
                                 <div class="col-12 mt-4">
                                     <h5 class="border-bottom pb-2 mb-3">購入履歴情報</h5>
                                 </div>
                                 <div class="col-md-4 mb-3">
-                                    <label class="form-label">来店回数</label>
-                                    <input type="text" class="form-control" value="<%= customer.visit_count || 0 %>回" readonly>
+                                    <label for="visit_count" class="form-label">来店回数</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="visit_count" name="visit_count" 
+                                               value="<%= customer ? (customer.visit_count || 0) : 0 %>" min="0">
+                                        <span class="input-group-text">回</span>
+                                    </div>
                                 </div>
                                 <div class="col-md-4 mb-3">
-                                    <label class="form-label">総購入金額</label>
-                                    <input type="text" class="form-control" value="¥<%= (customer.total_purchase_amount || 0).toLocaleString() %>" readonly>
+                                    <label for="total_purchase_amount" class="form-label">総購入金額</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">¥</span>
+                                        <input type="number" class="form-control" id="total_purchase_amount" name="total_purchase_amount" 
+                                               value="<%= customer ? (customer.total_purchase_amount || 0) : 0 %>" min="0">
+                                    </div>
                                 </div>
                                 <div class="col-md-4 mb-3">
-                                    <label class="form-label">最終来店日</label>
-                                    <input type="text" class="form-control" 
-                                           value="<%= customer.last_visit_date ? new Date(customer.last_visit_date).toLocaleDateString('ja-JP') : '-' %>" readonly>
+                                    <label for="last_visit_date" class="form-label">最終来店日</label>
+                                    <input type="date" class="form-control" id="last_visit_date" name="last_visit_date" 
+                                           value="<%= customer && customer.last_visit_date ? (new Date(customer.last_visit_date).toISOString().split('T')[0]) : '' %>">
                                 </div>
-                                <% } %>
                             </div>
 
                             <div class="d-flex justify-content-between mt-4">

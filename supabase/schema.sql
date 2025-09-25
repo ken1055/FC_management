@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS customers (
   birth_date DATE,
   gender TEXT,
   notes TEXT,
+  -- 購入履歴情報
+  visit_count INTEGER DEFAULT 0,
+  total_purchase_amount INTEGER DEFAULT 0,
+  last_visit_date DATE,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
