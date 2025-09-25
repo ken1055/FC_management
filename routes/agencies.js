@@ -1636,31 +1636,37 @@ router.get(
     db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, agency) => {
       if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
-      // 取り扱い商品を取得（既存データベース構造対応）
-      db.all(
-        "SELECT product_name FROM store_products WHERE store_id = ?",
-        [agencyId],
-        (err, products) => {
-          if (err) {
-            console.error("商品取得エラー:", err);
-            products = [];
+      const renderForm = (products) => {
+        agency.products = (products || []).map((p) => ({
+          product_name: p.product_name,
+          product_detail: null,
+          product_url: null,
+        }));
+
+        res.render("agencies_form", {
+          agency,
+          session: req.session,
+          title: agency.name + "のプロフィール編集",
+          isProfile: true,
+        });
+      };
+
+      if (isSupabaseConfigured()) {
+        // Supabaseでは store_products は未使用
+        renderForm([]);
+      } else {
+        db.all(
+          "SELECT product_name FROM store_products WHERE store_id = ?",
+          [agencyId],
+          (err, products) => {
+            if (err) {
+              console.error("商品取得エラー:", err);
+              return renderForm([]);
+            }
+            renderForm(products || []);
           }
-
-          // 既存データを新形式に変換
-          agency.products = products.map((p) => ({
-            product_name: p.product_name,
-            product_detail: null,
-            product_url: null,
-          }));
-
-          res.render("agencies_form", {
-            agency,
-            session: req.session,
-            title: agency.name + "のプロフィール編集",
-            isProfile: true,
-          });
-        }
-      );
+        );
+      }
     });
   }
 );
@@ -1791,63 +1797,66 @@ router.post(
       function (err) {
         if (err) return res.status(500).send("DBエラー");
 
-        // 既存の商品を削除
-        db.run(
-          "DELETE FROM store_products WHERE store_id = ?",
-          [agencyId],
-          (err) => {
-            if (err) console.error("商品削除エラー:", err);
+        // Supabaseでは store_products を操作しない
+        if (!isSupabaseConfigured()) {
+          // 既存の商品を削除
+          db.run(
+            "DELETE FROM store_products WHERE store_id = ?",
+            [agencyId],
+            (err) => {
+              if (err) console.error("商品削除エラー:", err);
 
-            // 新形式: 配列形式での商品データ処理
-            if (
-              product_names &&
-              Array.isArray(product_names) &&
-              product_names.length > 0
-            ) {
-              console.log("プロフィール編集: 新形式の商品データを処理");
-              product_names.forEach((productName, index) => {
-                if (productName && productName.trim() !== "") {
-                  db.run(
-                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                    [agencyId, productName.trim()],
-                    (err) => {
-                      if (err) console.error("商品保存エラー:", err);
-                    }
-                  );
-                }
-              });
+              // 新形式: 配列形式での商品データ処理
+              if (
+                product_names &&
+                Array.isArray(product_names) &&
+                product_names.length > 0
+              ) {
+                console.log("プロフィール編集: 新形式の商品データを処理");
+                product_names.forEach((productName, index) => {
+                  if (productName && productName.trim() !== "") {
+                    db.run(
+                      "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
+                      [agencyId, productName.trim()],
+                      (err) => {
+                        if (err) console.error("商品保存エラー:", err);
+                      }
+                    );
+                  }
+                });
+              }
+              // 旧形式: JSON文字列での商品データ処理（互換性のため）
+              else if (products) {
+                console.log("プロフィール編集: 旧形式の商品データを処理");
+                const productList = Array.isArray(products)
+                  ? products
+                  : [products];
+                productList.forEach((productStr) => {
+                  try {
+                    const product = JSON.parse(productStr);
+                    db.run(
+                      "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
+                      [agencyId, product.product_name],
+                      (err) => {
+                        if (err) console.error("商品保存エラー:", err);
+                      }
+                    );
+                  } catch (parseErr) {
+                    console.error("商品データパースエラー:", parseErr);
+                    // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
+                    db.run(
+                      "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
+                      [agencyId, productStr],
+                      (err) => {
+                        if (err) console.error("商品保存エラー（文字列）:", err);
+                      }
+                    );
+                  }
+                });
+              }
             }
-            // 旧形式: JSON文字列での商品データ処理（互換性のため）
-            else if (products) {
-              console.log("プロフィール編集: 旧形式の商品データを処理");
-              const productList = Array.isArray(products)
-                ? products
-                : [products];
-              productList.forEach((productStr) => {
-                try {
-                  const product = JSON.parse(productStr);
-                  db.run(
-                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                    [agencyId, product.product_name],
-                    (err) => {
-                      if (err) console.error("商品保存エラー:", err);
-                    }
-                  );
-                } catch (parseErr) {
-                  console.error("商品データパースエラー:", parseErr);
-                  // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
-                  db.run(
-                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                    [agencyId, productStr],
-                    (err) => {
-                      if (err) console.error("商品保存エラー（文字列）:", err);
-                    }
-                  );
-                }
-              });
-            }
-          }
-        );
+          );
+        }
 
         // プロフィール更新通知メール（代理店ユーザーが自分で更新した場合のみ）
         if (req.session.user.role === "agency") {
