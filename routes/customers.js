@@ -123,6 +123,7 @@ router.get("/list", requireAuth, (req, res) => {
         session: req.session,
         title: "顧客一覧",
         isAdmin: isAdmin,
+        isSupabase: isSupabaseConfigured(),
       });
     });
   });
@@ -167,11 +168,12 @@ router.get("/store", requireAuth, (req, res) => {
       });
     }
 
-    res.render("customers_store_list", {
+  res.render("customers_store_list", {
       customers: customers || [],
       searchTerm: searchTerm,
       session: req.session,
       title: "顧客一覧",
+    isSupabase: isSupabaseConfigured(),
     });
   });
 });
@@ -262,6 +264,7 @@ router.get("/new", requireAuth, (req, res) => {
         session: req.session,
         title: "顧客登録",
         isAdmin: isAdmin,
+        isSupabase: isSupabaseConfigured(),
       });
     });
   } else {
@@ -271,6 +274,7 @@ router.get("/new", requireAuth, (req, res) => {
       session: req.session,
       title: "顧客登録",
       isAdmin: isAdmin,
+      isSupabase: isSupabaseConfigured(),
     });
   }
 });
@@ -322,6 +326,7 @@ router.get("/edit/:id", requireAuth, (req, res) => {
           session: req.session,
           title: "顧客編集",
           isAdmin: isAdmin,
+          isSupabase: isSupabaseConfigured(),
         });
       });
     } else {
@@ -331,6 +336,7 @@ router.get("/edit/:id", requireAuth, (req, res) => {
         session: req.session,
         title: "顧客編集",
         isAdmin: isAdmin,
+        isSupabase: isSupabaseConfigured(),
       });
     }
   });
