@@ -396,8 +396,8 @@ router.post("/create", requireAuth, (req, res) => {
     const query = useSupabase
       ? `
       INSERT INTO customers (
-        store_id, name
-      ) VALUES (?, ?)
+        store_id, customer_code, name, email, phone, address, birth_date, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
       : `
       INSERT INTO customers (
@@ -406,19 +406,30 @@ router.post("/create", requireAuth, (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
+    const toNull = (v) => (v !== undefined && v !== null && String(v).trim() !== "" ? v : null);
+
     const params = isSupabaseConfigured()
-      ? [finalStoreId, name]
+      ? [
+          finalStoreId,
+          toNull(customer_code),
+          name,
+          toNull(email),
+          toNull(phone),
+          toNull(address),
+          toNull(birth_date),
+          toNull(notes),
+        ]
       : [
           finalStoreId,
-          customer_code || null,
+          toNull(customer_code),
           name,
-          kana || null,
-          email || null,
-          phone || null,
-          address || null,
-          birth_date || null,
-          gender || null,
-          notes || null,
+          toNull(kana),
+          toNull(email),
+          toNull(phone),
+          toNull(address),
+          toNull(birth_date),
+          toNull(gender),
+          toNull(notes),
           new Date().toISOString().slice(0, 10),
         ];
 
@@ -524,7 +535,7 @@ router.post("/update/:id", requireAuth, (req, res) => {
       const query = useSupabase
         ? `
         UPDATE customers SET 
-          store_id = ?, name = ?, updated_at = CURRENT_TIMESTAMP
+          store_id = ?, customer_code = ?, name = ?, email = ?, phone = ?, address = ?, birth_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `
         : `
@@ -535,19 +546,31 @@ router.post("/update/:id", requireAuth, (req, res) => {
         WHERE id = ?
       `;
 
+      const toNull = (v) => (v !== undefined && v !== null && String(v).trim() !== "" ? v : null);
+
       const params = isSupabaseConfigured()
-        ? [finalStoreId, name, customerId]
+        ? [
+            finalStoreId,
+            toNull(customer_code),
+            name,
+            toNull(email),
+            toNull(phone),
+            toNull(address),
+            toNull(birth_date),
+            toNull(notes),
+            customerId,
+          ]
         : [
             finalStoreId,
-            customer_code || null,
+            toNull(customer_code),
             name,
-            kana || null,
-            email || null,
-            phone || null,
-            address || null,
-            birth_date || null,
-            gender || null,
-            notes || null,
+            toNull(kana),
+            toNull(email),
+            toNull(phone),
+            toNull(address),
+            toNull(birth_date),
+            toNull(gender),
+            toNull(notes),
             customerId,
           ];
 
