@@ -102,10 +102,12 @@ CREATE TABLE IF NOT EXISTS customers (
   store_id INTEGER REFERENCES stores(id),
   customer_code TEXT UNIQUE,
   name TEXT NOT NULL,
+  kana TEXT,
   phone TEXT,
   email TEXT,
   address TEXT,
   birth_date DATE,
+  gender TEXT,
   notes TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
