@@ -524,12 +524,13 @@ async function executeSupabaseQuery(supabase, query, params) {
 
       let qb = supabase.from(targetTable).update(updateData);
 
-      if (lower.includes(" where ")) {
-        const { filters, usedParams } = parseWhereEqConditions(
-          originalQuery,
-          params,
-          paramIndex
-        );
+      // WHERE句を確実に解析（改行や複数空白に頑健）
+      const { filters, usedParams } = parseWhereEqConditions(
+        originalQuery,
+        params,
+        paramIndex
+      );
+      if (filters.length > 0) {
         filters.forEach(({ column, value }) => {
           const mappedColumn =
             targetTable === "system_settings" && column === "key_name"
@@ -537,8 +538,11 @@ async function executeSupabaseQuery(supabase, query, params) {
               : column;
           qb = qb.eq(mappedColumn, value);
         });
-        paramIndex += usedParams;
+      } else {
+        // PostgRESTはUPDATEにフィルタが必須
+        throw new Error("Supabase UPDATE requires WHERE clause");
       }
+      paramIndex += usedParams;
 
       const { data, error } = await qb.select();
       if (error) throw error;
@@ -555,15 +559,21 @@ async function executeSupabaseQuery(supabase, query, params) {
         : tableName;
 
       let qb = supabase.from(targetTable).delete();
-      if (lower.includes(" where ")) {
+      // WHERE句を確実に解析（改行や複数空白に頑健）
+      {
         const { filters } = parseWhereEqConditions(originalQuery, params, 0);
-        filters.forEach(({ column, value }) => {
-          const mappedColumn =
-            targetTable === "system_settings" && column === "key_name"
-              ? "key"
-              : column;
-          qb = qb.eq(mappedColumn, value);
-        });
+        if (filters.length > 0) {
+          filters.forEach(({ column, value }) => {
+            const mappedColumn =
+              targetTable === "system_settings" && column === "key_name"
+                ? "key"
+                : column;
+            qb = qb.eq(mappedColumn, value);
+          });
+        } else {
+          // PostgRESTはDELETEにフィルタが必須
+          throw new Error("Supabase DELETE requires WHERE clause");
+        }
       }
 
       const { data, error } = await qb.select();
