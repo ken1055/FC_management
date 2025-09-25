@@ -344,6 +344,11 @@ router.get("/edit/:id", requireAuth, (req, res) => {
 
 // 顧客登録処理
 router.post("/create", requireAuth, (req, res) => {
+  console.log("=== 顧客登録処理開始 ===");
+  console.log("リクエストボディ:", req.body);
+  console.log("セッションユーザー:", req.session.user);
+  console.log("Supabase設定:", isSupabaseConfigured());
+  
   const {
     customer_code,
     name,
@@ -359,6 +364,9 @@ router.post("/create", requireAuth, (req, res) => {
 
   const isAdmin = req.session.user.role === "admin";
   const finalStoreId = isAdmin ? store_id : req.session.user.store_id;
+  
+  console.log("isAdmin:", isAdmin);
+  console.log("finalStoreId:", finalStoreId);
 
   // 必須フィールドの検証
   if (!name || !finalStoreId) {
@@ -399,6 +407,9 @@ router.post("/create", requireAuth, (req, res) => {
 
   function insertCustomer() {
     const useSupabase = isSupabaseConfigured();
+    console.log("=== INSERT処理開始 ===");
+    console.log("useSupabase:", useSupabase);
+    
     const query = useSupabase
       ? `
       INSERT INTO customers (
@@ -438,6 +449,9 @@ router.post("/create", requireAuth, (req, res) => {
           toNull(notes),
           new Date().toISOString().slice(0, 10),
         ];
+
+    console.log("実行SQL:", query);
+    console.log("パラメータ:", params);
 
     db.run(query, params, function (err) {
       if (err) {
