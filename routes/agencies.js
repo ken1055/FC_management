@@ -1668,6 +1668,31 @@ router.post(
     product_details,
     product_urls,
     products, // 旧形式との互換性のため残す
+    // 店舗基本情報
+    manager_name,
+    business_address,
+    main_phone,
+    mobile_phone,
+    representative_email,
+    // 契約基本情報
+    contract_type,
+    contract_start_date,
+    royalty_rate,
+    // 請求基本情報
+    invoice_number,
+    bank_name,
+    branch_name,
+    account_type,
+    account_number,
+    account_holder,
+    // 許認可情報
+    license_status,
+    license_type,
+    license_number,
+    license_file_path,
+    // 連携ID
+    line_official_id,
+    representative_gmail,
   } = req.body;
 
     // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
@@ -1680,9 +1705,67 @@ router.post(
       contract_date && contract_date.trim() !== "" ? contract_date : null;
   // start_date は廃止（Supabaseスキーマ未定義）
 
+    // 空文字はNULLに正規化
+    const toNull = (v) => (v !== undefined && v !== null && String(v).trim() !== "" ? v : null);
+
+    // 数値系（royalty_rate）は数値へ
+    const normalizedRoyaltyRate =
+      royalty_rate !== undefined && royalty_rate !== "" ? parseFloat(royalty_rate) : null;
+
+    const updateSql = `
+      UPDATE stores SET 
+        name = ?,
+        manager_name = ?,
+        business_address = ?,
+        main_phone = ?,
+        mobile_phone = ?,
+        representative_email = ?,
+        contract_type = ?,
+        contract_start_date = ?,
+        royalty_rate = ?,
+        invoice_number = ?,
+        bank_name = ?,
+        branch_name = ?,
+        account_type = ?,
+        account_number = ?,
+        account_holder = ?,
+        license_status = ?,
+        license_type = ?,
+        license_number = ?,
+        license_file_path = ?,
+        line_official_id = ?,
+        representative_gmail = ?
+      WHERE id = ?
+    `;
+
+    const updateParams = [
+      toNull(name),
+      toNull(manager_name),
+      toNull(address || business_address),
+      toNull(main_phone),
+      toNull(mobile_phone),
+      toNull(representative_email),
+      toNull(contract_type),
+      toNull(processedContractDate || contract_start_date),
+      normalizedRoyaltyRate,
+      toNull(invoice_number),
+      toNull(bank_name),
+      toNull(branch_name),
+      toNull(account_type),
+      toNull(account_number),
+      toNull(account_holder),
+      toNull(license_status),
+      toNull(license_type),
+      toNull(license_number),
+      toNull(license_file_path),
+      toNull(line_official_id),
+      toNull(representative_gmail),
+      agencyId,
+    ];
+
     db.run(
-      "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
-      [name, address, processedContractDate, agencyId],
+      updateSql,
+      updateParams,
       function (err) {
         if (err) return res.status(500).send("DBエラー");
 
