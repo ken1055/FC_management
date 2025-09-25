@@ -334,6 +334,11 @@ try {
 }
 
 try {
+  // デバッグ用ミドルウェア
+  app.use("/customers", (req, res, next) => {
+    console.log(`[CUSTOMERS] ${req.method} ${req.path} - Body:`, req.body);
+    next();
+  });
   app.use("/customers", require("./routes/customers"));
   console.log("customers ルート読み込み完了");
 } catch (error) {
