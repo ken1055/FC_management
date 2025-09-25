@@ -402,8 +402,8 @@ router.post("/create", requireAuth, (req, res) => {
     const query = useSupabase
       ? `
       INSERT INTO customers (
-        store_id, customer_code, name, kana, email, phone, address, birth_date, gender, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        store_id, customer_code, name, email, phone, address, birth_date, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
       : `
       INSERT INTO customers (
@@ -419,12 +419,10 @@ router.post("/create", requireAuth, (req, res) => {
           finalStoreId,
           toNull(customer_code),
           name,
-          toNull(kana),
           toNull(email),
           toNull(phone),
           toNull(address),
           toNull(birth_date),
-          toNull(gender),
           toNull(notes),
         ]
       : [
@@ -543,7 +541,7 @@ router.post("/update/:id", requireAuth, (req, res) => {
       const query = useSupabase
         ? `
         UPDATE customers SET 
-          store_id = ?, customer_code = ?, name = ?, kana = ?, email = ?, phone = ?, address = ?, birth_date = ?, gender = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+          store_id = ?, customer_code = ?, name = ?, email = ?, phone = ?, address = ?, birth_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `
         : `
@@ -561,12 +559,10 @@ router.post("/update/:id", requireAuth, (req, res) => {
             finalStoreId,
             toNull(customer_code),
             name,
-            toNull(kana),
             toNull(email),
             toNull(phone),
             toNull(address),
             toNull(birth_date),
-            toNull(gender),
             toNull(notes),
             customerId,
           ]
