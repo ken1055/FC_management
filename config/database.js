@@ -628,22 +628,34 @@ function extractTableName(query) {
 
 // WHERE句の単純な col = ? AND col2 = ? を解析
 function parseWhereEqConditions(query, params, startIndex) {
-  const whereMatch = query.match(/where\s+(.+?)(order\s+by|limit|$)/i);
+  // WHERE ... (supports newlines) ... until ORDER BY / LIMIT / EOL
+  const whereMatch = query.match(/where\s+([\s\S]+?)(order\s+by|limit|$)/i);
   const filters = [];
   let usedParams = 0;
   if (whereMatch) {
-    const condStr = whereMatch[1];
+    let condStr = whereMatch[1] || "";
+    condStr = condStr.replace(/;+\s*$/i, "").trim();
+    if (!condStr) return { filters, usedParams };
+
+    // Split by AND (allow newlines around)
     const parts = condStr.split(/\s+and\s+/i);
-    for (const part of parts) {
-      const mQ = part.match(/(\w+)\s*=\s*\?/);
+    for (let raw of parts) {
+      const part = raw.trim().replace(/^\((.*)\)$/s, "$1").trim();
+
+      // Pattern: table.column = ?  or  column = ?
+      const mQ = part.match(/([\w\.]+)\s*=\s*\?/);
       if (mQ) {
-        filters.push({ column: mQ[1], value: params[startIndex + usedParams] });
+        const col = mQ[1];
+        filters.push({ column: col, value: params[startIndex + usedParams] });
         usedParams += 1;
         continue;
       }
-      const mL = part.match(/(\w+)\s*=\s*(['"])(.*?)\2/);
+
+      // Pattern: column = 'literal'
+      const mL = part.match(/([\w\.]+)\s*=\s*(["'])(.*?)\2/);
       if (mL) {
         filters.push({ column: mL[1], value: mL[3] });
+        continue;
       }
     }
   }
