@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const { isSupabaseConfigured } = require("../config/database");
 const bcrypt = require("bcryptjs");
 const {
   sendProfileRegistrationNotification,
@@ -1552,48 +1553,69 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
   db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, agency) => {
     if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
-    // 取り扱い商品を取得（既存データベース構造対応）
-    db.all(
-      "SELECT product_name FROM store_products WHERE store_id = ?",
-      [agencyId],
-      (err, products) => {
-        if (err) {
-          console.error("商品取得エラー:", err);
-          products = [];
-        }
+    const handleRender = (productsList, groupName) => {
+      agency.products = (productsList || []).map((p) => ({
+        product_name: p.product_name,
+        product_detail: null,
+        product_url: null,
+      }));
+      agency.group_name = groupName || null;
 
-        // グループ情報を取得
-        db.get(
-          `
-        SELECT g.name as group_name 
-        FROM group_store ga 
-        LEFT JOIN groups g ON ga.group_id = g.id 
-        WHERE ga.store_id = ?
-      `,
-          [agencyId],
-          (err, groupInfo) => {
-            if (err) {
-              console.error("グループ取得エラー:", err);
-              groupInfo = null;
-            }
+      res.render("agencies_profile", {
+        agency,
+        session: req.session,
+        title: agency.name + "のプロフィール",
+      });
+    };
 
-            // 既存データを新形式に変換
-            agency.products = products.map((p) => ({
-              product_name: p.product_name,
-              product_detail: null,
-              product_url: null,
-            }));
-            agency.group_name = groupInfo ? groupInfo.group_name : null;
+    const supa = isSupabaseConfigured();
 
-            res.render("agencies_profile", {
-              agency,
-              session: req.session,
-              title: agency.name + "のプロフィール",
-            });
+    // プロダクト取得
+    const fetchProducts = (cb) => {
+      if (supa) return cb([]);
+      db.all(
+        "SELECT product_name FROM store_products WHERE store_id = ?",
+        [agencyId],
+        (err, rows) => {
+          if (err) {
+            console.error("商品取得エラー:", err);
+            return cb([]);
           }
-        );
-      }
-    );
+          cb(rows || []);
+        }
+      );
+    };
+
+    // グループ名取得（Supabase=group_members/SQLiteはgroup_members優先→fallback group_store）
+    const fetchGroupName = (cb) => {
+      // まずgroup_membersから取得
+      db.get(
+        "SELECT group_id FROM group_members WHERE store_id = ?",
+        [agencyId],
+        (e1, gm) => {
+          if (!e1 && gm && gm.group_id) {
+            db.get(
+              "SELECT name as group_name FROM groups WHERE id = ?",
+              [gm.group_id],
+              (e2, g) => cb(!e2 && g ? g.group_name : null)
+            );
+          } else if (!supa) {
+            // Fallback: 旧group_store（SQLiteのみ）
+            db.get(
+              "SELECT g.name as group_name FROM group_store ga LEFT JOIN groups g ON ga.group_id = g.id WHERE ga.store_id = ?",
+              [agencyId],
+              (e3, g2) => cb(!e3 && g2 ? g2.group_name : null)
+            );
+          } else {
+            cb(null);
+          }
+        }
+      );
+    };
+
+    fetchProducts((productsList) => {
+      fetchGroupName((groupName) => handleRender(productsList, groupName));
+    });
   });
 });
 
