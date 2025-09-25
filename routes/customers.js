@@ -552,6 +552,10 @@ router.post("/update/:id", requireAuth, (req, res) => {
 
     function updateCustomer() {
       const useSupabase = isSupabaseConfigured();
+      console.log("=== UPDATE処理開始 ===");
+      console.log("useSupabase:", useSupabase);
+      console.log("customerId:", customerId);
+      
       const query = useSupabase
         ? `
         UPDATE customers SET 
@@ -594,6 +598,10 @@ router.post("/update/:id", requireAuth, (req, res) => {
             customerId,
           ];
 
+      console.log("実行SQL:", query);
+      console.log("パラメータ:", params);
+      console.log("更新前データ確認...");
+
       db.run(query, params, function (err) {
         if (err) {
           console.error("顧客更新エラー:", err);
@@ -604,7 +612,15 @@ router.post("/update/:id", requireAuth, (req, res) => {
         }
 
         console.log("顧客更新成功:", customerId);
-        res.redirect("/customers/list");
+        console.log("this.changes:", this.changes); // 実際に更新された行数
+        
+        // 更新後のデータを確認
+        db.get("SELECT * FROM customers WHERE id = ?", [customerId], (err, updatedCustomer) => {
+          if (!err && updatedCustomer) {
+            console.log("更新後データ:", updatedCustomer);
+          }
+          res.redirect("/customers/list");
+        });
       });
     }
   });

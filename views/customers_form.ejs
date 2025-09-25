@@ -114,6 +114,7 @@
                                     </div>
                                 </div>
 
+                                <% if (!isSupabase) { %>
                                 <!-- フリガナ -->
                                 <div class="col-md-6 mb-3">
                                     <label for="kana" class="form-label">フリガナ</label>
@@ -132,6 +133,7 @@
                                         <option value="その他" <%= customer && customer.gender === 'その他' ? 'selected' : '' %>>その他</option>
                                     </select>
                                 </div>
+                                <% } %>
 
                                 <!-- 生年月日 -->
                                 <div class="col-md-6 mb-3">
