@@ -69,6 +69,14 @@
     </nav>
 
 <div class="card shadow-sm p-4 mb-4">
+  <% if (typeof window === 'undefined' && typeof location === 'undefined') { %>
+  <% } %>
+  <% if (typeof success !== 'undefined' && success) { %>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      <i class="bi bi-check-circle"></i> 変更が保存されました。
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  <% } %>
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0">
       <% if (typeof isAdmin !== 'undefined' && isAdmin && agencyName) { %>

@@ -129,6 +129,7 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
               groups: [],
               selectedGroupId: null,
               session: req.session,
+              success: req.query.success,
               title: "売上管理",
             });
           }
@@ -190,6 +191,7 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
           groups: [],
           selectedGroupId: null,
           session: req.session,
+          success: req.query.success,
           title: `${agency.name}の売上管理`,
           isAdmin: true,
         });
@@ -311,7 +313,7 @@ router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
         [store_id, year, month, amount],
         function (err) {
           if (err) return res.status(500).send("DBエラー");
-          res.redirect("/sales/list");
+          res.redirect("/sales/list?success=1");
         }
       );
     }
@@ -380,7 +382,7 @@ router.post("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
       [store_id, year, month, amount, req.params.id],
       function (err) {
         if (err) return res.status(500).send("DBエラー");
-        res.redirect("/sales/list");
+        res.redirect("/sales/list?success=1");
       }
     );
   });
@@ -400,7 +402,7 @@ router.post("/delete/:id", requireRole(["admin", "agency"]), (req, res) => {
 
     db.run("DELETE FROM sales WHERE id = ?", [req.params.id], function (err) {
       if (err) return res.status(500).send("DBエラー");
-      res.redirect("/sales/list");
+      res.redirect("/sales/list?success=1");
     });
   });
 });
