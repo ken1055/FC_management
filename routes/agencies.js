@@ -1016,7 +1016,6 @@ router.post("/", (req, res) => {
     bank_info,
     experience_years,
     contract_date,
-    start_date,
   } = req.body;
   db.run(
     "INSERT INTO stores (name, business_address, contract_start_date) VALUES (?, ?, ?)",
@@ -1037,7 +1036,6 @@ router.put("/:id", (req, res) => {
     bank_info,
     experience_years,
     contract_date,
-    start_date,
   } = req.body;
   db.run(
     "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
