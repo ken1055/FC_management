@@ -1659,19 +1659,18 @@ router.post(
       }
     }
 
-    const {
-      name,
-      age,
-      address,
-      bank_info,
-      experience_years,
-      contract_date,
-      start_date,
-      product_names,
-      product_details,
-      product_urls,
-      products, // 旧形式との互換性のため残す
-    } = req.body;
+  const {
+    name,
+    age,
+    address,
+    bank_info,
+    experience_years,
+    contract_date,
+    product_names,
+    product_details,
+    product_urls,
+    products, // 旧形式との互換性のため残す
+  } = req.body;
 
     // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
     const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
@@ -1681,8 +1680,7 @@ router.post(
         : null;
     const processedContractDate =
       contract_date && contract_date.trim() !== "" ? contract_date : null;
-    const processedStartDate =
-      start_date && start_date.trim() !== "" ? start_date : null;
+  // start_date は廃止（Supabaseスキーマ未定義）
 
     db.run(
       "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
@@ -1801,7 +1799,6 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     bank_info,
     experience_years,
     contract_date,
-    start_date,
     product_names,
     product_details,
     product_urls,
@@ -1816,12 +1813,11 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
       : null;
   const processedContractDate =
     contract_date && contract_date.trim() !== "" ? contract_date : null;
-  const processedStartDate =
-    start_date && start_date.trim() !== "" ? start_date : null;
+  // start_date は廃止（Supabaseスキーマ未定義）
 
   db.run(
-    "INSERT INTO stores (name, business_address, bank_info, contract_start_date, start_date) VALUES (?, ?, ?, ?, ?)",
-    [name, address, bank_info, processedContractDate, processedStartDate],
+    "INSERT INTO stores (name, business_address, bank_info, contract_start_date) VALUES (?, ?, ?, ?)",
+    [name, address, bank_info, processedContractDate],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
 
