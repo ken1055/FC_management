@@ -1685,15 +1685,8 @@ router.post(
       start_date && start_date.trim() !== "" ? start_date : null;
 
     db.run(
-      "UPDATE stores SET name=?, address=?, bank_info=?, contract_date=?, start_date=? WHERE id=?",
-      [
-        name,
-        address,
-        bank_info,
-        processedContractDate,
-        processedStartDate,
-        agencyId,
-      ],
+      "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
+      [name, address, processedContractDate, agencyId],
       function (err) {
         if (err) return res.status(500).send("DBエラー");
 
@@ -1827,7 +1820,7 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     start_date && start_date.trim() !== "" ? start_date : null;
 
   db.run(
-    "INSERT INTO stores (name, address, bank_info, contract_date, start_date) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO stores (name, business_address, bank_info, contract_start_date, start_date) VALUES (?, ?, ?, ?, ?)",
     [name, address, bank_info, processedContractDate, processedStartDate],
     function (err) {
       if (err) return res.status(500).send("DBエラー");
