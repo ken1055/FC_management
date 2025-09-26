@@ -736,7 +736,7 @@ router.get("/:id/transactions", requireAuth, (req, res) => {
 
     // 取引履歴を取得
     const useSupabase = isSupabaseConfigured();
-    
+
     if (useSupabase) {
       // Supabase環境では分離クエリを使用
       db.all(
@@ -762,9 +762,9 @@ router.get("/:id/transactions", requireAuth, (req, res) => {
 
           // 店舗名を別途取得してマージ
           if (transactions.length > 0) {
-            const storeIds = [...new Set(transactions.map(t => t.store_id))];
-            const storePlaceholders = storeIds.map(() => '?').join(',');
-            
+            const storeIds = [...new Set(transactions.map((t) => t.store_id))];
+            const storePlaceholders = storeIds.map(() => "?").join(",");
+
             db.all(
               `SELECT id, name FROM stores WHERE id IN (${storePlaceholders})`,
               storeIds,
@@ -772,18 +772,20 @@ router.get("/:id/transactions", requireAuth, (req, res) => {
                 if (err) {
                   console.error("店舗情報取得エラー:", err);
                   // エラーでも取引履歴は返す（店舗名なし）
-                  processTransactionData(transactions.map(t => ({ ...t, store_name: null })));
+                  processTransactionData(
+                    transactions.map((t) => ({ ...t, store_name: null }))
+                  );
                   return;
                 }
 
                 const storeMap = {};
-                stores.forEach(s => {
+                stores.forEach((s) => {
                   storeMap[s.id] = s.name;
                 });
 
-                const enrichedTransactions = transactions.map(t => ({
+                const enrichedTransactions = transactions.map((t) => ({
                   ...t,
-                  store_name: storeMap[t.store_id] || null
+                  store_name: storeMap[t.store_id] || null,
                 }));
 
                 processTransactionData(enrichedTransactions);
@@ -955,7 +957,11 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
   const storeId = req.params.storeId;
   const isAdmin = req.session.user.role === "admin";
 
-  console.log("顧客売上情報取得リクエスト:", { storeId, isAdmin, isSupabase: isSupabaseConfigured() });
+  console.log("顧客売上情報取得リクエスト:", {
+    storeId,
+    isAdmin,
+    isSupabase: isSupabaseConfigured(),
+  });
 
   // 権限チェック
   if (!isAdmin && req.session.user.store_id !== parseInt(storeId)) {
@@ -967,7 +973,7 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
   if (useSupabase) {
     // Supabase環境では分離したクエリを使用
     console.log("Supabase環境: 分離クエリを実行");
-    
+
     // まず顧客一覧を取得
     db.all(
       "SELECT id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, registration_date FROM customers WHERE store_id = ? ORDER BY name",
@@ -975,7 +981,9 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
       (err, customers) => {
         if (err) {
           console.error("Supabase顧客一覧取得エラー:", err);
-          return res.status(500).json({ error: "顧客情報の取得に失敗しました" });
+          return res
+            .status(500)
+            .json({ error: "顧客情報の取得に失敗しました" });
         }
 
         console.log("取得した顧客数:", customers.length);
@@ -993,9 +1001,9 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
         }
 
         // 各顧客の取引統計を個別に取得
-        const customerIds = customers.map(c => c.id);
-        const placeholders = customerIds.map(() => '?').join(',');
-        
+        const customerIds = customers.map((c) => c.id);
+        const placeholders = customerIds.map(() => "?").join(",");
+
         db.all(
           `SELECT 
             customer_id,
@@ -1009,38 +1017,57 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
           (err, transactions) => {
             if (err) {
               console.error("Supabase取引統計取得エラー:", err);
-              return res.status(500).json({ error: "取引統計の取得に失敗しました" });
+              return res
+                .status(500)
+                .json({ error: "取引統計の取得に失敗しました" });
             }
 
             console.log("取得した取引統計数:", transactions.length);
 
             // 顧客データと取引統計をマージ
             const transactionMap = {};
-            transactions.forEach(t => {
+            transactions.forEach((t) => {
               transactionMap[t.customer_id] = {
                 actual_transactions: t.transaction_count || 0,
                 actual_total: t.total_amount || 0,
-                last_transaction_date: t.last_transaction_date
+                last_transaction_date: t.last_transaction_date,
               };
             });
 
-            const enrichedCustomers = customers.map(customer => ({
+            const enrichedCustomers = customers.map((customer) => ({
               ...customer,
-              actual_transactions: transactionMap[customer.id]?.actual_transactions || 0,
+              actual_transactions:
+                transactionMap[customer.id]?.actual_transactions || 0,
               actual_total: transactionMap[customer.id]?.actual_total || 0,
-              last_transaction_date: transactionMap[customer.id]?.last_transaction_date || null
+              last_transaction_date:
+                transactionMap[customer.id]?.last_transaction_date || null,
             }));
 
             // 実際の売上順でソート
-            enrichedCustomers.sort((a, b) => (b.actual_total || 0) - (a.actual_total || 0));
+            enrichedCustomers.sort(
+              (a, b) => (b.actual_total || 0) - (a.actual_total || 0)
+            );
 
             // 統計情報を計算
             const totalCustomers = enrichedCustomers.length;
-            const activeCustomers = enrichedCustomers.filter(c => c.actual_transactions > 0).length;
-            const totalRevenue = enrichedCustomers.reduce((sum, c) => sum + (c.actual_total || 0), 0);
-            const averageRevenue = totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
+            const activeCustomers = enrichedCustomers.filter(
+              (c) => c.actual_transactions > 0
+            ).length;
+            const totalRevenue = enrichedCustomers.reduce(
+              (sum, c) => sum + (c.actual_total || 0),
+              0
+            );
+            const averageRevenue =
+              totalCustomers > 0
+                ? Math.round(totalRevenue / totalCustomers)
+                : 0;
 
-            console.log("最終統計:", { totalCustomers, activeCustomers, totalRevenue, averageRevenue });
+            console.log("最終統計:", {
+              totalCustomers,
+              activeCustomers,
+              totalRevenue,
+              averageRevenue,
+            });
 
             res.json({
               customers: enrichedCustomers,
@@ -1058,7 +1085,7 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
   } else {
     // SQLite環境では従来のJOINクエリを使用
     console.log("SQLite環境: JOINクエリを実行");
-    
+
     db.all(
       `SELECT 
         customers.id,
@@ -1083,16 +1110,24 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
       (err, customers) => {
         if (err) {
           console.error("SQLite顧客売上情報取得エラー:", err);
-          return res.status(500).json({ error: "顧客情報の取得に失敗しました" });
+          return res
+            .status(500)
+            .json({ error: "顧客情報の取得に失敗しました" });
         }
 
         console.log("SQLite取得顧客数:", customers.length);
 
         // 統計情報を計算
         const totalCustomers = customers.length;
-        const activeCustomers = customers.filter(c => c.actual_transactions > 0).length;
-        const totalRevenue = customers.reduce((sum, c) => sum + (c.actual_total || 0), 0);
-        const averageRevenue = totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
+        const activeCustomers = customers.filter(
+          (c) => c.actual_transactions > 0
+        ).length;
+        const totalRevenue = customers.reduce(
+          (sum, c) => sum + (c.actual_total || 0),
+          0
+        );
+        const averageRevenue =
+          totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
 
         res.json({
           customers,

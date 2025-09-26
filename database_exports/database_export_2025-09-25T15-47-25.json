@@ -1,0 +1,1117 @@
+{
+  "schema": {
+    "stores": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "business_address",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "main_phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "manager_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "mobile_phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "representative_email",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "contract_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "contract_start_date",
+        "type": "DATE",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "royalty_rate",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": "5.0",
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "invoice_number",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "bank_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "branch_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "account_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "account_number",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "account_holder",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "license_status",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": "'none'",
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "license_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "license_number",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "license_file_path",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "line_official_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 21,
+        "name": "representative_gmail",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 22,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": "'active'",
+        "pk": 0
+      },
+      {
+        "cid": 23,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      },
+      {
+        "cid": 24,
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "customers": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "customer_code",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "kana",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "email",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "address",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "birth_date",
+        "type": "DATE",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "gender",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "registration_date",
+        "type": "DATE",
+        "notnull": 0,
+        "dflt_value": "date('now')",
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "last_visit_date",
+        "type": "DATE",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "total_purchase_amount",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "visit_count",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "notes",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "users": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "email",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "password",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "store_products": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "product_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "product_detail",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "product_url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "product_files": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "product_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "file_path",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "uploaded_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "sales": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "year",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "month",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "amount",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "groups": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "group_store": [
+      {
+        "cid": 0,
+        "name": "group_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 2
+      }
+    ],
+    "group_admin": [
+      {
+        "cid": 0,
+        "name": "group_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "admin_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 2
+      }
+    ],
+    "materials": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "filename",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "originalname",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "mimetype",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "uploaded_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "settings": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "key_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "value",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "group_members": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "group_id",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "admins": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "email",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "password",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "royalty_settings": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "royalty_rate",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "effective_date",
+        "type": "DATE",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "royalty_calculations": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "store_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "calculation_year",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "calculation_month",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "monthly_sales",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "royalty_rate",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "royalty_amount",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": "'calculated'",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "calculated_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ]
+  },
+  "data": {
+    "stores": [
+      {
+        "id": 1,
+        "name": "テスト店舗",
+        "business_address": "東京都新宿区テスト町1-2-3",
+        "main_phone": "03-1234-5678",
+        "manager_name": "田中太郎",
+        "mobile_phone": "090-1234-5678",
+        "representative_email": "test@example.com",
+        "contract_type": "franchise",
+        "contract_start_date": "2024-01-01",
+        "royalty_rate": 5,
+        "invoice_number": "T1234567890123",
+        "bank_name": "テスト銀行",
+        "branch_name": "新宿支店",
+        "account_type": "ordinary",
+        "account_number": "1234567",
+        "account_holder": "テスト店舗",
+        "license_status": "have",
+        "license_type": "飲食店営業許可",
+        "license_number": "12345",
+        "license_file_path": null,
+        "line_official_id": "@test_store",
+        "representative_gmail": "test.store@gmail.com",
+        "status": "active",
+        "created_at": "2025-09-21 16:08:46",
+        "updated_at": "2025-09-21 16:08:46"
+      }
+    ],
+    "customers": [],
+    "users": [
+      {
+        "id": 1,
+        "email": "store@test.com",
+        "password": "$2a$10$PHUnlp1f7pdz6Addu1271.FP1mJcwHUevQ5IWHR4AnYIEWUaJRm2i",
+        "store_id": 1
+      }
+    ],
+    "groups": [],
+    "group_store": [],
+    "group_admin": [],
+    "materials": [],
+    "settings": [],
+    "group_members": [],
+    "store_products": [],
+    "product_files": [],
+    "sales": [
+      {
+        "id": 1,
+        "store_id": 1,
+        "year": 2025,
+        "month": 1,
+        "amount": 100000
+      },
+      {
+        "id": 2,
+        "store_id": 1,
+        "year": 2025,
+        "month": 2,
+        "amount": 200000
+      }
+    ],
+    "royalty_settings": [],
+    "royalty_calculations": [
+      {
+        "id": 1,
+        "store_id": 1,
+        "calculation_year": 2025,
+        "calculation_month": 1,
+        "monthly_sales": 100000,
+        "royalty_rate": 5,
+        "royalty_amount": 5000,
+        "status": "calculated",
+        "calculated_at": "2025-09-21 16:14:41"
+      },
+      {
+        "id": 2,
+        "store_id": 1,
+        "calculation_year": 2025,
+        "calculation_month": 2,
+        "monthly_sales": 200000,
+        "royalty_rate": 5,
+        "royalty_amount": 10000,
+        "status": "calculated",
+        "calculated_at": "2025-09-21 16:14:56"
+      }
+    ],
+    "admins": [
+      {
+        "id": 1,
+        "email": "admin",
+        "password": "admin",
+        "created_at": "2025-09-21 16:03:11"
+      }
+    ]
+  },
+  "summary": {
+    "stores": {
+      "count": 1,
+      "columns": [
+        "id",
+        "name",
+        "business_address",
+        "main_phone",
+        "manager_name",
+        "mobile_phone",
+        "representative_email",
+        "contract_type",
+        "contract_start_date",
+        "royalty_rate",
+        "invoice_number",
+        "bank_name",
+        "branch_name",
+        "account_type",
+        "account_number",
+        "account_holder",
+        "license_status",
+        "license_type",
+        "license_number",
+        "license_file_path",
+        "line_official_id",
+        "representative_gmail",
+        "status",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "customers": {
+      "count": 0,
+      "columns": [
+        "id",
+        "store_id",
+        "customer_code",
+        "name",
+        "kana",
+        "email",
+        "phone",
+        "address",
+        "birth_date",
+        "gender",
+        "registration_date",
+        "last_visit_date",
+        "total_purchase_amount",
+        "visit_count",
+        "notes",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "users": {
+      "count": 1,
+      "columns": [
+        "id",
+        "email",
+        "password",
+        "store_id"
+      ]
+    },
+    "groups": {
+      "count": 0,
+      "columns": [
+        "id",
+        "name"
+      ]
+    },
+    "group_store": {
+      "count": 0,
+      "columns": [
+        "group_id",
+        "store_id"
+      ]
+    },
+    "group_admin": {
+      "count": 0,
+      "columns": [
+        "group_id",
+        "admin_id"
+      ]
+    },
+    "materials": {
+      "count": 0,
+      "columns": [
+        "id",
+        "filename",
+        "originalname",
+        "mimetype",
+        "description",
+        "store_id",
+        "uploaded_at"
+      ]
+    },
+    "settings": {
+      "count": 0,
+      "columns": [
+        "id",
+        "key_name",
+        "value",
+        "description",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "group_members": {
+      "count": 0,
+      "columns": [
+        "id",
+        "group_id",
+        "store_id"
+      ]
+    },
+    "store_products": {
+      "count": 0,
+      "columns": [
+        "id",
+        "store_id",
+        "product_name",
+        "product_detail",
+        "product_url"
+      ]
+    },
+    "product_files": {
+      "count": 0,
+      "columns": [
+        "id",
+        "store_id",
+        "product_name",
+        "file_path",
+        "uploaded_at"
+      ]
+    },
+    "sales": {
+      "count": 2,
+      "columns": [
+        "id",
+        "store_id",
+        "year",
+        "month",
+        "amount"
+      ]
+    },
+    "royalty_settings": {
+      "count": 0,
+      "columns": [
+        "id",
+        "store_id",
+        "royalty_rate",
+        "effective_date",
+        "created_at"
+      ]
+    },
+    "royalty_calculations": {
+      "count": 2,
+      "columns": [
+        "id",
+        "store_id",
+        "calculation_year",
+        "calculation_month",
+        "monthly_sales",
+        "royalty_rate",
+        "royalty_amount",
+        "status",
+        "calculated_at"
+      ]
+    },
+    "admins": {
+      "count": 1,
+      "columns": [
+        "id",
+        "email",
+        "password",
+        "created_at"
+      ]
+    }
+  }
+}

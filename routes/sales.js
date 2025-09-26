@@ -116,11 +116,9 @@ router.post("/transaction", requireRole(["admin", "agency"]), (req, res) => {
       }
 
       if (!customer) {
-        return res
-          .status(400)
-          .json({
-            error: "指定された顧客が見つからないか、店舗が一致しません",
-          });
+        return res.status(400).json({
+          error: "指定された顧客が見つからないか、店舗が一致しません",
+        });
       }
 
       // 取引を登録
@@ -187,19 +185,22 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
           (err, monthlySales) => {
             if (err) return res.status(500).send("DBエラー");
 
+            // データがない場合の処理
+            const validMonthlySales = monthlySales.filter(s => s.year && s.month && s.monthly_total !== null);
+
             // 月間売上推移データを作成
-            const chartData = monthlySales.reverse().map((s) => ({
+            const chartData = validMonthlySales.reverse().map((s) => ({
               period: `${s.year}年${parseInt(s.month)}月`,
-              amount: s.monthly_total,
-              transactions: s.transaction_count,
+              amount: s.monthly_total || 0,
+              transactions: s.transaction_count || 0,
             }));
 
             // 売上データを従来形式に変換（テンプレート互換性のため）
-            const salesFormatted = monthlySales.reverse().map((s) => ({
-              year: parseInt(s.year),
-              month: parseInt(s.month),
-              amount: s.monthly_total,
-              transaction_count: s.transaction_count,
+            const salesFormatted = validMonthlySales.reverse().map((s) => ({
+              year: parseInt(s.year) || 0,
+              month: parseInt(s.month) || 0,
+              amount: s.monthly_total || 0,
+              transaction_count: s.transaction_count || 0,
             }));
 
             res.render("sales_list", {
@@ -265,19 +266,22 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
       (err, monthlySales) => {
         if (err) return res.status(500).send("DBエラー");
 
+        // データがない場合の処理
+        const validMonthlySales = monthlySales.filter(s => s.year && s.month && s.monthly_total !== null);
+
         // 月間売上推移データを作成
-        const chartData = monthlySales.reverse().map((s) => ({
+        const chartData = validMonthlySales.reverse().map((s) => ({
           period: `${s.year}年${parseInt(s.month)}月`,
-          amount: s.monthly_total,
-          transactions: s.transaction_count,
+          amount: s.monthly_total || 0,
+          transactions: s.transaction_count || 0,
         }));
 
         // 売上データを従来形式に変換（テンプレート互換性のため）
-        const salesFormatted = monthlySales.reverse().map((s) => ({
-          year: parseInt(s.year),
-          month: parseInt(s.month),
-          amount: s.monthly_total,
-          transaction_count: s.transaction_count,
+        const salesFormatted = validMonthlySales.reverse().map((s) => ({
+          year: parseInt(s.year) || 0,
+          month: parseInt(s.month) || 0,
+          amount: s.monthly_total || 0,
+          transaction_count: s.transaction_count || 0,
         }));
 
         res.render("sales_list", {
@@ -348,168 +352,21 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
   }
 });
 
-// 売上登録（フォームPOST）
-router.post("/new", requireRole(["admin", "agency"]), (req, res) => {
-  const { store_id, year, month, amount } = req.body;
-
-  if (req.session.user.role === "agency") {
-    if (!req.session.user.store_id) {
-      return res.status(400).send("代理店IDが設定されていません");
-    }
-    if (req.session.user.store_id !== Number(store_id)) {
-      return res.status(403).send("自分の売上のみ登録可能です");
-    }
-  }
-
-  // 重複チェック
-  db.get(
-    "SELECT id FROM sales WHERE store_id = ? AND year = ? AND month = ?",
-    [store_id, year, month],
-    (err, existing) => {
-      if (err) return res.status(500).send("DBエラー");
-      if (existing) {
-        // エラー時も代理店リストを再取得して渡す
-        if (req.session.user.role === "agency") {
-          // 代理店情報を取得
-          db.get(
-            "SELECT name FROM stores WHERE id = ?",
-            [req.session.user.store_id],
-            (err, agency) => {
-              if (err) return res.status(500).send("DBエラー");
-
-              return res.render("sales_form", {
-                session: req.session,
-                stores: [],
-                agencyName: agency ? agency.name : "未設定",
-                title: "売上登録",
-                sale: null, // sale変数を追加
-                error: "同じ年月の売上データが既に存在します",
-              });
-            }
-          );
-        } else {
-          // 管理者は代理店一覧を取得
-          db.all("SELECT * FROM stores ORDER BY name", [], (err, stores) => {
-            if (err) return res.status(500).send("DBエラー");
-
-            return res.render("sales_form", {
-              session: req.session,
-              stores,
-              agencyName: null,
-              title: "売上登録",
-              sale: null, // sale変数を追加
-              error: "同じ年月の売上データが既に存在します",
-            });
-          });
-        }
-        return; // 重複データが存在する場合は、ここで処理を終了
-      }
-
-      db.run(
-        "INSERT INTO sales (store_id, year, month, amount) VALUES (?, ?, ?, ?)",
-        [store_id, year, month, amount],
-        function (err) {
-          if (err) return res.status(500).send("DBエラー");
-          res.redirect("/sales/list?success=1");
-        }
-      );
-    }
-  );
-});
-
-// 売上編集フォーム
-router.get("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
-  db.get("SELECT * FROM sales WHERE id = ?", [req.params.id], (err, sale) => {
-    if (err || !sale) return res.status(404).send("データがありません");
-
-    // 代理店は自分のデータのみ編集可能
-    if (req.session.user.role === "agency") {
-      if (sale.store_id !== req.session.user.store_id) {
-        return res.status(403).send("自分の売上のみ編集可能です");
-      }
-    }
-
-    if (req.session.user.role === "agency") {
-      db.get(
-        "SELECT name FROM stores WHERE id = ?",
-        [sale.store_id],
-        (err, agency) => {
-          if (err) return res.status(500).send("DBエラー");
-
-          res.render("sales_form", {
-            session: req.session,
-            stores: [],
-            agencyName: agency ? agency.name : "未設定",
-            sale: sale,
-            title: "売上編集",
-          });
-        }
-      );
-    } else {
-      db.all("SELECT * FROM stores ORDER BY name", [], (err, stores) => {
-        if (err) return res.status(500).send("DBエラー");
-        res.render("sales_form", {
-          session: req.session,
-          stores,
-          agencyName: null,
-          sale: sale,
-          title: "売上編集",
-        });
-      });
-    }
-  });
-});
-
-// 売上編集（フォームPOST）
-router.post("/edit/:id", requireRole(["admin", "agency"]), (req, res) => {
-  const { store_id, year, month, amount } = req.body;
-
-  db.get("SELECT * FROM sales WHERE id = ?", [req.params.id], (err, sale) => {
-    if (err || !sale) return res.status(404).send("データがありません");
-
-    // 代理店は自分のデータのみ編集可能
-    if (req.session.user.role === "agency") {
-      if (sale.store_id !== req.session.user.store_id) {
-        return res.status(403).send("自分の売上のみ編集可能です");
-      }
-    }
-
-    db.run(
-      "UPDATE sales SET store_id=?, year=?, month=?, amount=? WHERE id=?",
-      [store_id, year, month, amount, req.params.id],
-      function (err) {
-        if (err) return res.status(500).send("DBエラー");
-        res.redirect("/sales/list?success=1");
-      }
-    );
-  });
-});
-
-// 売上削除
-router.post("/delete/:id", requireRole(["admin", "agency"]), (req, res) => {
-  db.get("SELECT * FROM sales WHERE id = ?", [req.params.id], (err, sale) => {
-    if (err || !sale) return res.status(404).send("データがありません");
-
-    // 代理店は自分のデータのみ削除可能
-    if (req.session.user.role === "agency") {
-      if (sale.store_id !== req.session.user.store_id) {
-        return res.status(403).send("自分の売上のみ削除可能です");
-      }
-    }
-
-    db.run("DELETE FROM sales WHERE id = ?", [req.params.id], function (err) {
-      if (err) return res.status(500).send("DBエラー");
-      res.redirect("/sales/list?success=1");
-    });
-  });
-});
+// 古い売上登録機能は削除済み
+// 現在は個別取引登録（/transaction）のみサポート
 
 // 売上履歴一覧表示
 router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
   const isAdmin = req.session.user.role === "admin";
   const { store_id, start_date, end_date, customer_search } = req.query;
 
-  console.log("売上履歴取得リクエスト:", { store_id, start_date, end_date, customer_search, isAdmin });
+  console.log("売上履歴取得リクエスト:", {
+    store_id,
+    start_date,
+    end_date,
+    customer_search,
+    isAdmin,
+  });
 
   // 基本クエリ
   let baseQuery = `
@@ -588,9 +445,13 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
     console.log("取得した取引件数:", transactions.length);
 
     // 統計情報を計算
-    const totalAmount = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalAmount = transactions.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0
+    );
     const transactionCount = transactions.length;
-    const averageAmount = transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
+    const averageAmount =
+      transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
 
     // 店舗一覧を取得（管理者用）
     if (isAdmin) {
@@ -646,7 +507,14 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
 // 売上履歴API（JSON形式）
 router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
   const isAdmin = req.session.user.role === "admin";
-  const { store_id, start_date, end_date, customer_search, page = 1, limit = 50 } = req.query;
+  const {
+    store_id,
+    start_date,
+    end_date,
+    customer_search,
+    page = 1,
+    limit = 50,
+  } = req.query;
 
   // 基本クエリ
   let baseQuery = `
@@ -722,7 +590,9 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
     db.all(baseQuery, params, (err, transactions) => {
       if (err) {
         console.error("取引データ取得エラー:", err);
-        return res.status(500).json({ error: "取引データの取得に失敗しました" });
+        return res
+          .status(500)
+          .json({ error: "取引データの取得に失敗しました" });
       }
 
       res.json({

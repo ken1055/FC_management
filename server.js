@@ -374,11 +374,13 @@ app.get("/api/store/statistics", (req, res) => {
   const customerCountQuery =
     "SELECT COUNT(*) as count FROM customers WHERE store_id = ?";
 
-  // 今月の売上を取得
+  // 今月の売上を取得（customer_transactionsベース）
   const currentMonthSalesQuery = `
     SELECT SUM(amount) as total 
-    FROM sales 
-    WHERE store_id = ? AND year = ? AND month = ?
+    FROM customer_transactions 
+    WHERE store_id = ? 
+    AND strftime('%Y', transaction_date) = ? 
+    AND strftime('%m', transaction_date) = ?
   `;
 
   db.get(customerCountQuery, [storeId], (err, customerResult) => {
@@ -389,7 +391,7 @@ app.get("/api/store/statistics", (req, res) => {
 
     db.get(
       currentMonthSalesQuery,
-      [storeId, currentYear, currentMonth],
+      [storeId, currentYear.toString(), String(currentMonth).padStart(2, '0')],
       (err, salesResult) => {
         if (err) {
           console.error("売上取得エラー:", err);
