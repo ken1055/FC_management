@@ -11,7 +11,7 @@ function requireRole(roles) {
   };
 }
 
-// 売上一覧取得（API）
+// 売上統計取得（API）- 個別取引ベース
 router.get("/", (req, res) => {
   if (req.session.user.role === "agency") {
     // 代理店は自分のデータのみ
@@ -19,7 +19,15 @@ router.get("/", (req, res) => {
       return res.status(400).send("代理店IDが設定されていません");
     }
     db.all(
-      "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
+      `SELECT 
+        strftime('%Y', transaction_date) as year,
+        strftime('%m', transaction_date) as month,
+        SUM(amount) as amount,
+        COUNT(*) as transaction_count
+      FROM customer_transactions 
+      WHERE store_id = ? 
+      GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
+      ORDER BY year DESC, month DESC`,
       [req.session.user.store_id],
       (err, rows) => {
         if (err) return res.status(500).send("DBエラー");
@@ -29,7 +37,17 @@ router.get("/", (req, res) => {
   } else {
     // 役員・管理者は全て
     db.all(
-      "SELECT s.*, a.name as agency_name FROM sales s LEFT JOIN stores a ON s.store_id = a.id ORDER BY s.year DESC, s.month DESC",
+      `SELECT 
+        ct.store_id,
+        s.name as agency_name,
+        strftime('%Y', ct.transaction_date) as year,
+        strftime('%m', ct.transaction_date) as month,
+        SUM(ct.amount) as amount,
+        COUNT(*) as transaction_count
+      FROM customer_transactions ct
+      LEFT JOIN stores s ON ct.store_id = s.id 
+      GROUP BY ct.store_id, s.name, strftime('%Y', ct.transaction_date), strftime('%m', ct.transaction_date)
+      ORDER BY year DESC, month DESC`,
       [],
       (err, rows) => {
         if (err) return res.status(500).send("DBエラー");
@@ -37,61 +55,6 @@ router.get("/", (req, res) => {
       }
     );
   }
-});
-
-// 売上登録（API）- 月次集計用（従来機能）
-router.post("/", requireRole(["admin", "agency"]), (req, res) => {
-  const { store_id, year, month, amount } = req.body;
-
-  // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
-  const processedAgencyId =
-    store_id && store_id.toString().trim() !== "" ? parseInt(store_id) : null;
-  const processedYear =
-    year && year.toString().trim() !== "" ? parseInt(year) : null;
-  const processedMonth =
-    month && month.toString().trim() !== "" ? parseInt(month) : null;
-  const processedAmount =
-    amount && amount.toString().trim() !== "" ? parseInt(amount) : null;
-
-  if (
-    !processedAgencyId ||
-    !processedYear ||
-    !processedMonth ||
-    processedAmount === null
-  ) {
-    return res.status(400).send("必須項目が不足しています");
-  }
-
-  // 代理店は自分のstore_idのみ登録可能
-  if (req.session.user.role === "agency") {
-    if (!req.session.user.store_id) {
-      return res.status(400).send("代理店IDが設定されていません");
-    }
-    if (req.session.user.store_id !== processedAgencyId) {
-      return res.status(403).send("自分の売上のみ登録可能です");
-    }
-  }
-
-  // 重複チェック
-  db.get(
-    "SELECT id FROM sales WHERE store_id = ? AND year = ? AND month = ?",
-    [processedAgencyId, processedYear, processedMonth],
-    (err, existing) => {
-      if (err) return res.status(500).send("DBエラー");
-      if (existing) {
-        return res.status(400).send("同じ年月の売上データが既に存在します");
-      }
-
-      db.run(
-        "INSERT INTO sales (store_id, year, month, amount) VALUES (?, ?, ?, ?)",
-        [processedAgencyId, processedYear, processedMonth, processedAmount],
-        function (err) {
-          if (err) return res.status(500).send("DBエラー");
-          res.json({ id: this.lastID });
-        }
-      );
-    }
-  );
 });
 
 // 個別取引登録（API）- 新機能
@@ -209,21 +172,38 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
       (err, agency) => {
         if (err) return res.status(500).send("DBエラー");
 
-        // 売上データを取得
+        // 個別取引データを取得して月次集計
         db.all(
-          "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
+          `SELECT 
+            strftime('%Y', transaction_date) as year,
+            strftime('%m', transaction_date) as month,
+            SUM(amount) as monthly_total,
+            COUNT(*) as transaction_count
+          FROM customer_transactions 
+          WHERE store_id = ? 
+          GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
+          ORDER BY year DESC, month DESC`,
           [req.session.user.store_id],
-          (err, sales) => {
+          (err, monthlySales) => {
             if (err) return res.status(500).send("DBエラー");
 
             // 月間売上推移データを作成
-            const chartData = sales.reverse().map((s) => ({
-              period: `${s.year}年${s.month}月`,
-              amount: s.amount,
+            const chartData = monthlySales.reverse().map((s) => ({
+              period: `${s.year}年${parseInt(s.month)}月`,
+              amount: s.monthly_total,
+              transactions: s.transaction_count,
+            }));
+
+            // 売上データを従来形式に変換（テンプレート互換性のため）
+            const salesFormatted = monthlySales.reverse().map((s) => ({
+              year: parseInt(s.year),
+              month: parseInt(s.month),
+              amount: s.monthly_total,
+              transaction_count: s.transaction_count,
             }));
 
             res.render("sales_list", {
-              sales: sales.reverse(),
+              sales: salesFormatted,
               chartData: JSON.stringify(chartData),
               agencyName: agency ? agency.name : "未設定",
               groups: [],
@@ -237,17 +217,17 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
       }
     );
   } else {
-    // 管理者・役員は代理店選択画面を表示
+    // 管理者・役員は代理店選択画面を表示（個別取引ベース）
     db.all(
       `SELECT 
-          a.id, 
-          a.name,
-          COALESCE(COUNT(s.id), 0) as sales_count,
-          COALESCE(SUM(s.amount), 0) as total_sales
-        FROM stores a 
-        LEFT JOIN sales s ON a.id = s.store_id 
-        GROUP BY a.id, a.name 
-        ORDER BY a.name`,
+          s.id, 
+          s.name,
+          COALESCE(COUNT(ct.id), 0) as transaction_count,
+          COALESCE(SUM(ct.amount), 0) as total_sales
+        FROM stores s 
+        LEFT JOIN customer_transactions ct ON s.id = ct.store_id 
+        GROUP BY s.id, s.name 
+        ORDER BY s.name`,
       [],
       (err, stores) => {
         if (err) return res.status(500).send("DBエラー");
@@ -270,21 +250,38 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
   db.get("SELECT name FROM stores WHERE id = ?", [agencyId], (err, agency) => {
     if (err || !agency) return res.status(404).send("代理店が見つかりません");
 
-    // 売上データを取得
+    // 個別取引データを取得して月次集計
     db.all(
-      "SELECT * FROM sales WHERE store_id = ? ORDER BY year DESC, month DESC",
+      `SELECT 
+        strftime('%Y', transaction_date) as year,
+        strftime('%m', transaction_date) as month,
+        SUM(amount) as monthly_total,
+        COUNT(*) as transaction_count
+      FROM customer_transactions 
+      WHERE store_id = ? 
+      GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
+      ORDER BY year DESC, month DESC`,
       [agencyId],
-      (err, sales) => {
+      (err, monthlySales) => {
         if (err) return res.status(500).send("DBエラー");
 
         // 月間売上推移データを作成
-        const chartData = sales.reverse().map((s) => ({
-          period: `${s.year}年${s.month}月`,
-          amount: s.amount,
+        const chartData = monthlySales.reverse().map((s) => ({
+          period: `${s.year}年${parseInt(s.month)}月`,
+          amount: s.monthly_total,
+          transactions: s.transaction_count,
+        }));
+
+        // 売上データを従来形式に変換（テンプレート互換性のため）
+        const salesFormatted = monthlySales.reverse().map((s) => ({
+          year: parseInt(s.year),
+          month: parseInt(s.month),
+          amount: s.monthly_total,
+          transaction_count: s.transaction_count,
         }));
 
         res.render("sales_list", {
-          sales: sales.reverse(),
+          sales: salesFormatted,
           chartData: JSON.stringify(chartData),
           agencyName: agency.name,
           agencyId: agencyId,
@@ -503,6 +500,240 @@ router.post("/delete/:id", requireRole(["admin", "agency"]), (req, res) => {
     db.run("DELETE FROM sales WHERE id = ?", [req.params.id], function (err) {
       if (err) return res.status(500).send("DBエラー");
       res.redirect("/sales/list?success=1");
+    });
+  });
+});
+
+// 売上履歴一覧表示
+router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
+  const isAdmin = req.session.user.role === "admin";
+  const { store_id, start_date, end_date, customer_search } = req.query;
+
+  console.log("売上履歴取得リクエスト:", { store_id, start_date, end_date, customer_search, isAdmin });
+
+  // 基本クエリ
+  let baseQuery = `
+    SELECT 
+      ct.id,
+      ct.transaction_date,
+      ct.amount,
+      ct.description,
+      ct.payment_method,
+      ct.created_at,
+      c.name as customer_name,
+      c.customer_code,
+      s.name as store_name,
+      ct.store_id,
+      ct.customer_id
+    FROM customer_transactions ct
+    LEFT JOIN customers c ON ct.customer_id = c.id
+    LEFT JOIN stores s ON ct.store_id = s.id
+  `;
+
+  let whereConditions = [];
+  let params = [];
+
+  // 権限に基づく店舗フィルタ
+  if (!isAdmin) {
+    // 店舗ユーザーは自店舗のみ
+    whereConditions.push("ct.store_id = ?");
+    params.push(req.session.user.store_id);
+  } else if (store_id && store_id !== "all") {
+    // 管理者が特定店舗を選択
+    whereConditions.push("ct.store_id = ?");
+    params.push(parseInt(store_id));
+  }
+
+  // 日付フィルタ
+  if (start_date) {
+    whereConditions.push("ct.transaction_date >= ?");
+    params.push(start_date);
+  }
+  if (end_date) {
+    whereConditions.push("ct.transaction_date <= ?");
+    params.push(end_date);
+  }
+
+  // 顧客検索
+  if (customer_search && customer_search.trim()) {
+    whereConditions.push("(c.name LIKE ? OR c.customer_code LIKE ?)");
+    params.push(`%${customer_search.trim()}%`, `%${customer_search.trim()}%`);
+  }
+
+  // WHERE句を追加
+  if (whereConditions.length > 0) {
+    baseQuery += " WHERE " + whereConditions.join(" AND ");
+  }
+
+  // 並び順
+  baseQuery += " ORDER BY ct.transaction_date DESC, ct.created_at DESC";
+
+  // ページネーション（将来的に実装）
+  const limit = 100; // とりあえず100件まで
+  baseQuery += ` LIMIT ${limit}`;
+
+  console.log("実行クエリ:", baseQuery);
+  console.log("パラメータ:", params);
+
+  // データ取得
+  db.all(baseQuery, params, (err, transactions) => {
+    if (err) {
+      console.error("売上履歴取得エラー:", err);
+      return res.status(500).render("error", {
+        message: "売上履歴の取得に失敗しました",
+        session: req.session,
+      });
+    }
+
+    console.log("取得した取引件数:", transactions.length);
+
+    // 統計情報を計算
+    const totalAmount = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const transactionCount = transactions.length;
+    const averageAmount = transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
+
+    // 店舗一覧を取得（管理者用）
+    if (isAdmin) {
+      db.all("SELECT id, name FROM stores ORDER BY name", [], (err, stores) => {
+        if (err) {
+          console.error("店舗一覧取得エラー:", err);
+          stores = [];
+        }
+
+        res.render("sales_history", {
+          transactions,
+          stores,
+          summary: {
+            total_amount: totalAmount,
+            transaction_count: transactionCount,
+            average_amount: averageAmount,
+          },
+          filters: {
+            store_id: store_id || "all",
+            start_date: start_date || "",
+            end_date: end_date || "",
+            customer_search: customer_search || "",
+          },
+          session: req.session,
+          title: "売上履歴",
+          isAdmin,
+        });
+      });
+    } else {
+      // 店舗ユーザーの場合
+      res.render("sales_history", {
+        transactions,
+        stores: [],
+        summary: {
+          total_amount: totalAmount,
+          transaction_count: transactionCount,
+          average_amount: averageAmount,
+        },
+        filters: {
+          store_id: req.session.user.store_id,
+          start_date: start_date || "",
+          end_date: end_date || "",
+          customer_search: customer_search || "",
+        },
+        session: req.session,
+        title: "売上履歴",
+        isAdmin: false,
+      });
+    }
+  });
+});
+
+// 売上履歴API（JSON形式）
+router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
+  const isAdmin = req.session.user.role === "admin";
+  const { store_id, start_date, end_date, customer_search, page = 1, limit = 50 } = req.query;
+
+  // 基本クエリ
+  let baseQuery = `
+    SELECT 
+      ct.id,
+      ct.transaction_date,
+      ct.amount,
+      ct.description,
+      ct.payment_method,
+      ct.created_at,
+      c.name as customer_name,
+      c.customer_code,
+      s.name as store_name,
+      ct.store_id,
+      ct.customer_id
+    FROM customer_transactions ct
+    LEFT JOIN customers c ON ct.customer_id = c.id
+    LEFT JOIN stores s ON ct.store_id = s.id
+  `;
+
+  let whereConditions = [];
+  let params = [];
+
+  // 権限チェック
+  if (!isAdmin) {
+    whereConditions.push("ct.store_id = ?");
+    params.push(req.session.user.store_id);
+  } else if (store_id && store_id !== "all") {
+    whereConditions.push("ct.store_id = ?");
+    params.push(parseInt(store_id));
+  }
+
+  // フィルタ条件
+  if (start_date) {
+    whereConditions.push("ct.transaction_date >= ?");
+    params.push(start_date);
+  }
+  if (end_date) {
+    whereConditions.push("ct.transaction_date <= ?");
+    params.push(end_date);
+  }
+  if (customer_search && customer_search.trim()) {
+    whereConditions.push("(c.name LIKE ? OR c.customer_code LIKE ?)");
+    params.push(`%${customer_search.trim()}%`, `%${customer_search.trim()}%`);
+  }
+
+  if (whereConditions.length > 0) {
+    baseQuery += " WHERE " + whereConditions.join(" AND ");
+  }
+
+  // 件数取得用クエリ
+  const countQuery = baseQuery.replace(
+    /SELECT[\s\S]*?FROM/,
+    "SELECT COUNT(*) as total FROM"
+  );
+
+  // 件数を取得
+  db.get(countQuery, params, (err, countResult) => {
+    if (err) {
+      console.error("件数取得エラー:", err);
+      return res.status(500).json({ error: "データ取得に失敗しました" });
+    }
+
+    const total = countResult.total || 0;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    // データ取得
+    baseQuery += " ORDER BY ct.transaction_date DESC, ct.created_at DESC";
+    baseQuery += ` LIMIT ${limitNum} OFFSET ${offset}`;
+
+    db.all(baseQuery, params, (err, transactions) => {
+      if (err) {
+        console.error("取引データ取得エラー:", err);
+        return res.status(500).json({ error: "取引データの取得に失敗しました" });
+      }
+
+      res.json({
+        transactions,
+        pagination: {
+          current_page: pageNum,
+          total_pages: Math.ceil(total / limitNum),
+          total_count: total,
+          limit: limitNum,
+        },
+      });
     });
   });
 });

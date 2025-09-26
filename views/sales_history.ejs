@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>売上履歴 - 店舗管理システム</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"
+    />
+    <style>
+      .transaction-card {
+        transition: all 0.2s ease;
+        border-left: 4px solid #0d6efd;
+      }
+      .transaction-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      }
+      .amount-large {
+        font-size: 1.25rem;
+        font-weight: bold;
+      }
+      .payment-method-badge {
+        font-size: 0.75rem;
+      }
+      .date-display {
+        font-size: 0.9rem;
+        color: #6c757d;
+      }
+      .customer-info {
+        background: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        display: inline-block;
+      }
+      .summary-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+      .filter-card {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+      }
+    </style>
+  </head>
+  <body class="bg-light">
+    <!-- ナビゲーション -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+      <div class="container">
+        <a class="navbar-brand" href="/">
+          <i class="bi bi-shop"></i> 店舗管理システム
+        </a>
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarNav"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="/sales/list">
+                <i class="bi bi-graph-up"></i> 売上管理
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link active" href="/sales/history">
+                <i class="bi bi-clock-history"></i> 売上履歴
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/sales/new">
+                <i class="bi bi-plus-circle"></i> 売上登録
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/customers/list">
+                <i class="bi bi-people"></i> 顧客管理
+              </a>
+            </li>
+          </ul>
+          <ul class="navbar-nav">
+            <li class="nav-item">
+              <span class="navbar-text">
+                <i class="bi bi-person-circle"></i>
+                <%= session.user.username %>
+                <% if (session.user.role === 'admin') { %>
+                  <span class="badge bg-danger ms-1">管理者</span>
+                <% } else if (session.user.role === 'agency') { %>
+                  <span class="badge bg-warning ms-1">店舗</span>
+                <% } %>
+              </span>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/auth/logout">
+                <i class="bi bi-box-arrow-right"></i> ログアウト
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <!-- ページヘッダー -->
+      <div class="row mb-4">
+        <div class="col">
+          <h1 class="h3 mb-3">
+            <i class="bi bi-clock-history text-primary"></i>
+            売上履歴
+          </h1>
+          <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item"><a href="/">ホーム</a></li>
+              <li class="breadcrumb-item"><a href="/sales/list">売上管理</a></li>
+              <li class="breadcrumb-item active">売上履歴</li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+
+      <!-- 統計サマリー -->
+      <div class="row mb-4">
+        <div class="col-md-3">
+          <div class="card summary-card">
+            <div class="card-body text-center">
+              <h5 class="card-title">
+                <i class="bi bi-receipt"></i> 取引件数
+              </h5>
+              <h3><%= summary.transaction_count.toLocaleString() %>件</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-success text-white">
+            <div class="card-body text-center">
+              <h5 class="card-title">
+                <i class="bi bi-currency-yen"></i> 合計金額
+              </h5>
+              <h3>¥<%= summary.total_amount.toLocaleString() %></h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-info text-white">
+            <div class="card-body text-center">
+              <h5 class="card-title">
+                <i class="bi bi-calculator"></i> 平均単価
+              </h5>
+              <h3>¥<%= summary.average_amount.toLocaleString() %></h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+              <h5 class="card-title">
+                <i class="bi bi-funnel"></i> フィルター
+              </h5>
+              <button class="btn btn-light btn-sm" onclick="toggleFilters()">
+                <i class="bi bi-gear"></i> 設定
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- フィルター -->
+      <div class="row mb-4">
+        <div class="col">
+          <div class="card filter-card" id="filterCard" style="display: none;">
+            <div class="card-header">
+              <h5 class="mb-0">
+                <i class="bi bi-funnel"></i> 検索・フィルター
+              </h5>
+            </div>
+            <div class="card-body">
+              <form method="GET" action="/sales/history">
+                <div class="row g-3">
+                  <% if (isAdmin) { %>
+                  <div class="col-md-3">
+                    <label class="form-label">店舗</label>
+                    <select name="store_id" class="form-select">
+                      <option value="all" <%= filters.store_id === 'all' ? 'selected' : '' %>>全店舗</option>
+                      <% stores.forEach(store => { %>
+                      <option value="<%= store.id %>" <%= filters.store_id == store.id ? 'selected' : '' %>>
+                        <%= store.name %>
+                      </option>
+                      <% }) %>
+                    </select>
+                  </div>
+                  <% } %>
+                  <div class="col-md-3">
+                    <label class="form-label">開始日</label>
+                    <input
+                      type="date"
+                      name="start_date"
+                      class="form-control"
+                      value="<%= filters.start_date %>"
+                    />
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">終了日</label>
+                    <input
+                      type="date"
+                      name="end_date"
+                      class="form-control"
+                      value="<%= filters.end_date %>"
+                    />
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">顧客検索</label>
+                    <input
+                      type="text"
+                      name="customer_search"
+                      class="form-control"
+                      placeholder="顧客名・顧客コード"
+                      value="<%= filters.customer_search %>"
+                    />
+                  </div>
+                </div>
+                <div class="row mt-3">
+                  <div class="col">
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bi bi-search"></i> 検索
+                    </button>
+                    <a href="/sales/history" class="btn btn-outline-secondary ms-2">
+                      <i class="bi bi-arrow-clockwise"></i> リセット
+                    </a>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 売上履歴一覧 -->
+      <div class="row">
+        <div class="col">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">
+                <i class="bi bi-list-ul"></i> 取引履歴
+                <span class="badge bg-primary ms-2"><%= transactions.length %>件表示</span>
+              </h5>
+              <div class="btn-group">
+                <button class="btn btn-outline-primary btn-sm" onclick="exportToCsv()">
+                  <i class="bi bi-download"></i> CSV出力
+                </button>
+                <a href="/sales/new" class="btn btn-success btn-sm">
+                  <i class="bi bi-plus-circle"></i> 新規登録
+                </a>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <% if (transactions.length === 0) { %>
+              <div class="text-center py-5">
+                <i class="bi bi-inbox display-1 text-muted"></i>
+                <h4 class="text-muted mt-3">取引履歴がありません</h4>
+                <p class="text-muted">条件を変更して再検索してください</p>
+                <a href="/sales/new" class="btn btn-primary">
+                  <i class="bi bi-plus-circle"></i> 最初の売上を登録
+                </a>
+              </div>
+              <% } else { %>
+              <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                  <thead class="table-dark">
+                    <tr>
+                      <th>取引日</th>
+                      <th>顧客</th>
+                      <th>金額</th>
+                      <th>取引内容</th>
+                      <th>支払方法</th>
+                      <% if (isAdmin) { %>
+                      <th>店舗</th>
+                      <% } %>
+                      <th>登録日時</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% transactions.forEach(transaction => { %>
+                    <tr class="transaction-row" data-transaction-id="<%= transaction.id %>">
+                      <td>
+                        <div class="fw-bold">
+                          <%= new Date(transaction.transaction_date).toLocaleDateString('ja-JP') %>
+                        </div>
+                        <small class="text-muted">
+                          <%= new Date(transaction.transaction_date).toLocaleDateString('ja-JP', { weekday: 'short' }) %>
+                        </small>
+                      </td>
+                      <td>
+                        <div class="customer-info">
+                          <div class="fw-bold"><%= transaction.customer_name || '不明' %></div>
+                          <% if (transaction.customer_code) { %>
+                          <small class="text-muted"><%= transaction.customer_code %></small>
+                          <% } %>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="amount-large text-success">
+                          ¥<%= transaction.amount.toLocaleString() %>
+                        </span>
+                      </td>
+                      <td>
+                        <%= transaction.description || '-' %>
+                      </td>
+                      <td>
+                        <span class="badge payment-method-badge <%= getPaymentMethodClass(transaction.payment_method) %>">
+                          <%= transaction.payment_method || '現金' %>
+                        </span>
+                      </td>
+                      <% if (isAdmin) { %>
+                      <td>
+                        <small class="text-muted">
+                          <%= transaction.store_name || '不明' %>
+                        </small>
+                      </td>
+                      <% } %>
+                      <td>
+                        <small class="date-display">
+                          <%= new Date(transaction.created_at).toLocaleString('ja-JP') %>
+                        </small>
+                      </td>
+                      <td>
+                        <div class="btn-group btn-group-sm">
+                          <% if (transaction.customer_id) { %>
+                          <a href="/customers/detail/<%= transaction.customer_id %>" 
+                             class="btn btn-outline-info btn-sm" 
+                             title="顧客詳細">
+                            <i class="bi bi-person"></i>
+                          </a>
+                          <% } %>
+                          <button class="btn btn-outline-secondary btn-sm" 
+                                  onclick="showTransactionDetail(<%= transaction.id %>)"
+                                  title="詳細">
+                            <i class="bi bi-eye"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              </div>
+              <% } %>
+            </div>
+            <% if (transactions.length > 0) { %>
+            <div class="card-footer text-muted">
+              <small>
+                <i class="bi bi-info-circle"></i>
+                最新100件を表示しています。さらに詳細な検索には日付範囲を指定してください。
+              </small>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 取引詳細モーダル -->
+    <div class="modal fade" id="transactionModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">取引詳細</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="transactionModalBody">
+            <!-- 動的に内容が挿入されます -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+              閉じる
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+      // フィルター表示切り替え
+      function toggleFilters() {
+        const filterCard = document.getElementById('filterCard');
+        if (filterCard.style.display === 'none') {
+          filterCard.style.display = 'block';
+        } else {
+          filterCard.style.display = 'none';
+        }
+      }
+
+      // 支払方法のCSSクラス取得
+      function getPaymentMethodClass(method) {
+        switch (method) {
+          case 'クレジットカード': return 'bg-primary';
+          case 'QR決済': return 'bg-info';
+          case 'その他': return 'bg-warning';
+          default: return 'bg-secondary';
+        }
+      }
+
+      // 取引詳細表示
+      function showTransactionDetail(transactionId) {
+        const row = document.querySelector(`tr[data-transaction-id="${transactionId}"]`);
+        if (!row) return;
+
+        const cells = row.querySelectorAll('td');
+        const modalBody = document.getElementById('transactionModalBody');
+        
+        modalBody.innerHTML = `
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">取引ID</label>
+              <p class="form-control-plaintext">${transactionId}</p>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">取引日</label>
+              <p class="form-control-plaintext">${cells[0].textContent.trim()}</p>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">顧客</label>
+              <p class="form-control-plaintext">${cells[1].textContent.trim()}</p>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">金額</label>
+              <p class="form-control-plaintext text-success fw-bold">${cells[2].textContent.trim()}</p>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-bold">取引内容</label>
+              <p class="form-control-plaintext">${cells[3].textContent.trim()}</p>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">支払方法</label>
+              <p class="form-control-plaintext">${cells[4].textContent.trim()}</p>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">登録日時</label>
+              <p class="form-control-plaintext">${cells[${isAdmin ? 6 : 5}].textContent.trim()}</p>
+            </div>
+          </div>
+        `;
+
+        new bootstrap.Modal(document.getElementById('transactionModal')).show();
+      }
+
+      // CSV出力
+      function exportToCsv() {
+        const currentUrl = new URL(window.location);
+        currentUrl.pathname = '/sales/history/api';
+        currentUrl.searchParams.set('format', 'csv');
+        
+        // 新しいウィンドウで開く（ダウンロード）
+        window.open(currentUrl.toString(), '_blank');
+      }
+
+      // 初期表示時にURLパラメータがある場合はフィルターを表示
+      document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasFilters = urlParams.has('start_date') || urlParams.has('end_date') || 
+                          urlParams.has('customer_search') || urlParams.has('store_id');
+        
+        if (hasFilters) {
+          document.getElementById('filterCard').style.display = 'block';
+        }
+      });
+    </script>
+
+    <%
+      function getPaymentMethodClass(method) {
+        switch (method) {
+          case 'クレジットカード': return 'bg-primary';
+          case 'QR決済': return 'bg-info';
+          case 'その他': return 'bg-warning';
+          default: return 'bg-secondary';
+        }
+      }
+    %>
+  </body>
+</html>
