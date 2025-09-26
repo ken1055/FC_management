@@ -39,7 +39,7 @@ router.get("/", (req, res) => {
   }
 });
 
-// 売上登録（API）
+// 売上登録（API）- 月次集計用（従来機能）
 router.post("/", requireRole(["admin", "agency"]), (req, res) => {
   const { store_id, year, month, amount } = req.body;
 
@@ -88,6 +88,106 @@ router.post("/", requireRole(["admin", "agency"]), (req, res) => {
         function (err) {
           if (err) return res.status(500).send("DBエラー");
           res.json({ id: this.lastID });
+        }
+      );
+    }
+  );
+});
+
+// 個別取引登録（API）- 新機能
+router.post("/transaction", requireRole(["admin", "agency"]), (req, res) => {
+  const {
+    store_id,
+    customer_id,
+    transaction_date,
+    amount,
+    description,
+    payment_method,
+  } = req.body;
+
+  console.log("個別取引登録リクエスト:", req.body);
+
+  // 必須項目チェック
+  if (!store_id || !customer_id || !transaction_date || !amount) {
+    return res.status(400).json({
+      error: "必須項目が不足しています",
+      required: ["store_id", "customer_id", "transaction_date", "amount"],
+    });
+  }
+
+  // 数値変換
+  const processedStoreId = parseInt(store_id);
+  const processedCustomerId = parseInt(customer_id);
+  const processedAmount = parseInt(amount);
+
+  if (
+    isNaN(processedStoreId) ||
+    isNaN(processedCustomerId) ||
+    isNaN(processedAmount)
+  ) {
+    return res
+      .status(400)
+      .json({ error: "数値フィールドの形式が正しくありません" });
+  }
+
+  // 代理店は自分のstore_idのみ登録可能
+  if (req.session.user.role === "agency") {
+    if (!req.session.user.store_id) {
+      return res.status(400).json({ error: "代理店IDが設定されていません" });
+    }
+    if (req.session.user.store_id !== processedStoreId) {
+      return res
+        .status(403)
+        .json({ error: "自分の店舗の売上のみ登録可能です" });
+    }
+  }
+
+  // 顧客が指定店舗に属しているかチェック
+  db.get(
+    "SELECT id, name FROM customers WHERE id = ? AND store_id = ?",
+    [processedCustomerId, processedStoreId],
+    (err, customer) => {
+      if (err) {
+        console.error("顧客確認エラー:", err);
+        return res.status(500).json({ error: "データベースエラー" });
+      }
+
+      if (!customer) {
+        return res
+          .status(400)
+          .json({
+            error: "指定された顧客が見つからないか、店舗が一致しません",
+          });
+      }
+
+      // 取引を登録
+      db.run(
+        `INSERT INTO customer_transactions 
+         (store_id, customer_id, transaction_date, amount, description, payment_method) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          processedStoreId,
+          processedCustomerId,
+          transaction_date,
+          processedAmount,
+          description || "",
+          payment_method || "現金",
+        ],
+        function (err) {
+          if (err) {
+            console.error("取引登録エラー:", err);
+            return res.status(500).json({ error: "取引の登録に失敗しました" });
+          }
+
+          console.log("取引登録成功:", this.lastID);
+
+          // 成功レスポンス
+          res.json({
+            success: true,
+            transaction_id: this.lastID,
+            customer_name: customer.name,
+            message: `${customer.name}様の取引を登録しました`,
+          });
         }
       );
     }
