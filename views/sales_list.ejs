@@ -157,42 +157,57 @@
     <table class="table table-bordered table-striped">
       <thead class="table-dark">
         <tr>
-          <th>ID</th>
           <% if (session.user.role !== 'agency') { %>
           <th>店舗名</th>
-          <th>グループ</th>
           <% } %>
           <th>年</th>
           <th>月</th>
           <th>金額</th>
+          <th>取引件数</th>
+          <th>平均単価</th>
           <th>操作</th>
         </tr>
       </thead>
       <tbody>
         <% if (sales.length === 0) { %>
         <tr>
-          <td colspan="<%= session.user.role === 'agency' ? '4' : '6' %>" class="text-center text-muted">
-            売上データがありません
+          <td colspan="<%= session.user.role === 'agency' ? '5' : '6' %>" class="text-center text-muted">
+            <div class="py-4">
+              <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
+              <h5 class="text-muted">売上データがありません</h5>
+              <p class="text-muted">取引を登録すると、ここに月次集計が表示されます</p>
+              <a href="/sales/new" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> 売上を登録
+              </a>
+            </div>
           </td>
         </tr>
         <% } else { %>
         <% sales.forEach(s => { %>
         <tr>
-          <td><%= s.id %></td>
           <% if (session.user.role !== 'agency') { %>
           <td><%= s.agency_name || 'ID:' + s.store_id %></td>
-          <td><%= s.group_name || '未設定' %></td>
           <% } %>
           <td><%= s.year %></td>
           <td><%= s.month %></td>
-          <td>¥<%= s.amount.toLocaleString() %></td>
+          <td class="fw-bold text-success">¥<%= (s.amount || 0).toLocaleString() %></td>
           <td>
-            <div class="btn-group-vertical btn-group-sm">
-              <a href="/sales/edit/<%= s.id %>" class="btn btn-sm btn-secondary mb-1">編集</a>
-              <form method="post" action="/sales/delete/<%= s.id %>" style="display:inline;" 
-                    onsubmit="return confirm('本当に削除しますか？')">
-                <button type="submit" class="btn btn-sm btn-danger">削除</button>
-              </form>
+            <span class="badge bg-info">
+              <%= (s.transaction_count || 0).toLocaleString() %>件
+            </span>
+          </td>
+          <td>
+            ¥<%= s.transaction_count > 0 ? Math.round((s.amount || 0) / s.transaction_count).toLocaleString() : '0' %>
+          </td>
+          <td>
+            <div class="btn-group btn-group-sm">
+              <a href="/sales/history?start_date=<%= s.year %>-<%= String(s.month).padStart(2, '0') %>-01&end_date=<%= s.year %>-<%= String(s.month).padStart(2, '0') %>-31" 
+                 class="btn btn-outline-primary" title="詳細履歴">
+                <i class="bi bi-list-ul"></i>
+              </a>
+              <a href="/sales/new" class="btn btn-outline-success" title="新規登録">
+                <i class="bi bi-plus-circle"></i>
+              </a>
             </div>
           </td>
         </tr>
