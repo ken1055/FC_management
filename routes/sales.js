@@ -188,15 +188,15 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
             // データがない場合の処理
             const validMonthlySales = monthlySales.filter(s => s.year && s.month && s.monthly_total !== null);
 
-            // 月間売上推移データを作成
-            const chartData = validMonthlySales.reverse().map((s) => ({
+            // チャート用データ（時系列順）
+            const chartData = validMonthlySales.slice().reverse().map((s) => ({
               period: `${s.year}年${parseInt(s.month)}月`,
               amount: s.monthly_total || 0,
               transactions: s.transaction_count || 0,
             }));
 
-            // 売上データを従来形式に変換（テンプレート互換性のため）
-            const salesFormatted = validMonthlySales.reverse().map((s) => ({
+            // テーブル表示用データ（新しい順）
+            const salesFormatted = validMonthlySales.map((s) => ({
               year: parseInt(s.year) || 0,
               month: parseInt(s.month) || 0,
               amount: s.monthly_total || 0,
@@ -269,15 +269,15 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
         // データがない場合の処理
         const validMonthlySales = monthlySales.filter(s => s.year && s.month && s.monthly_total !== null);
 
-        // 月間売上推移データを作成
-        const chartData = validMonthlySales.reverse().map((s) => ({
+        // チャート用データ（時系列順）
+        const chartData = validMonthlySales.slice().reverse().map((s) => ({
           period: `${s.year}年${parseInt(s.month)}月`,
           amount: s.monthly_total || 0,
           transactions: s.transaction_count || 0,
         }));
 
-        // 売上データを従来形式に変換（テンプレート互換性のため）
-        const salesFormatted = validMonthlySales.reverse().map((s) => ({
+        // テーブル表示用データ（新しい順）
+        const salesFormatted = validMonthlySales.map((s) => ({
           year: parseInt(s.year) || 0,
           month: parseInt(s.month) || 0,
           amount: s.monthly_total || 0,

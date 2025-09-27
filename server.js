@@ -356,12 +356,19 @@ console.log("全ルート読み込み処理完了");
 
 // 店舗統計情報API
 app.get("/api/store/statistics", (req, res) => {
+  console.log("=== 統計情報API呼び出し ===");
+  console.log("セッション:", req.session?.user);
+  
   if (!req.session || !req.session.user || req.session.user.role !== "agency") {
+    console.log("認証エラー: 権限なし");
     return res.status(403).json({ error: "Unauthorized" });
   }
 
   const storeId = req.session.user.store_id;
+  console.log("店舗ID:", storeId);
+  
   if (!storeId) {
+    console.log("店舗IDエラー: 未設定");
     return res.status(400).json({ error: "Store ID not found" });
   }
 
@@ -369,6 +376,8 @@ app.get("/api/store/statistics", (req, res) => {
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
+  
+  console.log("現在日時:", { currentYear, currentMonth });
 
   // 顧客数を取得
   const customerCountQuery =
@@ -383,27 +392,39 @@ app.get("/api/store/statistics", (req, res) => {
     AND strftime('%m', transaction_date) = ?
   `;
 
+  console.log("顧客数クエリ実行:", customerCountQuery, [storeId]);
+  
   db.get(customerCountQuery, [storeId], (err, customerResult) => {
     if (err) {
       console.error("顧客数取得エラー:", err);
       return res.status(500).json({ error: "Failed to fetch customer count" });
     }
+    
+    console.log("顧客数結果:", customerResult);
 
+    const salesParams = [storeId, currentYear.toString(), String(currentMonth).padStart(2, '0')];
+    console.log("売上クエリ実行:", currentMonthSalesQuery, salesParams);
+    
     db.get(
       currentMonthSalesQuery,
-      [storeId, currentYear.toString(), String(currentMonth).padStart(2, '0')],
+      salesParams,
       (err, salesResult) => {
         if (err) {
           console.error("売上取得エラー:", err);
           return res.status(500).json({ error: "Failed to fetch sales data" });
         }
+        
+        console.log("売上結果:", salesResult);
 
-        res.json({
+        const response = {
           customerCount: customerResult?.count || 0,
           currentMonthSales: salesResult?.total || 0,
           year: currentYear,
           month: currentMonth,
-        });
+        };
+        
+        console.log("最終レスポンス:", response);
+        res.json(response);
       }
     );
   });
