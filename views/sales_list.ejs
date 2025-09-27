@@ -93,7 +93,20 @@
     </h2>
     <div>
       <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
-      <a href="/sales/list" class="btn btn-secondary me-2">店舗選択へ戻る</a>
+        <% if (typeof showOverview !== 'undefined' && showOverview) { %>
+          <a href="/sales/list?overview=false" class="btn btn-outline-primary me-2">
+            <i class="bi bi-list"></i> 店舗別表示
+          </a>
+        <% } else { %>
+          <a href="/sales/list" class="btn btn-outline-primary me-2">
+            <i class="bi bi-graph-up"></i> 統合ビュー
+          </a>
+        <% } %>
+        <% if (typeof agencyId === 'undefined') { %>
+          <a href="/sales/list?overview=false" class="btn btn-secondary me-2">店舗選択</a>
+        <% } else { %>
+          <a href="/sales/list" class="btn btn-secondary me-2">統合ビューへ戻る</a>
+        <% } %>
       <% } %>
       <% if (typeof agencyId !== 'undefined' && agencyId) { %>
       <a href="/sales/new?store_id=<%= agencyId %>" class="btn btn-success">売上登録</a>

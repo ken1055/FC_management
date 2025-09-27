@@ -186,14 +186,19 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
             if (err) return res.status(500).send("DBエラー");
 
             // データがない場合の処理
-            const validMonthlySales = monthlySales.filter(s => s.year && s.month && s.monthly_total !== null);
+            const validMonthlySales = monthlySales.filter(
+              (s) => s.year && s.month && s.monthly_total !== null
+            );
 
             // チャート用データ（時系列順）
-            const chartData = validMonthlySales.slice().reverse().map((s) => ({
-              period: `${s.year}年${parseInt(s.month)}月`,
-              amount: s.monthly_total || 0,
-              transactions: s.transaction_count || 0,
-            }));
+            const chartData = validMonthlySales
+              .slice()
+              .reverse()
+              .map((s) => ({
+                period: `${s.year}年${parseInt(s.month)}月`,
+                amount: s.monthly_total || 0,
+                transactions: s.transaction_count || 0,
+              }));
 
             // テーブル表示用データ（新しい順）
             const salesFormatted = validMonthlySales.map((s) => ({
@@ -218,28 +223,112 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
       }
     );
   } else {
-    // 管理者・役員は代理店選択画面を表示（個別取引ベース）
-    db.all(
-      `SELECT 
-          s.id, 
-          s.name,
-          COALESCE(COUNT(ct.id), 0) as transaction_count,
-          COALESCE(SUM(ct.amount), 0) as total_sales
-        FROM stores s 
-        LEFT JOIN customer_transactions ct ON s.id = ct.store_id 
-        GROUP BY s.id, s.name 
-        ORDER BY s.name`,
-      [],
-      (err, stores) => {
-        if (err) return res.status(500).send("DBエラー");
+    // 管理者・役員は全店舗統合ビューまたは代理店選択画面を表示
+    const showOverview = req.query.overview !== 'false'; // デフォルトで統合ビューを表示
+    
+    if (showOverview) {
+      // 全店舗統合の月次売上データを取得
+      db.all(
+        `SELECT 
+          strftime('%Y', transaction_date) as year,
+          strftime('%m', transaction_date) as month,
+          SUM(amount) as monthly_total,
+          COUNT(*) as transaction_count,
+          COUNT(DISTINCT store_id) as store_count
+        FROM customer_transactions 
+        GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
+        ORDER BY year DESC, month DESC`,
+        [],
+        (err, monthlySales) => {
+          if (err) return res.status(500).send("DBエラー");
 
-        res.render("sales_agency_list", {
-          stores,
-          session: req.session,
-          title: "売上管理 - 代理店選択",
-        });
-      }
-    );
+          console.log("管理者統合ビュー - 月次売上データ:", monthlySales);
+
+          // データがない場合の処理
+          const validMonthlySales = monthlySales.filter(
+            (s) => s.year && s.month && s.monthly_total !== null
+          );
+
+          // チャート用データ（時系列順）
+          const chartData = validMonthlySales
+            .slice()
+            .reverse()
+            .map((s) => ({
+              period: `${s.year}年${parseInt(s.month)}月`,
+              amount: s.monthly_total || 0,
+              transactions: s.transaction_count || 0,
+              stores: s.store_count || 0,
+            }));
+
+          // テーブル表示用データ（新しい順）
+          const salesFormatted = validMonthlySales.map((s) => ({
+            year: parseInt(s.year) || 0,
+            month: parseInt(s.month) || 0,
+            amount: s.monthly_total || 0,
+            transaction_count: s.transaction_count || 0,
+            store_count: s.store_count || 0,
+            agency_name: `全店舗統合 (${s.store_count || 0}店舗)`,
+          }));
+
+          // 店舗一覧も取得（詳細表示用）
+          db.all(
+            `SELECT 
+              s.id, 
+              s.name,
+              COALESCE(COUNT(ct.id), 0) as transaction_count,
+              COALESCE(SUM(ct.amount), 0) as total_sales
+            FROM stores s 
+            LEFT JOIN customer_transactions ct ON s.id = ct.store_id 
+            GROUP BY s.id, s.name 
+            ORDER BY s.name`,
+            [],
+            (err, stores) => {
+              if (err) {
+                console.error("店舗一覧取得エラー:", err);
+                stores = [];
+              }
+
+              res.render("sales_list", {
+                sales: salesFormatted,
+                chartData: JSON.stringify(chartData),
+                agencyName: "全店舗統合ビュー",
+                stores: stores,
+                groups: [],
+                selectedGroupId: null,
+                session: req.session,
+                success: req.query.success,
+                title: "売上管理 - 全店舗統合",
+                isAdmin: true,
+                showOverview: true,
+              });
+            }
+          );
+        }
+      );
+    } else {
+      // 従来の代理店選択画面を表示
+      db.all(
+        `SELECT 
+            s.id, 
+            s.name,
+            COALESCE(COUNT(ct.id), 0) as transaction_count,
+            COALESCE(SUM(ct.amount), 0) as total_sales
+          FROM stores s 
+          LEFT JOIN customer_transactions ct ON s.id = ct.store_id 
+          GROUP BY s.id, s.name 
+          ORDER BY s.name`,
+        [],
+        (err, stores) => {
+          if (err) return res.status(500).send("DBエラー");
+
+          res.render("sales_agency_list", {
+            stores,
+            session: req.session,
+            title: "売上管理 - 代理店選択",
+          });
+        }
+      );
+    }
   }
 });
 
@@ -267,14 +356,19 @@ router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
         if (err) return res.status(500).send("DBエラー");
 
         // データがない場合の処理
-        const validMonthlySales = monthlySales.filter(s => s.year && s.month && s.monthly_total !== null);
+        const validMonthlySales = monthlySales.filter(
+          (s) => s.year && s.month && s.monthly_total !== null
+        );
 
         // チャート用データ（時系列順）
-        const chartData = validMonthlySales.slice().reverse().map((s) => ({
-          period: `${s.year}年${parseInt(s.month)}月`,
-          amount: s.monthly_total || 0,
-          transactions: s.transaction_count || 0,
-        }));
+        const chartData = validMonthlySales
+          .slice()
+          .reverse()
+          .map((s) => ({
+            period: `${s.year}年${parseInt(s.month)}月`,
+            amount: s.monthly_total || 0,
+            transactions: s.transaction_count || 0,
+          }));
 
         // テーブル表示用データ（新しい順）
         const salesFormatted = validMonthlySales.map((s) => ({
@@ -422,7 +516,8 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
       transactionQuery += " WHERE " + whereConditions.join(" AND ");
     }
 
-    transactionQuery += " ORDER BY transaction_date DESC, created_at DESC LIMIT 100";
+    transactionQuery +=
+      " ORDER BY transaction_date DESC, created_at DESC LIMIT 100";
 
     console.log("Supabase取引クエリ:", transactionQuery, params);
 
@@ -442,45 +537,50 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
       }
 
       // 顧客情報と店舗情報を別途取得
-      const customerIds = [...new Set(transactions.map(t => t.customer_id).filter(Boolean))];
-      const storeIds = [...new Set(transactions.map(t => t.store_id).filter(Boolean))];
+      const customerIds = [
+        ...new Set(transactions.map((t) => t.customer_id).filter(Boolean)),
+      ];
+      const storeIds = [
+        ...new Set(transactions.map((t) => t.store_id).filter(Boolean)),
+      ];
 
       let customersMap = {};
       let storesMap = {};
 
       // 顧客情報を取得
       if (customerIds.length > 0) {
-        const customerPlaceholders = customerIds.map(() => '?').join(',');
+        const customerPlaceholders = customerIds.map(() => "?").join(",");
         const customerQuery = `SELECT id, name, customer_code FROM customers WHERE id IN (${customerPlaceholders})`;
-        
+
         db.all(customerQuery, customerIds, (err, customers) => {
           if (err) {
             console.error("顧客情報取得エラー:", err);
           } else {
-            customers.forEach(c => {
+            customers.forEach((c) => {
               customersMap[c.id] = c;
             });
           }
 
           // 店舗情報を取得
           if (storeIds.length > 0) {
-            const storePlaceholders = storeIds.map(() => '?').join(',');
+            const storePlaceholders = storeIds.map(() => "?").join(",");
             const storeQuery = `SELECT id, name FROM stores WHERE id IN (${storePlaceholders})`;
-            
+
             db.all(storeQuery, storeIds, (err, stores) => {
               if (err) {
                 console.error("店舗情報取得エラー:", err);
               } else {
-                stores.forEach(s => {
+                stores.forEach((s) => {
                   storesMap[s.id] = s;
                 });
               }
 
               // データをマージして結果を返す
-              const enrichedTransactions = transactions.map(t => ({
+              const enrichedTransactions = transactions.map((t) => ({
                 ...t,
                 customer_name: customersMap[t.customer_id]?.name || null,
-                customer_code: customersMap[t.customer_id]?.customer_code || null,
+                customer_code:
+                  customersMap[t.customer_id]?.customer_code || null,
                 store_name: storesMap[t.store_id]?.name || null,
               }));
 
@@ -488,16 +588,19 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
               let filteredTransactions = enrichedTransactions;
               if (customer_search && customer_search.trim()) {
                 const searchTerm = customer_search.trim().toLowerCase();
-                filteredTransactions = enrichedTransactions.filter(t => 
-                  (t.customer_name && t.customer_name.toLowerCase().includes(searchTerm)) ||
-                  (t.customer_code && t.customer_code.toLowerCase().includes(searchTerm))
+                filteredTransactions = enrichedTransactions.filter(
+                  (t) =>
+                    (t.customer_name &&
+                      t.customer_name.toLowerCase().includes(searchTerm)) ||
+                    (t.customer_code &&
+                      t.customer_code.toLowerCase().includes(searchTerm))
                 );
               }
 
               renderHistoryPage(filteredTransactions);
             });
           } else {
-            const enrichedTransactions = transactions.map(t => ({
+            const enrichedTransactions = transactions.map((t) => ({
               ...t,
               customer_name: customersMap[t.customer_id]?.name || null,
               customer_code: customersMap[t.customer_id]?.customer_code || null,
@@ -507,9 +610,12 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
             let filteredTransactions = enrichedTransactions;
             if (customer_search && customer_search.trim()) {
               const searchTerm = customer_search.trim().toLowerCase();
-              filteredTransactions = enrichedTransactions.filter(t => 
-                (t.customer_name && t.customer_name.toLowerCase().includes(searchTerm)) ||
-                (t.customer_code && t.customer_code.toLowerCase().includes(searchTerm))
+              filteredTransactions = enrichedTransactions.filter(
+                (t) =>
+                  (t.customer_name &&
+                    t.customer_name.toLowerCase().includes(searchTerm)) ||
+                  (t.customer_code &&
+                    t.customer_code.toLowerCase().includes(searchTerm))
               );
             }
 
@@ -519,19 +625,19 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
       } else {
         // 顧客情報がない場合、店舗情報のみ取得
         if (storeIds.length > 0) {
-          const storePlaceholders = storeIds.map(() => '?').join(',');
+          const storePlaceholders = storeIds.map(() => "?").join(",");
           const storeQuery = `SELECT id, name FROM stores WHERE id IN (${storePlaceholders})`;
-          
+
           db.all(storeQuery, storeIds, (err, stores) => {
             if (err) {
               console.error("店舗情報取得エラー:", err);
             } else {
-              stores.forEach(s => {
+              stores.forEach((s) => {
                 storesMap[s.id] = s;
               });
             }
 
-            const enrichedTransactions = transactions.map(t => ({
+            const enrichedTransactions = transactions.map((t) => ({
               ...t,
               customer_name: null,
               customer_code: null,
@@ -541,7 +647,7 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
             renderHistoryPage(enrichedTransactions);
           });
         } else {
-          const enrichedTransactions = transactions.map(t => ({
+          const enrichedTransactions = transactions.map((t) => ({
             ...t,
             customer_name: null,
             customer_code: null,
@@ -606,7 +712,8 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
       baseQuery += " WHERE " + whereConditions.join(" AND ");
     }
 
-    baseQuery += " ORDER BY ct.transaction_date DESC, ct.created_at DESC LIMIT 100";
+    baseQuery +=
+      " ORDER BY ct.transaction_date DESC, ct.created_at DESC LIMIT 100";
 
     console.log("SQLite実行クエリ:", baseQuery, params);
 
@@ -626,9 +733,13 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
 
   function renderHistoryPage(transactions) {
     // 統計情報を計算
-    const totalAmount = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalAmount = transactions.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0
+    );
     const transactionCount = transactions.length;
-    const averageAmount = transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
+    const averageAmount =
+      transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
 
     // 店舗一覧を取得（管理者用）
     if (isAdmin) {
@@ -769,7 +880,9 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
       db.all(transactionQuery, params, (err, transactions) => {
         if (err) {
           console.error("Supabase取引データ取得エラー:", err);
-          return res.status(500).json({ error: "取引データの取得に失敗しました" });
+          return res
+            .status(500)
+            .json({ error: "取引データの取得に失敗しました" });
         }
 
         if (transactions.length === 0) {
@@ -785,42 +898,52 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
         }
 
         // 顧客情報と店舗情報を別途取得してマージ
-        const customerIds = [...new Set(transactions.map(t => t.customer_id).filter(Boolean))];
-        const storeIds = [...new Set(transactions.map(t => t.store_id).filter(Boolean))];
+        const customerIds = [
+          ...new Set(transactions.map((t) => t.customer_id).filter(Boolean)),
+        ];
+        const storeIds = [
+          ...new Set(transactions.map((t) => t.store_id).filter(Boolean)),
+        ];
 
         Promise.all([
           // 顧客情報取得
-          customerIds.length > 0 ? new Promise((resolve) => {
-            const customerPlaceholders = customerIds.map(() => '?').join(',');
-            const customerQuery = `SELECT id, name, customer_code FROM customers WHERE id IN (${customerPlaceholders})`;
-            db.all(customerQuery, customerIds, (err, customers) => {
-              const customersMap = {};
-              if (!err && customers) {
-                customers.forEach(c => {
-                  customersMap[c.id] = c;
+          customerIds.length > 0
+            ? new Promise((resolve) => {
+                const customerPlaceholders = customerIds
+                  .map(() => "?")
+                  .join(",");
+                const customerQuery = `SELECT id, name, customer_code FROM customers WHERE id IN (${customerPlaceholders})`;
+                db.all(customerQuery, customerIds, (err, customers) => {
+                  const customersMap = {};
+                  if (!err && customers) {
+                    customers.forEach((c) => {
+                      customersMap[c.id] = c;
+                    });
+                  }
+                  resolve(customersMap);
                 });
-              }
-              resolve(customersMap);
-            });
-          }) : Promise.resolve({}),
-          
+              })
+            : Promise.resolve({}),
+
           // 店舗情報取得
-          storeIds.length > 0 ? new Promise((resolve) => {
-            const storePlaceholders = storeIds.map(() => '?').join(',');
-            const storeQuery = `SELECT id, name FROM stores WHERE id IN (${storePlaceholders})`;
-            db.all(storeQuery, storeIds, (err, stores) => {
-              const storesMap = {};
-              if (!err && stores) {
-                stores.forEach(s => {
-                  storesMap[s.id] = s;
+          storeIds.length > 0
+            ? new Promise((resolve) => {
+                const storePlaceholders = storeIds.map(() => "?").join(",");
+                const storeQuery = `SELECT id, name FROM stores WHERE id IN (${storePlaceholders})`;
+                db.all(storeQuery, storeIds, (err, stores) => {
+                  const storesMap = {};
+                  if (!err && stores) {
+                    stores.forEach((s) => {
+                      storesMap[s.id] = s;
+                    });
+                  }
+                  resolve(storesMap);
                 });
-              }
-              resolve(storesMap);
-            });
-          }) : Promise.resolve({})
+              })
+            : Promise.resolve({}),
         ]).then(([customersMap, storesMap]) => {
           // データをマージして結果を返す
-          let enrichedTransactions = transactions.map(t => ({
+          let enrichedTransactions = transactions.map((t) => ({
             ...t,
             customer_name: customersMap[t.customer_id]?.name || null,
             customer_code: customersMap[t.customer_id]?.customer_code || null,
@@ -830,9 +953,12 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
           // 顧客検索フィルタを適用（Supabase側でできないため）
           if (customer_search && customer_search.trim()) {
             const searchTerm = customer_search.trim().toLowerCase();
-            enrichedTransactions = enrichedTransactions.filter(t => 
-              (t.customer_name && t.customer_name.toLowerCase().includes(searchTerm)) ||
-              (t.customer_code && t.customer_code.toLowerCase().includes(searchTerm))
+            enrichedTransactions = enrichedTransactions.filter(
+              (t) =>
+                (t.customer_name &&
+                  t.customer_name.toLowerCase().includes(searchTerm)) ||
+                (t.customer_code &&
+                  t.customer_code.toLowerCase().includes(searchTerm))
             );
           }
 
@@ -925,7 +1051,9 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
       db.all(baseQuery, params, (err, transactions) => {
         if (err) {
           console.error("SQLite取引データ取得エラー:", err);
-          return res.status(500).json({ error: "取引データの取得に失敗しました" });
+          return res
+            .status(500)
+            .json({ error: "取引データの取得に失敗しました" });
         }
 
         res.json({

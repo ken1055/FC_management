@@ -358,18 +358,32 @@ console.log("全ルート読み込み処理完了");
 app.get("/api/store/statistics", (req, res) => {
   console.log("=== 統計情報API呼び出し ===");
   console.log("セッション:", req.session?.user);
+  console.log("リクエストヘッダー:", req.headers);
   
-  if (!req.session || !req.session.user || req.session.user.role !== "agency") {
-    console.log("認証エラー: 権限なし");
-    return res.status(403).json({ error: "Unauthorized" });
+  if (!req.session || !req.session.user) {
+    console.log("認証エラー: セッションまたはユーザーなし");
+    return res.status(403).json({ error: "Unauthorized - No session" });
   }
 
-  const storeId = req.session.user.store_id;
-  console.log("店舗ID:", storeId);
+  // 管理者とagencyロールの両方に対応
+  if (!["admin", "agency"].includes(req.session.user.role)) {
+    console.log("認証エラー: 権限不足 - ロール:", req.session.user.role);
+    return res.status(403).json({ error: "Unauthorized - Invalid role" });
+  }
+
+  let storeId;
+  if (req.session.user.role === "agency") {
+    storeId = req.session.user.store_id;
+    console.log("店舗ユーザー - 店舗ID:", storeId);
+  } else if (req.session.user.role === "admin") {
+    // 管理者の場合、クエリパラメータから店舗IDを取得するか、全店舗統計を返す
+    storeId = req.query.store_id ? parseInt(req.query.store_id) : null;
+    console.log("管理者ユーザー - 指定店舗ID:", storeId);
+  }
   
-  if (!storeId) {
-    console.log("店舗IDエラー: 未設定");
-    return res.status(400).json({ error: "Store ID not found" });
+  if (req.session.user.role === "agency" && !storeId) {
+    console.log("店舗IDエラー: 店舗ユーザーなのに店舗ID未設定");
+    return res.status(400).json({ error: "Store ID not found for agency user" });
   }
 
   const db = require("./db");
@@ -379,55 +393,103 @@ app.get("/api/store/statistics", (req, res) => {
   
   console.log("現在日時:", { currentYear, currentMonth });
 
-  // 顧客数を取得
-  const customerCountQuery =
-    "SELECT COUNT(*) as count FROM customers WHERE store_id = ?";
+  if (storeId) {
+    // 特定店舗の統計を取得
+    const customerCountQuery = "SELECT COUNT(*) as count FROM customers WHERE store_id = ?";
+    const currentMonthSalesQuery = `
+      SELECT SUM(amount) as total 
+      FROM customer_transactions 
+      WHERE store_id = ? 
+      AND strftime('%Y', transaction_date) = ? 
+      AND strftime('%m', transaction_date) = ?
+    `;
 
-  // 今月の売上を取得（customer_transactionsベース）
-  const currentMonthSalesQuery = `
-    SELECT SUM(amount) as total 
-    FROM customer_transactions 
-    WHERE store_id = ? 
-    AND strftime('%Y', transaction_date) = ? 
-    AND strftime('%m', transaction_date) = ?
-  `;
-
-  console.log("顧客数クエリ実行:", customerCountQuery, [storeId]);
-  
-  db.get(customerCountQuery, [storeId], (err, customerResult) => {
-    if (err) {
-      console.error("顧客数取得エラー:", err);
-      return res.status(500).json({ error: "Failed to fetch customer count" });
-    }
+    console.log("特定店舗統計 - 顧客数クエリ実行:", customerCountQuery, [storeId]);
     
-    console.log("顧客数結果:", customerResult);
-
-    const salesParams = [storeId, currentYear.toString(), String(currentMonth).padStart(2, '0')];
-    console.log("売上クエリ実行:", currentMonthSalesQuery, salesParams);
-    
-    db.get(
-      currentMonthSalesQuery,
-      salesParams,
-      (err, salesResult) => {
-        if (err) {
-          console.error("売上取得エラー:", err);
-          return res.status(500).json({ error: "Failed to fetch sales data" });
-        }
-        
-        console.log("売上結果:", salesResult);
-
-        const response = {
-          customerCount: customerResult?.count || 0,
-          currentMonthSales: salesResult?.total || 0,
-          year: currentYear,
-          month: currentMonth,
-        };
-        
-        console.log("最終レスポンス:", response);
-        res.json(response);
+    db.get(customerCountQuery, [storeId], (err, customerResult) => {
+      if (err) {
+        console.error("顧客数取得エラー:", err);
+        return res.status(500).json({ error: "Failed to fetch customer count" });
       }
-    );
-  });
+      
+      console.log("顧客数結果:", customerResult);
+
+      const salesParams = [storeId, currentYear.toString(), String(currentMonth).padStart(2, '0')];
+      console.log("売上クエリ実行:", currentMonthSalesQuery, salesParams);
+      
+      db.get(
+        currentMonthSalesQuery,
+        salesParams,
+        (err, salesResult) => {
+          if (err) {
+            console.error("売上取得エラー:", err);
+            return res.status(500).json({ error: "Failed to fetch sales data" });
+          }
+          
+          console.log("売上結果:", salesResult);
+
+          const response = {
+            customerCount: customerResult?.count || 0,
+            currentMonthSales: salesResult?.total || 0,
+            year: currentYear,
+            month: currentMonth,
+            storeId: storeId,
+          };
+          
+          console.log("最終レスポンス:", response);
+          res.json(response);
+        }
+      );
+    });
+  } else {
+    // 管理者用：全店舗統計を取得
+    const customerCountQuery = "SELECT COUNT(*) as count FROM customers";
+    const currentMonthSalesQuery = `
+      SELECT SUM(amount) as total 
+      FROM customer_transactions 
+      WHERE strftime('%Y', transaction_date) = ? 
+      AND strftime('%m', transaction_date) = ?
+    `;
+
+    console.log("全店舗統計 - 顧客数クエリ実行:", customerCountQuery);
+    
+    db.get(customerCountQuery, [], (err, customerResult) => {
+      if (err) {
+        console.error("全店舗顧客数取得エラー:", err);
+        return res.status(500).json({ error: "Failed to fetch customer count" });
+      }
+      
+      console.log("全店舗顧客数結果:", customerResult);
+
+      const salesParams = [currentYear.toString(), String(currentMonth).padStart(2, '0')];
+      console.log("全店舗売上クエリ実行:", currentMonthSalesQuery, salesParams);
+      
+      db.get(
+        currentMonthSalesQuery,
+        salesParams,
+        (err, salesResult) => {
+          if (err) {
+            console.error("全店舗売上取得エラー:", err);
+            return res.status(500).json({ error: "Failed to fetch sales data" });
+          }
+          
+          console.log("全店舗売上結果:", salesResult);
+
+          const response = {
+            customerCount: customerResult?.count || 0,
+            currentMonthSales: salesResult?.total || 0,
+            year: currentYear,
+            month: currentMonth,
+            storeId: null,
+            isGlobal: true,
+          };
+          
+          console.log("全店舗統計最終レスポンス:", response);
+          res.json(response);
+        }
+      );
+    });
+  }
 });
 
 // メインページ（簡素化・安全化）- 最優先でルート定義
