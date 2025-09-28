@@ -5,7 +5,9 @@ const router = express.Router();
 const { getSupabaseClient } = require("../config/supabase");
 const db = getSupabaseClient();
 
-console.log("sales.js: Vercel + Supabase環境で初期化完了 - v3.0 - db.all完全削除");
+console.log(
+  "sales.js: Vercel + Supabase環境で初期化完了 - v3.0 - db.all完全削除"
+);
 
 // Supabase用のヘルパー関数
 
@@ -14,7 +16,7 @@ async function handleAdminOverviewData(req, res) {
   try {
     // 全店舗の月次売上データを取得
     const monthlySales = await getMonthlySalesData();
-    
+
     console.log("管理者統合ビュー - 月次売上データ:", monthlySales);
 
     // データがない場合の処理
@@ -24,11 +26,13 @@ async function handleAdminOverviewData(req, res) {
 
     // 店舗数を計算（全取引から一意の店舗IDを取得）
     const { data: storeCountData, error: storeCountError } = await db
-      .from('customer_transactions')
-      .select('store_id')
-      .not('store_id', 'is', null);
-    
-    const uniqueStores = storeCountData ? [...new Set(storeCountData.map(t => t.store_id))] : [];
+      .from("customer_transactions")
+      .select("store_id")
+      .not("store_id", "is", null);
+
+    const uniqueStores = storeCountData
+      ? [...new Set(storeCountData.map((t) => t.store_id))]
+      : [];
     const totalStoreCount = uniqueStores.length;
 
     // チャート用データ（時系列順）
@@ -54,8 +58,8 @@ async function handleAdminOverviewData(req, res) {
 
     // 店舗一覧も取得（詳細表示用）
     const { data: stores, error: storesError } = await db
-      .from('stores')
-      .select('id, name');
+      .from("stores")
+      .select("id, name");
 
     if (storesError) {
       console.error("店舗一覧取得エラー:", storesError);
@@ -87,9 +91,9 @@ async function handleAgencyListData(req, res) {
 
     // 代理店情報を取得
     const { data: stores, error: storeError } = await db
-      .from('stores')
-      .select('name')
-      .eq('id', storeId)
+      .from("stores")
+      .select("name")
+      .eq("id", storeId)
       .limit(1);
 
     if (storeError || !stores || stores.length === 0) {
@@ -154,9 +158,9 @@ async function handleAgencySelectionData(req, res) {
   try {
     // 店舗一覧を取得
     const { data: stores, error: storesError } = await db
-      .from('stores')
-      .select('id, name')
-      .order('name');
+      .from("stores")
+      .select("id, name")
+      .order("name");
 
     if (storesError) {
       console.error("店舗一覧取得エラー:", storesError);
@@ -165,8 +169,8 @@ async function handleAgencySelectionData(req, res) {
 
     // 各店舗の取引統計を取得
     const { data: transactionStats, error: statsError } = await db
-      .from('customer_transactions')
-      .select('store_id, amount');
+      .from("customer_transactions")
+      .select("store_id, amount");
 
     if (statsError) {
       console.error("取引統計取得エラー:", statsError);
@@ -175,12 +179,12 @@ async function handleAgencySelectionData(req, res) {
     // 店舗ごとの統計を計算
     const storeStats = {};
     if (transactionStats) {
-      transactionStats.forEach(transaction => {
+      transactionStats.forEach((transaction) => {
         const storeId = transaction.store_id;
         if (!storeStats[storeId]) {
           storeStats[storeId] = {
             transaction_count: 0,
-            total_sales: 0
+            total_sales: 0,
           };
         }
         storeStats[storeId].transaction_count += 1;
@@ -189,10 +193,10 @@ async function handleAgencySelectionData(req, res) {
     }
 
     // 店舗データに統計を追加
-    const enrichedStores = stores.map(store => ({
+    const enrichedStores = stores.map((store) => ({
       ...store,
       transaction_count: storeStats[store.id]?.transaction_count || 0,
-      total_sales: storeStats[store.id]?.total_sales || 0
+      total_sales: storeStats[store.id]?.total_sales || 0,
     }));
 
     res.render("sales_agency_list", {
@@ -209,46 +213,44 @@ async function handleAgencySelectionData(req, res) {
 async function getMonthlySalesData(storeId = null) {
   try {
     let query = db
-      .from('customer_transactions')
-      .select('transaction_date, amount, store_id')
-      .not('transaction_date', 'is', null);
-    
+      .from("customer_transactions")
+      .select("transaction_date, amount, store_id")
+      .not("transaction_date", "is", null);
+
     if (storeId) {
-      query = query.eq('store_id', storeId);
+      query = query.eq("store_id", storeId);
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) throw error;
-    
+
     // JavaScript側で集計処理
     const monthlyData = {};
-    data.forEach(transaction => {
+    data.forEach((transaction) => {
       const date = new Date(transaction.transaction_date);
       const year = date.getFullYear().toString();
       const month = (date.getMonth() + 1).toString();
       const key = `${year}-${month}`;
-      
+
       if (!monthlyData[key]) {
         monthlyData[key] = {
           year,
           month,
           monthly_total: 0,
-          transaction_count: 0
+          transaction_count: 0,
         };
       }
-      
+
       monthlyData[key].monthly_total += transaction.amount || 0;
       monthlyData[key].transaction_count += 1;
     });
-    
+
     // 配列に変換して並び替え
-    return Object.values(monthlyData)
-      .sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year;
-        return b.month - a.month;
-      });
-      
+    return Object.values(monthlyData).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
   } catch (error) {
     console.error("月次売上データ取得エラー:", error);
     return [];
@@ -272,38 +274,38 @@ router.get("/", async (req, res) => {
       if (!req.session.user.store_id) {
         return res.status(400).send("代理店IDが設定されていません");
       }
-      
+
       const monthlySales = await getMonthlySalesData(req.session.user.store_id);
-      const formattedData = monthlySales.map(sale => ({
+      const formattedData = monthlySales.map((sale) => ({
         year: sale.year,
         month: sale.month,
         amount: sale.monthly_total,
-        transaction_count: sale.transaction_count
+        transaction_count: sale.transaction_count,
       }));
-      
+
       res.json(formattedData);
     } else {
       // 役員・管理者は全店舗のデータ
       const { data: transactions, error } = await db
-        .from('customer_transactions')
-        .select('transaction_date, amount, store_id, stores!inner(name)')
-        .not('transaction_date', 'is', null);
-      
+        .from("customer_transactions")
+        .select("transaction_date, amount, store_id, stores!inner(name)")
+        .not("transaction_date", "is", null);
+
       if (error) {
         console.error("全店舗データ取得エラー:", error);
         return res.status(500).send("DBエラー");
       }
-      
+
       // JavaScript側で集計処理
       const storeMonthlyData = {};
-      transactions.forEach(transaction => {
+      transactions.forEach((transaction) => {
         const date = new Date(transaction.transaction_date);
         const year = date.getFullYear().toString();
         const month = (date.getMonth() + 1).toString();
         const storeId = transaction.store_id;
         const storeName = transaction.stores?.name || `Store ${storeId}`;
         const key = `${storeId}-${year}-${month}`;
-        
+
         if (!storeMonthlyData[key]) {
           storeMonthlyData[key] = {
             store_id: storeId,
@@ -311,21 +313,20 @@ router.get("/", async (req, res) => {
             year,
             month,
             amount: 0,
-            transaction_count: 0
+            transaction_count: 0,
           };
         }
-        
+
         storeMonthlyData[key].amount += transaction.amount || 0;
         storeMonthlyData[key].transaction_count += 1;
       });
-      
-      const formattedData = Object.values(storeMonthlyData)
-        .sort((a, b) => {
-          if (a.year !== b.year) return b.year - a.year;
-          if (a.month !== b.month) return b.month - a.month;
-          return a.store_id - b.store_id;
-        });
-      
+
+      const formattedData = Object.values(storeMonthlyData).sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        if (a.month !== b.month) return b.month - a.month;
+        return a.store_id - b.store_id;
+      });
+
       res.json(formattedData);
     }
   } catch (error) {
@@ -335,115 +336,119 @@ router.get("/", async (req, res) => {
 });
 
 // 個別取引登録（API）- 新機能
-router.post("/transaction", requireRole(["admin", "agency"]), async (req, res) => {
-  const {
-    store_id,
-    customer_id,
-    transaction_date,
-    amount,
-    description,
-    payment_method,
-  } = req.body;
+router.post(
+  "/transaction",
+  requireRole(["admin", "agency"]),
+  async (req, res) => {
+    const {
+      store_id,
+      customer_id,
+      transaction_date,
+      amount,
+      description,
+      payment_method,
+    } = req.body;
 
-  console.log("個別取引登録リクエスト:", req.body);
+    console.log("個別取引登録リクエスト:", req.body);
 
-  // 必須項目チェック
-  if (!store_id || !customer_id || !transaction_date || !amount) {
-    return res.status(400).json({
-      error: "必須項目が不足しています",
-      required: ["store_id", "customer_id", "transaction_date", "amount"],
-    });
-  }
-
-  // 数値変換
-  const processedStoreId = parseInt(store_id);
-  const processedCustomerId = parseInt(customer_id);
-  const processedAmount = parseInt(amount);
-
-  if (
-    isNaN(processedStoreId) ||
-    isNaN(processedCustomerId) ||
-    isNaN(processedAmount)
-  ) {
-    return res
-      .status(400)
-      .json({ error: "数値フィールドの形式が正しくありません" });
-  }
-
-  // 代理店は自分のstore_idのみ登録可能
-  if (req.session.user.role === "agency") {
-    if (!req.session.user.store_id) {
-      return res.status(400).json({ error: "代理店IDが設定されていません" });
-    }
-    if (req.session.user.store_id !== processedStoreId) {
-      return res
-        .status(403)
-        .json({ error: "自分の店舗の売上のみ登録可能です" });
-    }
-  }
-
-  try {
-    // 顧客が指定店舗に属しているかチェック（Supabase）
-    const { data: customers, error: customerError } = await db
-      .from('customers')
-      .select('id, name')
-      .eq('id', processedCustomerId)
-      .eq('store_id', processedStoreId)
-      .limit(1);
-
-    if (customerError) {
-      console.error("顧客確認エラー:", customerError);
-      return res.status(500).json({ error: "データベースエラー" });
-    }
-
-    if (!customers || customers.length === 0) {
+    // 必須項目チェック
+    if (!store_id || !customer_id || !transaction_date || !amount) {
       return res.status(400).json({
-        error: "指定された顧客が見つからないか、店舗が一致しません",
+        error: "必須項目が不足しています",
+        required: ["store_id", "customer_id", "transaction_date", "amount"],
       });
     }
 
-    const customer = customers[0];
+    // 数値変換
+    const processedStoreId = parseInt(store_id);
+    const processedCustomerId = parseInt(customer_id);
+    const processedAmount = parseInt(amount);
 
-    // 取引を登録（Supabase）
-    const { data: transaction, error: insertError } = await db
-      .from('customer_transactions')
-      .insert({
-        store_id: processedStoreId,
-        customer_id: processedCustomerId,
-        transaction_date,
-        amount: processedAmount,
-        description: description || "",
-        payment_method: payment_method || "現金"
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("取引登録エラー:", insertError);
-      return res.status(500).json({ error: "取引の登録に失敗しました" });
+    if (
+      isNaN(processedStoreId) ||
+      isNaN(processedCustomerId) ||
+      isNaN(processedAmount)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "数値フィールドの形式が正しくありません" });
     }
 
-    console.log("取引登録成功:", transaction.id);
+    // 代理店は自分のstore_idのみ登録可能
+    if (req.session.user.role === "agency") {
+      if (!req.session.user.store_id) {
+        return res.status(400).json({ error: "代理店IDが設定されていません" });
+      }
+      if (req.session.user.store_id !== processedStoreId) {
+        return res
+          .status(403)
+          .json({ error: "自分の店舗の売上のみ登録可能です" });
+      }
+    }
 
-    // 成功レスポンス
-    res.json({
-      success: true,
-      transaction_id: transaction.id,
-      customer_name: customer.name,
-      message: `${customer.name}様の取引を登録しました`,
-    });
-  } catch (error) {
-    console.error("取引登録処理エラー:", error);
-    res.status(500).json({ error: "取引登録に失敗しました" });
+    try {
+      // 顧客が指定店舗に属しているかチェック（Supabase）
+      const { data: customers, error: customerError } = await db
+        .from("customers")
+        .select("id, name")
+        .eq("id", processedCustomerId)
+        .eq("store_id", processedStoreId)
+        .limit(1);
+
+      if (customerError) {
+        console.error("顧客確認エラー:", customerError);
+        return res.status(500).json({ error: "データベースエラー" });
+      }
+
+      if (!customers || customers.length === 0) {
+        return res.status(400).json({
+          error: "指定された顧客が見つからないか、店舗が一致しません",
+        });
+      }
+
+      const customer = customers[0];
+
+      // 取引を登録（Supabase）
+      const { data: transaction, error: insertError } = await db
+        .from("customer_transactions")
+        .insert({
+          store_id: processedStoreId,
+          customer_id: processedCustomerId,
+          transaction_date,
+          amount: processedAmount,
+          description: description || "",
+          payment_method: payment_method || "現金",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("取引登録エラー:", insertError);
+        return res.status(500).json({ error: "取引の登録に失敗しました" });
+      }
+
+      console.log("取引登録成功:", transaction.id);
+
+      // 成功レスポンス
+      res.json({
+        success: true,
+        transaction_id: transaction.id,
+        customer_name: customer.name,
+        message: `${customer.name}様の取引を登録しました`,
+      });
+    } catch (error) {
+      console.error("取引登録処理エラー:", error);
+      res.status(500).json({ error: "取引登録に失敗しました" });
+    }
   }
-});
+);
 
 // 売上管理画面（一覧・可視化）
 router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
   console.log("=== /sales/list アクセス開始 ===");
   console.log("ユーザー役割:", req.session.user.role);
   console.log("店舗ID:", req.session.user.store_id);
-  
+
   try {
     if (req.session.user.role === "agency") {
       // 代理店は自分のデータのみ（Supabase）
@@ -454,8 +459,8 @@ router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
       await handleAgencyListData(req, res);
     } else {
       // 管理者・役員は全店舗統合ビューまたは代理店選択画面を表示
-      const showOverview = req.query.overview !== 'false'; // デフォルトで統合ビューを表示
-      
+      const showOverview = req.query.overview !== "false"; // デフォルトで統合ビューを表示
+
       if (showOverview) {
         // 全店舗統合の月次売上データを取得（Supabase）
         await handleAdminOverviewData(req, res);
@@ -477,9 +482,9 @@ router.get("/agency/:id", requireRole(["admin"]), async (req, res) => {
   try {
     // 代理店情報を取得（Supabase）
     const { data: stores, error: storeError } = await db
-      .from('stores')
-      .select('name')
-      .eq('id', agencyId)
+      .from("stores")
+      .select("name")
+      .eq("id", agencyId)
       .limit(1);
 
     if (storeError || !stores || stores.length === 0) {
@@ -544,9 +549,9 @@ router.get("/new", requireRole(["admin", "agency"]), async (req, res) => {
 
       // 代理店情報を取得（Supabase）
       const { data: stores, error: storeError } = await db
-        .from('stores')
-        .select('name')
-        .eq('id', req.session.user.store_id)
+        .from("stores")
+        .select("name")
+        .eq("id", req.session.user.store_id)
         .limit(1);
 
       if (storeError) {
@@ -566,9 +571,9 @@ router.get("/new", requireRole(["admin", "agency"]), async (req, res) => {
     } else {
       // 管理者は代理店一覧を取得（Supabase）
       const { data: stores, error: storesError } = await db
-        .from('stores')
-        .select('*')
-        .order('name');
+        .from("stores")
+        .select("*")
+        .order("name");
 
       if (storesError) {
         console.error("店舗一覧取得エラー:", storesError);
@@ -621,31 +626,33 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
   async function getTransactionsSupabase() {
     try {
       console.log("=== Supabase履歴取得開始 ===");
-      
+
       // 取引データを取得（Supabase）
       let query = db
-        .from('customer_transactions')
-        .select('id, transaction_date, amount, description, payment_method, created_at, store_id, customer_id');
+        .from("customer_transactions")
+        .select(
+          "id, transaction_date, amount, description, payment_method, created_at, store_id, customer_id"
+        );
 
       // 権限に基づく店舗フィルタ
       if (!isAdmin) {
-        query = query.eq('store_id', req.session.user.store_id);
+        query = query.eq("store_id", req.session.user.store_id);
       } else if (store_id && store_id !== "all") {
-        query = query.eq('store_id', parseInt(store_id));
+        query = query.eq("store_id", parseInt(store_id));
       }
 
       // 日付フィルタ
       if (start_date) {
-        query = query.gte('transaction_date', start_date);
+        query = query.gte("transaction_date", start_date);
       }
       if (end_date) {
-        query = query.lte('transaction_date', end_date);
+        query = query.lte("transaction_date", end_date);
       }
 
       // ソートと制限
       query = query
-        .order('transaction_date', { ascending: false })
-        .order('created_at', { ascending: false })
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(100);
 
       const { data: transactions, error: transactionError } = await query;
@@ -665,8 +672,12 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       }
 
       // 顧客情報と店舗情報を別途取得
-      const customerIds = [...new Set(transactions.map((t) => t.customer_id).filter(Boolean))];
-      const storeIds = [...new Set(transactions.map((t) => t.store_id).filter(Boolean))];
+      const customerIds = [
+        ...new Set(transactions.map((t) => t.customer_id).filter(Boolean)),
+      ];
+      const storeIds = [
+        ...new Set(transactions.map((t) => t.store_id).filter(Boolean)),
+      ];
 
       let customersMap = {};
       let storesMap = {};
@@ -674,9 +685,9 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       // 顧客情報を取得（Supabase）
       if (customerIds.length > 0) {
         const { data: customers, error: customerError } = await db
-          .from('customers')
-          .select('id, name, customer_code')
-          .in('id', customerIds);
+          .from("customers")
+          .select("id, name, customer_code")
+          .in("id", customerIds);
 
         if (customerError) {
           console.error("顧客情報取得エラー:", customerError);
@@ -690,9 +701,9 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       // 店舗情報を取得（Supabase）
       if (storeIds.length > 0) {
         const { data: stores, error: storeError } = await db
-          .from('stores')
-          .select('id, name')
-          .in('id', storeIds);
+          .from("stores")
+          .select("id, name")
+          .in("id", storeIds);
 
         if (storeError) {
           console.error("店舗情報取得エラー:", storeError);
@@ -706,8 +717,10 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       // 取引データに顧客情報と店舗情報を結合
       const enrichedTransactions = transactions.map((transaction) => ({
         ...transaction,
-        customer_name: customersMap[transaction.customer_id]?.name || "不明な顧客",
-        customer_code: customersMap[transaction.customer_id]?.customer_code || "",
+        customer_name:
+          customersMap[transaction.customer_id]?.name || "不明な顧客",
+        customer_code:
+          customersMap[transaction.customer_id]?.customer_code || "",
         store_name: storesMap[transaction.store_id]?.name || "不明な店舗",
       }));
 
@@ -719,18 +732,87 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
         session: req.session,
       });
     }
-      if (err) {
-        console.error("Supabase売上履歴取得エラー:", err);
-        return res.status(500).render("error", {
-          message: "売上履歴の取得に失敗しました",
-          session: req.session,
-        });
+  }
+
+  // 売上履歴API（管理者・代理店共通）
+  async function getHistoryAPISupabase() {
+    try {
+      console.log("=== 売上履歴API開始 ===");
+
+      // 取引データを取得（Supabase）
+      let query = db.from("customer_transactions").select("*");
+
+      // 権限に基づく店舗フィルタ
+      if (!isAdmin) {
+        query = query.eq("store_id", req.session.user.store_id);
+      } else if (store_id && store_id !== "all") {
+        query = query.eq("store_id", parseInt(store_id));
       }
 
-      console.log("Supabase取得取引数:", transactions.length);
+      // 顧客検索フィルタ（JavaScript側で実装）
+      if (customer_search) {
+        // まず全顧客を取得してフィルタリング
+        const { data: allCustomers, error: customerError } = await db
+          .from("customers")
+          .select("id, name, customer_code");
 
-      if (transactions.length === 0) {
-        return renderHistoryPage([]);
+        if (customerError) {
+          console.error("顧客検索エラー:", customerError);
+        } else {
+          const matchingCustomers = allCustomers.filter(
+            (customer) =>
+              customer.name.includes(customer_search) ||
+              customer.customer_code.includes(customer_search)
+          );
+          const matchingCustomerIds = matchingCustomers.map((c) => c.id);
+
+          if (matchingCustomerIds.length > 0) {
+            query = query.in("customer_id", matchingCustomerIds);
+          } else {
+            // マッチする顧客がいない場合は空の結果を返す
+            return res.json({
+              success: true,
+              transactions: [],
+              pagination: {
+                page: 1,
+                limit: limitNum,
+                total: 0,
+                hasMore: false,
+              },
+            });
+          }
+        }
+      }
+
+      // 日付フィルタ
+      if (start_date) {
+        query = query.gte("transaction_date", start_date);
+      }
+      if (end_date) {
+        query = query.lte("transaction_date", end_date);
+      }
+
+      // ソートと制限
+      query = query
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limitNum - 1);
+
+      const { data: transactions, error: transactionError } = await query;
+
+      if (transactionError) {
+        console.error("取引データ取得エラー:", transactionError);
+        return res
+          .status(500)
+          .json({ success: false, error: "データ取得エラー" });
+      }
+
+      if (!transactions || transactions.length === 0) {
+        return res.json({
+          success: true,
+          transactions: [],
+          pagination: { page, limit: limitNum, total: 0, hasMore: false },
+        });
       }
 
       // 顧客情報と店舗情報を別途取得
@@ -744,96 +826,12 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       let customersMap = {};
       let storesMap = {};
 
-  }
-
-  // 売上履歴API（管理者・代理店共通）
-  async function getHistoryAPISupabase() {
-    try {
-      console.log("=== 売上履歴API開始 ===");
-      
-      // 取引データを取得（Supabase）
-      let query = db
-        .from('customer_transactions')
-        .select('*');
-
-      // 権限に基づく店舗フィルタ
-      if (!isAdmin) {
-        query = query.eq('store_id', req.session.user.store_id);
-      } else if (store_id && store_id !== "all") {
-        query = query.eq('store_id', parseInt(store_id));
-      }
-
-      // 顧客検索フィルタ（JavaScript側で実装）
-      if (customer_search) {
-        // まず全顧客を取得してフィルタリング
-        const { data: allCustomers, error: customerError } = await db
-          .from('customers')
-          .select('id, name, customer_code');
-        
-        if (customerError) {
-          console.error("顧客検索エラー:", customerError);
-        } else {
-          const matchingCustomers = allCustomers.filter(customer => 
-            customer.name.includes(customer_search) || 
-            customer.customer_code.includes(customer_search)
-          );
-          const matchingCustomerIds = matchingCustomers.map(c => c.id);
-          
-          if (matchingCustomerIds.length > 0) {
-            query = query.in('customer_id', matchingCustomerIds);
-          } else {
-            // マッチする顧客がいない場合は空の結果を返す
-            return res.json({
-              success: true,
-              transactions: [],
-              pagination: { page: 1, limit: limitNum, total: 0, hasMore: false }
-            });
-          }
-        }
-      }
-
-      // 日付フィルタ
-      if (start_date) {
-        query = query.gte('transaction_date', start_date);
-      }
-      if (end_date) {
-        query = query.lte('transaction_date', end_date);
-      }
-
-      // ソートと制限
-      query = query
-        .order('transaction_date', { ascending: false })
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limitNum - 1);
-
-      const { data: transactions, error: transactionError } = await query;
-
-      if (transactionError) {
-        console.error("取引データ取得エラー:", transactionError);
-        return res.status(500).json({ success: false, error: "データ取得エラー" });
-      }
-
-      if (!transactions || transactions.length === 0) {
-        return res.json({
-          success: true,
-          transactions: [],
-          pagination: { page, limit: limitNum, total: 0, hasMore: false }
-        });
-      }
-
-      // 顧客情報と店舗情報を別途取得
-      const customerIds = [...new Set(transactions.map((t) => t.customer_id).filter(Boolean))];
-      const storeIds = [...new Set(transactions.map((t) => t.store_id).filter(Boolean))];
-
-      let customersMap = {};
-      let storesMap = {};
-
       // 顧客情報を取得（Supabase）
       if (customerIds.length > 0) {
         const { data: customers, error: customerError } = await db
-          .from('customers')
-          .select('id, name, customer_code')
-          .in('id', customerIds);
+          .from("customers")
+          .select("id, name, customer_code")
+          .in("id", customerIds);
 
         if (!customerError && customers) {
           customers.forEach((customer) => {
@@ -845,9 +843,9 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       // 店舗情報を取得（Supabase）
       if (storeIds.length > 0) {
         const { data: stores, error: storeError } = await db
-          .from('stores')
-          .select('id, name')
-          .in('id', storeIds);
+          .from("stores")
+          .select("id, name")
+          .in("id", storeIds);
 
         if (!storeError && stores) {
           stores.forEach((store) => {
@@ -859,8 +857,10 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
       // 取引データに顧客情報と店舗情報を結合
       const enrichedTransactions = transactions.map((transaction) => ({
         ...transaction,
-        customer_name: customersMap[transaction.customer_id]?.name || "不明な顧客",
-        customer_code: customersMap[transaction.customer_id]?.customer_code || "",
+        customer_name:
+          customersMap[transaction.customer_id]?.name || "不明な顧客",
+        customer_code:
+          customersMap[transaction.customer_id]?.customer_code || "",
         store_name: storesMap[transaction.store_id]?.name || "不明な店舗",
       }));
 
@@ -871,8 +871,8 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
           page,
           limit: limitNum,
           total: enrichedTransactions.length,
-          hasMore: enrichedTransactions.length === limitNum
-        }
+          hasMore: enrichedTransactions.length === limitNum,
+        },
       });
     } catch (error) {
       console.error("売上履歴API処理エラー:", error);
@@ -884,17 +884,23 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
   async function renderHistoryPage(enrichedTransactions) {
     try {
       // 統計情報を計算
-      const totalAmount = enrichedTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-      const avgAmount = enrichedTransactions.length > 0 ? totalAmount / enrichedTransactions.length : 0;
+      const totalAmount = enrichedTransactions.reduce(
+        (sum, t) => sum + (t.amount || 0),
+        0
+      );
+      const avgAmount =
+        enrichedTransactions.length > 0
+          ? totalAmount / enrichedTransactions.length
+          : 0;
 
       let stores = [];
 
       // 店舗一覧を取得（管理者用）
       if (isAdmin) {
         const { data: storeData, error: storeError } = await db
-          .from('stores')
-          .select('id, name')
-          .order('name');
+          .from("stores")
+          .select("id, name")
+          .order("name");
 
         if (storeError) {
           console.error("店舗一覧取得エラー:", storeError);
@@ -910,7 +916,7 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
         isAdmin,
         stores,
         filters: {
-          store_id: isAdmin ? (store_id || "all") : req.session.user.store_id,
+          store_id: isAdmin ? store_id || "all" : req.session.user.store_id,
           start_date,
           end_date,
           customer_search,
@@ -932,34 +938,38 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
 });
 
 // 売上履歴API
-router.get("/history/api", requireRole(["admin", "agency"]), async (req, res) => {
-  const isAdmin = req.session.user.role === "admin";
-  const {
-    store_id,
-    start_date,
-    end_date,
-    customer_search,
-    page = 1,
-    limit = 20,
-  } = req.query;
+router.get(
+  "/history/api",
+  requireRole(["admin", "agency"]),
+  async (req, res) => {
+    const isAdmin = req.session.user.role === "admin";
+    const {
+      store_id,
+      start_date,
+      end_date,
+      customer_search,
+      page = 1,
+      limit = 20,
+    } = req.query;
 
-  const offset = (page - 1) * limit;
-  const limitNum = parseInt(limit);
+    const offset = (page - 1) * limit;
+    const limitNum = parseInt(limit);
 
-  console.log("売上履歴API パラメータ:", {
-    isAdmin,
-    store_id,
-    start_date,
-    end_date,
-    customer_search,
-    page,
-    limit,
-    offset,
-  });
+    console.log("売上履歴API パラメータ:", {
+      isAdmin,
+      store_id,
+      start_date,
+      end_date,
+      customer_search,
+      page,
+      limit,
+      offset,
+    });
 
-  // Supabase環境で分離クエリを使用（Vercel + Supabase専用）
-  console.log("Supabase環境: 分離クエリで売上履歴APIを取得");
-  await getHistoryAPISupabase();
-});
+    // Supabase環境で分離クエリを使用（Vercel + Supabase専用）
+    console.log("Supabase環境: 分離クエリで売上履歴APIを取得");
+    await getHistoryAPISupabase();
+  }
+);
 
 module.exports = router;
