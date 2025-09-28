@@ -285,16 +285,39 @@ router.get("/", async (req, res) => {
 
       res.json(formattedData);
     } else {
-      // 役員・管理者は全店舗のデータ
+      // 役員・管理者は全店舗のデータ（分離クエリ方式）
       const { data: transactions, error } = await db
         .from("customer_transactions")
-        .select("transaction_date, amount, store_id, stores!inner(name)")
+        .select("transaction_date, amount, store_id")
         .not("transaction_date", "is", null);
 
       if (error) {
         console.error("全店舗データ取得エラー:", error);
         return res.status(500).send("DBエラー");
       }
+
+      console.log("=== 管理者売上統計デバッグ ===");
+      console.log("取得した取引数:", transactions?.length || 0);
+
+      // 店舗情報を別途取得
+      const { data: stores, error: storesError } = await db
+        .from("stores")
+        .select("id, name");
+
+      if (storesError) {
+        console.error("店舗情報取得エラー:", storesError);
+      }
+
+      // 店舗IDから店舗名へのマッピングを作成
+      const storeMap = {};
+      if (stores) {
+        stores.forEach(store => {
+          storeMap[store.id] = store.name;
+        });
+      }
+
+      console.log("取得した店舗数:", stores?.length || 0);
+      console.log("店舗マッピング:", storeMap);
 
       // JavaScript側で集計処理
       const storeMonthlyData = {};
@@ -303,7 +326,7 @@ router.get("/", async (req, res) => {
         const year = date.getFullYear().toString();
         const month = (date.getMonth() + 1).toString();
         const storeId = transaction.store_id;
-        const storeName = transaction.stores?.name || `Store ${storeId}`;
+        const storeName = storeMap[storeId] || `id:${storeId}`;
         const key = `${storeId}-${year}-${month}`;
 
         if (!storeMonthlyData[key]) {
