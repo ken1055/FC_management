@@ -456,6 +456,63 @@ function initializeInMemoryDatabase() {
   console.log("メモリDB初期化中...");
   const startTime = Date.now();
 
+  // Vercel環境では超高速初期化
+  if (isVercel) {
+    console.log("Vercel超高速初期化: 最小構成でテーブル作成");
+    
+    // 必要最小限のテーブルを同期的に作成
+    db.serialize(() => {
+      // 最小限のテーブル構造
+      db.run("CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT)", (err) => {
+        if (err) console.log("adminsテーブル作成スキップ:", err.message);
+      });
+      
+      db.run("CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY, name TEXT)", (err) => {
+        if (err) console.log("storesテーブル作成スキップ:", err.message);
+      });
+      
+      db.run("CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY, store_id INTEGER, name TEXT, customer_code TEXT, total_purchase_amount INTEGER DEFAULT 0)", (err) => {
+        if (err) console.log("customersテーブル作成スキップ:", err.message);
+      });
+      
+      db.run("CREATE TABLE IF NOT EXISTS customer_transactions (id INTEGER PRIMARY KEY, store_id INTEGER, customer_id INTEGER, transaction_date DATE, amount INTEGER, description TEXT, payment_method TEXT DEFAULT '現金', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)", (err) => {
+        if (err) console.log("customer_transactionsテーブル作成スキップ:", err.message);
+      });
+      
+      db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, store_id INTEGER)", (err) => {
+        if (err) console.log("usersテーブル作成スキップ:", err.message);
+      });
+
+      // デフォルトデータ挿入
+      db.run("INSERT OR IGNORE INTO admins (email, password) VALUES ('admin', 'admin')", (err) => {
+        if (!err) console.log("管理者アカウント作成完了");
+      });
+
+      db.run("INSERT OR IGNORE INTO stores (id, name) VALUES (1, 'テスト店舗')", (err) => {
+        if (!err) console.log("テスト店舗作成完了");
+      });
+
+      db.run("INSERT OR IGNORE INTO users (email, password, store_id) VALUES ('store@test.com', 'store123', 1)", (err) => {
+        if (!err) console.log("店舗ユーザー作成完了");
+      });
+
+      db.run("INSERT OR IGNORE INTO customers (id, store_id, name, customer_code) VALUES (1, 1, '田中太郎', 'CUST001')", (err) => {
+        if (!err) console.log("テスト顧客作成完了");
+      });
+
+      // サンプル取引データ
+      db.run("INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-01-15', 5000, 'コーヒー豆購入', '現金')");
+      db.run("INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-02-10', 3000, 'ドリンク', 'クレジットカード')");
+      db.run("INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-02-15', 7000, 'ケーキセット', '現金')");
+
+      isInitialized = true;
+      const duration = Date.now() - startTime;
+      console.log(`Vercel超高速初期化完了: ${duration}ms`);
+    });
+
+    return;
+  }
+
   // 高速初期化（最小限のテーブルのみ）
   if (FAST_INIT) {
     console.log("高速初期化モード");

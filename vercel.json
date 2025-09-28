@@ -2,8 +2,13 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "maxDuration": 25
+      "maxDuration": 60,
+      "memory": 512
     }
+  },
+  "env": {
+    "FAST_INIT": "true",
+    "NODE_ENV": "production"
   },
   "headers": [
     {
