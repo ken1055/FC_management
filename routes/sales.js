@@ -196,8 +196,15 @@ async function handleAgencySelectionData(req, res) {
     const enrichedStores = stores.map((store) => ({
       ...store,
       transaction_count: storeStats[store.id]?.transaction_count || 0,
+      sales_count: storeStats[store.id]?.transaction_count || 0, // EJSテンプレート用
       total_sales: storeStats[store.id]?.total_sales || 0,
     }));
+
+    console.log("=== 代理店選択画面デバッグ ===");
+    console.log("店舗数:", stores?.length || 0);
+    console.log("取引統計数:", transactionStats?.length || 0);
+    console.log("店舗統計:", storeStats);
+    console.log("最初の店舗データサンプル:", enrichedStores[0]);
 
     res.render("sales_agency_list", {
       stores: enrichedStores,
@@ -311,7 +318,7 @@ router.get("/", async (req, res) => {
       // 店舗IDから店舗名へのマッピングを作成
       const storeMap = {};
       if (stores) {
-        stores.forEach(store => {
+        stores.forEach((store) => {
           storeMap[store.id] = store.name;
         });
       }
