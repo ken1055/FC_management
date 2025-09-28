@@ -376,15 +376,12 @@ app.get("/api/store/statistics", async (req, res) => {
       const customerCount = customerData?.length || 0;
       console.log("顧客数結果:", customerCount);
 
-      // 当月の売上を取得
-      const startDate = `${currentYear}-${String(currentMonth).padStart(
-        2,
-        "0"
-      )}-01`;
-      const endDate = `${currentYear}-${String(currentMonth).padStart(
-        2,
-        "0"
-      )}-31`;
+      // 当月の売上を取得（正しい月末日を計算）
+      const startDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+      const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate(); // 月末日を正確に取得
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+      
+      console.log("日付範囲:", { startDate, endDate, lastDayOfMonth });
 
       const { data: salesData, error: salesError } = await db
         .from("customer_transactions")
@@ -438,15 +435,12 @@ app.get("/api/store/statistics", async (req, res) => {
       const customerCount = customerData?.length || 0;
       console.log("全店舗顧客数結果:", customerCount);
 
-      // 当月の全店舗売上を取得
-      const startDate = `${currentYear}-${String(currentMonth).padStart(
-        2,
-        "0"
-      )}-01`;
-      const endDate = `${currentYear}-${String(currentMonth).padStart(
-        2,
-        "0"
-      )}-31`;
+      // 当月の全店舗売上を取得（正しい月末日を計算）
+      const startDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+      const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate(); // 月末日を正確に取得
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+      
+      console.log("全店舗日付範囲:", { startDate, endDate, lastDayOfMonth });
 
       const { data: salesData, error: salesError } = await db
         .from("customer_transactions")
