@@ -1,11 +1,31 @@
 const express = require("express");
 const router = express.Router();
-const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
-// SQLiteデータベースに直接接続
-const db = new sqlite3.Database("./agency.db");
+// データベース接続の取得
+const { isSupabaseConfigured, getSupabaseClient } = require("../config/supabase");
+
+// 環境に応じたデータベース接続
+let db;
+const useSupabase = isSupabaseConfigured();
+
+if (useSupabase) {
+  console.log("auth.js: Supabase環境を使用");
+  db = getSupabaseClient();
+} else {
+  console.log("auth.js: SQLite環境を使用");
+  try {
+    const sqlite3 = require("sqlite3").verbose();
+    db = new sqlite3.Database("./agency.db");
+  } catch (error) {
+    console.error("SQLite接続エラー:", error);
+    // Vercel環境でSQLiteファイルが開けない場合、メモリDBにフォールバック
+    const sqlite3 = require("sqlite3").verbose();
+    db = new sqlite3.Database(":memory:");
+    console.log("メモリDBにフォールバック");
+  }
+}
 
 // パスワードハッシュ化関数（後方互換性のため保持）
 function hashPassword(password) {
@@ -96,8 +116,107 @@ router.post("/login", (req, res) => {
   }
 
   try {
-    // まず管理者テーブルから検索
-    db.get("SELECT * FROM admins WHERE email=?", [email], (err, admin) => {
+    if (useSupabase) {
+      // Supabase環境での認証処理
+      console.log("Supabase環境での認証処理");
+      handleSupabaseLogin(email, password, req, res);
+    } else {
+      // SQLite環境での認証処理
+      console.log("SQLite環境での認証処理");
+      handleSQLiteLogin(email, password, req, res);
+    }
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.send(`
+      <h1>ログインエラー</h1>
+      <p>システムエラーが発生しました: ${error.message}</p>
+      <a href="/auth/login">ログインに戻る</a>
+    `);
+  }
+});
+
+// Supabase環境でのログイン処理
+async function handleSupabaseLogin(email, password, req, res) {
+  try {
+    // 管理者テーブルから検索
+    const { data: admins, error: adminError } = await db
+      .from('admins')
+      .select('*')
+      .eq('email', email)
+      .limit(1);
+
+    if (adminError) {
+      console.error("Supabase admin query error:", adminError);
+      return res.send(`
+        <h1>データベースエラー</h1>
+        <p>エラー: ${adminError.message}</p>
+        <a href="/auth/login">ログインに戻る</a>
+      `);
+    }
+
+    if (admins && admins.length > 0 && verifyPassword(password, admins[0].password)) {
+      console.log("Admin found, creating session");
+      req.session.user = {
+        id: admins[0].id,
+        email: admins[0].email,
+        role: "admin",
+        store_id: null,
+      };
+
+      console.log("Admin session created:", req.session.user);
+      return res.redirect("/");
+    }
+
+    // 店舗ユーザーテーブルから検索
+    const { data: users, error: userError } = await db
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .limit(1);
+
+    if (userError) {
+      console.error("Supabase user query error:", userError);
+      return res.send(`
+        <h1>データベースエラー</h1>
+        <p>エラー: ${userError.message}</p>
+        <a href="/auth/login">ログインに戻る</a>
+      `);
+    }
+
+    if (users && users.length > 0 && verifyPassword(password, users[0].password)) {
+      console.log("User found, creating session");
+      req.session.user = {
+        id: users[0].id,
+        email: users[0].email,
+        role: "agency",
+        store_id: users[0].store_id,
+      };
+
+      console.log("User session created:", req.session.user);
+      return res.redirect("/");
+    }
+
+    console.log("Invalid credentials");
+    return res.send(`
+      <h1>ログインエラー</h1>
+      <p>メールアドレスまたはパスワードが正しくありません</p>
+      <a href="/auth/login">ログインに戻る</a>
+    `);
+
+  } catch (error) {
+    console.error("Supabase login error:", error);
+    return res.send(`
+      <h1>ログインエラー</h1>
+      <p>システムエラー: ${error.message}</p>
+      <a href="/auth/login">ログインに戻る</a>
+    `);
+  }
+}
+
+// SQLite環境でのログイン処理
+function handleSQLiteLogin(email, password, req, res) {
+  // まず管理者テーブルから検索
+  db.get("SELECT * FROM admins WHERE email=?", [email], (err, admin) => {
       if (err) {
         console.error("Database error (admins):", err);
         return res.send(`
@@ -163,15 +282,7 @@ router.post("/login", (req, res) => {
         }
       });
     });
-  } catch (error) {
-    console.error("Login process error:", error);
-    res.status(500).send(`
-      <h1>ログイン処理エラー</h1>
-      <p>エラー: ${error.message}</p>
-      <a href="/auth/login">ログインに戻る</a>
-    `);
-  }
-});
+}
 
 // ログアウト
 router.get("/logout", (req, res) => {

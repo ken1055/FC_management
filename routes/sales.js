@@ -1,9 +1,29 @@
 const express = require("express");
 const router = express.Router();
-const sqlite3 = require("sqlite3").verbose();
 
-// SQLiteデータベースに直接接続
-const db = new sqlite3.Database("./agency.db");
+// データベース接続の取得
+const { isSupabaseConfigured, getSupabaseClient } = require("../config/supabase");
+
+// 環境に応じたデータベース接続
+let db;
+const useSupabase = isSupabaseConfigured();
+
+if (useSupabase) {
+  console.log("sales.js: Supabase環境を使用");
+  db = getSupabaseClient();
+} else {
+  console.log("sales.js: SQLite環境を使用");
+  try {
+    const sqlite3 = require("sqlite3").verbose();
+    db = new sqlite3.Database("./agency.db");
+  } catch (error) {
+    console.error("SQLite接続エラー:", error);
+    // Vercel環境でSQLiteファイルが開けない場合、メモリDBにフォールバック
+    const sqlite3 = require("sqlite3").verbose();
+    db = new sqlite3.Database(":memory:");
+    console.log("メモリDBにフォールバック");
+  }
+}
 
 function requireRole(roles) {
   return (req, res, next) => {
