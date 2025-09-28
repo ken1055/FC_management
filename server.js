@@ -287,16 +287,20 @@ app.get("/simple", (req, res) => {
 });
 
 // Vercel + Supabase専用ルート読み込み
-console.log("Vercel + Supabase環境: 必須ルート読み込み");
+console.log("Vercel + Supabase環境: 全ルート読み込み");
 
-// 必須ルートのみ読み込み
+// 全ルートを読み込み
 app.use("/auth", require("./routes/auth"));
 app.use("/sales", require("./routes/sales"));
 app.use("/stores", require("./routes/agencies"));
 app.use("/agencies", require("./routes/agencies"));
 app.use("/customers", require("./routes/customers"));
+app.use("/users", require("./routes/users"));
+app.use("/groups", require("./routes/groups"));
+app.use("/settings", require("./routes/settings"));
+app.use("/royalty", require("./routes/royalty"));
 
-console.log("Vercel + Supabase必須ルート読み込み完了");
+console.log("Vercel + Supabase全ルート読み込み完了");
 
 // 店舗統計情報API
 app.get("/api/store/statistics", (req, res) => {
