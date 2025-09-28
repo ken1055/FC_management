@@ -307,7 +307,7 @@ app.get("/api/store/statistics", (req, res) => {
   console.log("=== 統計情報API呼び出し ===");
   console.log("セッション:", req.session?.user);
   console.log("リクエストヘッダー:", req.headers);
-  
+
   if (!req.session || !req.session.user) {
     console.log("認証エラー: セッションまたはユーザーなし");
     return res.status(403).json({ error: "Unauthorized - No session" });
@@ -328,115 +328,140 @@ app.get("/api/store/statistics", (req, res) => {
     storeId = req.query.store_id ? parseInt(req.query.store_id) : null;
     console.log("管理者ユーザー - 指定店舗ID:", storeId);
   }
-  
+
   if (req.session.user.role === "agency" && !storeId) {
     console.log("店舗IDエラー: 店舗ユーザーなのに店舗ID未設定");
-    return res.status(400).json({ error: "Store ID not found for agency user" });
+    return res
+      .status(400)
+      .json({ error: "Store ID not found for agency user" });
   }
 
-  const db = require("./db");
+  // Supabase接続を取得
+  const { getSupabaseClient } = require("./config/supabase");
+  const db = getSupabaseClient();
+  
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
-  
+
   console.log("現在日時:", { currentYear, currentMonth });
+  console.log("Supabaseクライアント:", !!db);
 
   if (storeId) {
-    // 特定店舗の統計を取得
-    const customerCountQuery = "SELECT COUNT(*) as count FROM customers WHERE store_id = ?";
-    const currentMonthSalesQuery = `
-      SELECT SUM(amount) as total 
-      FROM customer_transactions 
-      WHERE store_id = ? 
-      AND strftime('%Y', transaction_date) = ? 
-      AND strftime('%m', transaction_date) = ?
-    `;
-
-    console.log("特定店舗統計 - 顧客数クエリ実行:", customerCountQuery, [storeId]);
-    
-    db.get(customerCountQuery, [storeId], (err, customerResult) => {
-      if (err) {
-        console.error("顧客数取得エラー:", err);
-        return res.status(500).json({ error: "Failed to fetch customer count" });
-      }
-      
-      console.log("顧客数結果:", customerResult);
-
-      const salesParams = [storeId, currentYear.toString(), String(currentMonth).padStart(2, '0')];
-      console.log("売上クエリ実行:", currentMonthSalesQuery, salesParams);
-      
-      db.get(
-        currentMonthSalesQuery,
-        salesParams,
-        (err, salesResult) => {
-          if (err) {
-            console.error("売上取得エラー:", err);
-            return res.status(500).json({ error: "Failed to fetch sales data" });
-          }
-          
-          console.log("売上結果:", salesResult);
-
-          const response = {
-            customerCount: customerResult?.count || 0,
-            currentMonthSales: salesResult?.total || 0,
-            year: currentYear,
-            month: currentMonth,
-            storeId: storeId,
-          };
-          
-          console.log("最終レスポンス:", response);
-          res.json(response);
-        }
-      );
-    });
+    // 特定店舗の統計を取得（Supabase）
+    handleStoreStatistics(storeId);
   } else {
-    // 管理者用：全店舗統計を取得
-    const customerCountQuery = "SELECT COUNT(*) as count FROM customers";
-    const currentMonthSalesQuery = `
-      SELECT SUM(amount) as total 
-      FROM customer_transactions 
-      WHERE strftime('%Y', transaction_date) = ? 
-      AND strftime('%m', transaction_date) = ?
-    `;
+    // 管理者用：全店舗統計を取得（Supabase）
+    handleGlobalStatistics();
+  }
 
-    console.log("全店舗統計 - 顧客数クエリ実行:", customerCountQuery);
-    
-    db.get(customerCountQuery, [], (err, customerResult) => {
-      if (err) {
-        console.error("全店舗顧客数取得エラー:", err);
+  // 特定店舗の統計を取得する関数（Supabase）
+  async function handleStoreStatistics(storeId) {
+    try {
+      console.log("特定店舗統計取得開始 - storeId:", storeId);
+
+      // 顧客数を取得
+      const { data: customerData, error: customerError } = await db
+        .from('customers')
+        .select('id', { count: 'exact' })
+        .eq('store_id', storeId);
+
+      if (customerError) {
+        console.error("顧客数取得エラー:", customerError);
         return res.status(500).json({ error: "Failed to fetch customer count" });
       }
-      
-      console.log("全店舗顧客数結果:", customerResult);
 
-      const salesParams = [currentYear.toString(), String(currentMonth).padStart(2, '0')];
-      console.log("全店舗売上クエリ実行:", currentMonthSalesQuery, salesParams);
-      
-      db.get(
-        currentMonthSalesQuery,
-        salesParams,
-        (err, salesResult) => {
-          if (err) {
-            console.error("全店舗売上取得エラー:", err);
-            return res.status(500).json({ error: "Failed to fetch sales data" });
-          }
-          
-          console.log("全店舗売上結果:", salesResult);
+      const customerCount = customerData?.length || 0;
+      console.log("顧客数結果:", customerCount);
 
-          const response = {
-            customerCount: customerResult?.count || 0,
-            currentMonthSales: salesResult?.total || 0,
-            year: currentYear,
-            month: currentMonth,
-            storeId: null,
-            isGlobal: true,
-          };
-          
-          console.log("全店舗統計最終レスポンス:", response);
-          res.json(response);
-        }
-      );
-    });
+      // 当月の売上を取得
+      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+
+      const { data: salesData, error: salesError } = await db
+        .from('customer_transactions')
+        .select('amount')
+        .eq('store_id', storeId)
+        .gte('transaction_date', startDate)
+        .lte('transaction_date', endDate);
+
+      if (salesError) {
+        console.error("売上取得エラー:", salesError);
+        return res.status(500).json({ error: "Failed to fetch sales data" });
+      }
+
+      const currentMonthSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      console.log("売上結果:", currentMonthSales);
+
+      const response = {
+        customerCount,
+        currentMonthSales,
+        year: currentYear,
+        month: currentMonth,
+        storeId: storeId,
+      };
+
+      console.log("特定店舗統計最終レスポンス:", response);
+      res.json(response);
+
+    } catch (error) {
+      console.error("特定店舗統計処理エラー:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  // 全店舗統計を取得する関数（Supabase）
+  async function handleGlobalStatistics() {
+    try {
+      console.log("全店舗統計取得開始");
+
+      // 全顧客数を取得
+      const { data: customerData, error: customerError } = await db
+        .from('customers')
+        .select('id', { count: 'exact' });
+
+      if (customerError) {
+        console.error("全店舗顧客数取得エラー:", customerError);
+        return res.status(500).json({ error: "Failed to fetch customer count" });
+      }
+
+      const customerCount = customerData?.length || 0;
+      console.log("全店舗顧客数結果:", customerCount);
+
+      // 当月の全店舗売上を取得
+      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+
+      const { data: salesData, error: salesError } = await db
+        .from('customer_transactions')
+        .select('amount')
+        .gte('transaction_date', startDate)
+        .lte('transaction_date', endDate);
+
+      if (salesError) {
+        console.error("全店舗売上取得エラー:", salesError);
+        return res.status(500).json({ error: "Failed to fetch sales data" });
+      }
+
+      const currentMonthSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      console.log("全店舗売上結果:", currentMonthSales);
+
+      const response = {
+        customerCount,
+        currentMonthSales,
+        year: currentYear,
+        month: currentMonth,
+        storeId: null,
+        isGlobal: true,
+      };
+
+      console.log("全店舗統計最終レスポンス:", response);
+      res.json(response);
+
+    } catch (error) {
+      console.error("全店舗統計処理エラー:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
 });
 
