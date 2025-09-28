@@ -80,6 +80,75 @@ async function handleAdminOverviewData(req, res) {
   }
 }
 
+// 代理店リスト画面データ取得
+async function handleAgencyListData(req, res) {
+  try {
+    const storeId = req.session.user.store_id;
+
+    // 代理店情報を取得
+    const { data: stores, error: storeError } = await db
+      .from('stores')
+      .select('name')
+      .eq('id', storeId)
+      .limit(1);
+
+    if (storeError || !stores || stores.length === 0) {
+      console.error("代理店情報取得エラー:", storeError);
+      return res.status(500).send("DBエラー");
+    }
+
+    const agency = stores[0];
+
+    // 月次売上データを取得
+    const monthlySales = await getMonthlySalesData(storeId);
+
+    console.log("代理店月次売上データ:", monthlySales);
+
+    // データがない場合の処理
+    const validMonthlySales = monthlySales.filter(
+      (s) => s.year && s.month && s.monthly_total !== null
+    );
+
+    // チャート用データ（時系列順）
+    const chartData = validMonthlySales
+      .slice()
+      .reverse()
+      .map((s) => ({
+        period: `${s.year}年${parseInt(s.month)}月`,
+        amount: s.monthly_total || 0,
+        transactions: s.transaction_count || 0,
+      }));
+
+    // テーブル表示用データ（新しい順）
+    const salesFormatted = validMonthlySales.map((s) => ({
+      year: parseInt(s.year) || 0,
+      month: parseInt(s.month) || 0,
+      amount: s.monthly_total || 0,
+      transaction_count: s.transaction_count || 0,
+      agency_name: agency ? agency.name : "未設定",
+    }));
+
+    console.log("店舗ユーザー - チャートデータ:", chartData);
+    console.log("店舗ユーザー - 売上データ:", salesFormatted);
+
+    res.render("sales_list", {
+      sales: salesFormatted,
+      chartData: JSON.stringify(chartData),
+      agencyName: agency ? agency.name : "未設定",
+      agencyId: storeId,
+      groups: [],
+      selectedGroupId: null,
+      session: req.session,
+      success: req.query.success,
+      title: "売上管理",
+      isAdmin: false,
+    });
+  } catch (error) {
+    console.error("代理店リストデータエラー:", error);
+    res.status(500).send("システムエラー");
+  }
+}
+
 // 代理店選択画面データ取得
 async function handleAgencySelectionData(req, res) {
   try {
@@ -372,76 +441,12 @@ router.post("/transaction", requireRole(["admin", "agency"]), async (req, res) =
 // 売上管理画面（一覧・可視化）
 router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
   if (req.session.user.role === "agency") {
-    // 代理店は自分のデータのみ
+    // 代理店は自分のデータのみ（Supabase）
     if (!req.session.user.store_id) {
       return res.redirect("/stores/create-profile");
     }
 
-    // 代理店情報を取得
-    db.get(
-      "SELECT name FROM stores WHERE id = ?",
-      [req.session.user.store_id],
-      (err, agency) => {
-        if (err) return res.status(500).send("DBエラー");
-
-        // 個別取引データを取得して月次集計
-        db.all(
-          `SELECT 
-            strftime('%Y', transaction_date) as year,
-            strftime('%m', transaction_date) as month,
-            SUM(amount) as monthly_total,
-            COUNT(*) as transaction_count
-          FROM customer_transactions 
-          WHERE store_id = ? 
-          GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
-          ORDER BY year DESC, month DESC`,
-          [req.session.user.store_id],
-          (err, monthlySales) => {
-            if (err) return res.status(500).send("DBエラー");
-
-            // データがない場合の処理
-            const validMonthlySales = monthlySales.filter(
-              (s) => s.year && s.month && s.monthly_total !== null
-            );
-
-            // チャート用データ（時系列順）
-            const chartData = validMonthlySales
-              .slice()
-              .reverse()
-              .map((s) => ({
-                period: `${s.year}年${parseInt(s.month)}月`,
-                amount: s.monthly_total || 0,
-                transactions: s.transaction_count || 0,
-              }));
-
-            // テーブル表示用データ（新しい順）
-            const salesFormatted = validMonthlySales.map((s) => ({
-              year: parseInt(s.year) || 0,
-              month: parseInt(s.month) || 0,
-              amount: s.monthly_total || 0,
-              transaction_count: s.transaction_count || 0,
-              agency_name: agency ? agency.name : "未設定",
-            }));
-
-            console.log("店舗ユーザー - チャートデータ:", chartData);
-            console.log("店舗ユーザー - 売上データ:", salesFormatted);
-
-            res.render("sales_list", {
-              sales: salesFormatted,
-              chartData: JSON.stringify(chartData),
-              agencyName: agency ? agency.name : "未設定",
-              agencyId: req.session.user.store_id,
-              groups: [],
-              selectedGroupId: null,
-              session: req.session,
-              success: req.query.success,
-              title: "売上管理",
-              isAdmin: false,
-            });
-          }
-        );
-      }
-    );
+    await handleAgencyListData(req, res);
   } else {
     // 管理者・役員は全店舗統合ビューまたは代理店選択画面を表示
     const showOverview = req.query.overview !== 'false'; // デフォルトで統合ビューを表示
@@ -460,97 +465,109 @@ router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
 });
 
 // 個別代理店の売上表示
-router.get("/agency/:id", requireRole(["admin"]), (req, res) => {
+router.get("/agency/:id", requireRole(["admin"]), async (req, res) => {
   const agencyId = req.params.id;
 
-  // 代理店情報を取得
-  db.get("SELECT name FROM stores WHERE id = ?", [agencyId], (err, agency) => {
-    if (err || !agency) return res.status(404).send("代理店が見つかりません");
+  try {
+    // 代理店情報を取得（Supabase）
+    const { data: stores, error: storeError } = await db
+      .from('stores')
+      .select('name')
+      .eq('id', agencyId)
+      .limit(1);
 
-    // 個別取引データを取得して月次集計
-    db.all(
-      `SELECT 
-        strftime('%Y', transaction_date) as year,
-        strftime('%m', transaction_date) as month,
-        SUM(amount) as monthly_total,
-        COUNT(*) as transaction_count
-      FROM customer_transactions 
-      WHERE store_id = ? 
-      GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
-      ORDER BY year DESC, month DESC`,
-      [agencyId],
-      (err, monthlySales) => {
-        if (err) return res.status(500).send("DBエラー");
+    if (storeError || !stores || stores.length === 0) {
+      return res.status(404).send("代理店が見つかりません");
+    }
 
-        // データがない場合の処理
-        const validMonthlySales = monthlySales.filter(
-          (s) => s.year && s.month && s.monthly_total !== null
-        );
+    const agency = stores[0];
 
-        // チャート用データ（時系列順）
-        const chartData = validMonthlySales
-          .slice()
-          .reverse()
-          .map((s) => ({
-            period: `${s.year}年${parseInt(s.month)}月`,
-            amount: s.monthly_total || 0,
-            transactions: s.transaction_count || 0,
-          }));
+    // 月次売上データを取得
+    const monthlySales = await getMonthlySalesData(agencyId);
 
-        // テーブル表示用データ（新しい順）
-        const salesFormatted = validMonthlySales.map((s) => ({
-          year: parseInt(s.year) || 0,
-          month: parseInt(s.month) || 0,
-          amount: s.monthly_total || 0,
-          transaction_count: s.transaction_count || 0,
-        }));
-
-        res.render("sales_list", {
-          sales: salesFormatted,
-          chartData: JSON.stringify(chartData),
-          agencyName: agency.name,
-          agencyId: agencyId,
-          groups: [],
-          selectedGroupId: null,
-          session: req.session,
-          success: req.query.success,
-          title: `${agency.name}の売上管理`,
-          isAdmin: true,
-        });
-      }
+    // データがない場合の処理
+    const validMonthlySales = monthlySales.filter(
+      (s) => s.year && s.month && s.monthly_total !== null
     );
-  });
+
+    // チャート用データ（時系列順）
+    const chartData = validMonthlySales
+      .slice()
+      .reverse()
+      .map((s) => ({
+        period: `${s.year}年${parseInt(s.month)}月`,
+        amount: s.monthly_total || 0,
+        transactions: s.transaction_count || 0,
+      }));
+
+    // テーブル表示用データ（新しい順）
+    const salesFormatted = validMonthlySales.map((s) => ({
+      year: parseInt(s.year) || 0,
+      month: parseInt(s.month) || 0,
+      amount: s.monthly_total || 0,
+      transaction_count: s.transaction_count || 0,
+    }));
+
+    res.render("sales_list", {
+      sales: salesFormatted,
+      chartData: JSON.stringify(chartData),
+      agencyName: agency.name,
+      agencyId: agencyId,
+      groups: [],
+      selectedGroupId: null,
+      session: req.session,
+      success: req.query.success,
+      title: `${agency.name}の売上管理`,
+      isAdmin: true,
+    });
+  } catch (error) {
+    console.error("個別代理店売上表示エラー:", error);
+    res.status(500).send("システムエラー");
+  }
 });
 
 // 売上登録フォーム
-router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
+router.get("/new", requireRole(["admin", "agency"]), async (req, res) => {
   const preselectedAgencyId = req.query.store_id; // クエリパラメータから代理店IDを取得
 
-  if (req.session.user.role === "agency") {
-    if (!req.session.user.store_id) {
-      return res.redirect("/stores/create-profile");
-    }
-
-    // 代理店情報を取得
-    db.get(
-      "SELECT name FROM stores WHERE id = ?",
-      [req.session.user.store_id],
-      (err, agency) => {
-        if (err) return res.status(500).send("DBエラー");
-
-        res.render("sales_form", {
-          session: req.session,
-          stores: [],
-          agencyName: agency ? agency.name : "未設定",
-          sale: null, // sale変数を追加
-          title: "売上登録",
-        });
+  try {
+    if (req.session.user.role === "agency") {
+      if (!req.session.user.store_id) {
+        return res.redirect("/stores/create-profile");
       }
-    );
-  } else {
-    // 管理者は代理店一覧を取得
-    db.all("SELECT * FROM stores ORDER BY name", [], (err, stores) => {
-      if (err) return res.status(500).send("DBエラー");
+
+      // 代理店情報を取得（Supabase）
+      const { data: stores, error: storeError } = await db
+        .from('stores')
+        .select('name')
+        .eq('id', req.session.user.store_id)
+        .limit(1);
+
+      if (storeError) {
+        console.error("代理店情報取得エラー:", storeError);
+        return res.status(500).send("DBエラー");
+      }
+
+      const agency = stores && stores.length > 0 ? stores[0] : null;
+
+      res.render("sales_form", {
+        session: req.session,
+        stores: [],
+        agencyName: agency ? agency.name : "未設定",
+        sale: null, // sale変数を追加
+        title: "売上登録",
+      });
+    } else {
+      // 管理者は代理店一覧を取得（Supabase）
+      const { data: stores, error: storesError } = await db
+        .from('stores')
+        .select('*')
+        .order('name');
+
+      if (storesError) {
+        console.error("店舗一覧取得エラー:", storesError);
+        return res.status(500).send("DBエラー");
+      }
 
       // 事前選択された代理店の情報を取得
       let preselectedAgency = null;
@@ -560,7 +577,7 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
 
       res.render("sales_form", {
         session: req.session,
-        stores,
+        stores: stores || [],
         agencyName: null,
         preselectedAgencyId: preselectedAgencyId,
         preselectedAgencyName: preselectedAgency
@@ -569,7 +586,10 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
         sale: null, // sale変数を追加
         title: "売上登録",
       });
-    });
+    }
+  } catch (error) {
+    console.error("売上登録フォームエラー:", error);
+    res.status(500).send("システムエラー");
   }
 });
 
