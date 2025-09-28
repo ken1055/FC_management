@@ -603,7 +603,7 @@ router.get("/new", requireRole(["admin", "agency"]), async (req, res) => {
 // 現在は個別取引登録（/transaction）のみサポート
 
 // 売上履歴一覧表示
-router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
+router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
   const isAdmin = req.session.user.role === "admin";
   const { store_id, start_date, end_date, customer_search } = req.query;
   console.log("売上履歴取得リクエスト:", {
@@ -616,7 +616,7 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
 
   // Supabase環境で分離クエリを使用（Vercel + Supabase専用）
   console.log("Supabase環境: 分離クエリで売上履歴を取得");
-  getTransactionsSupabase();
+  await getTransactionsSupabase();
 
   async function getTransactionsSupabase() {
     try {
@@ -877,6 +877,7 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
     } catch (error) {
       console.error("売上履歴API処理エラー:", error);
       res.status(500).json({ success: false, error: "システムエラー" });
+    }
   }
 
   // 履歴ページレンダリング関数
@@ -928,10 +929,6 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
       });
     }
   }
-
-  // Supabase環境で分離クエリを使用（Vercel + Supabase専用）
-  console.log("Supabase環境: 分離クエリで売上履歴を取得");
-  await getTransactionsSupabase();
 });
 
 // 売上履歴API
