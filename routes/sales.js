@@ -219,8 +219,13 @@ async function handleAgencySelectionData(req, res) {
 
 async function getMonthlySalesData(storeId = null) {
   try {
-    console.log("getMonthlySalesData呼び出し - storeId:", storeId, "型:", typeof storeId);
-    
+    console.log(
+      "getMonthlySalesData呼び出し - storeId:",
+      storeId,
+      "型:",
+      typeof storeId
+    );
+
     let query = db
       .from("customer_transactions")
       .select("transaction_date, amount, store_id")
@@ -235,7 +240,7 @@ async function getMonthlySalesData(storeId = null) {
     const { data, error } = await query;
 
     if (error) throw error;
-    
+
     console.log("getMonthlySalesData - 取得したデータ件数:", data?.length || 0);
     if (data && data.length > 0) {
       console.log("最初の取引データサンプル:", data[0]);
@@ -337,11 +342,26 @@ router.get("/", async (req, res) => {
 
       // JavaScript側で集計処理
       const storeMonthlyData = {};
+      let debugCount = 0;
       transactions.forEach((transaction) => {
         const date = new Date(transaction.transaction_date);
         const year = date.getFullYear().toString();
         const month = (date.getMonth() + 1).toString();
         const storeId = transaction.store_id;
+        
+        // 最初の3件のみデバッグログを出力
+        if (debugCount < 3) {
+          console.log(`取引データ詳細 #${debugCount + 1}:`, {
+            store_id: storeId,
+            storeIdType: typeof storeId,
+            storeMapHasKey: storeMap.hasOwnProperty(storeId),
+            storeMapValue: storeMap[storeId],
+            transaction_date: transaction.transaction_date,
+            amount: transaction.amount
+          });
+          debugCount++;
+        }
+        
         const storeName = storeMap[storeId] || `id:${storeId}`;
         const key = `${storeId}-${year}-${month}`;
 
