@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const db = require("../db");
+// Supabase接続を取得
+const { getSupabaseClient } = require("../config/supabase");
+const db = getSupabaseClient();
 const crypto = require("crypto");
 
 // パスワードハッシュ化関数
@@ -18,15 +20,23 @@ function requireRole(roles) {
   };
 }
 
-// ID整合性チェック機能（管理者のみ）
-function checkUserIdIntegrity(callback) {
-  db.all("SELECT id, email FROM admins ORDER BY email", [], (err, admins) => {
-    if (err) return callback(err, null);
+// ID整合性チェック機能（管理者のみ）- Supabase対応
+async function checkUserIdIntegrity(callback) {
+  try {
+    // 管理者一覧を取得（Supabase）
+    const { data: admins, error: adminError } = await db
+      .from("admins")
+      .select("id, email")
+      .order("email");
+
+    if (adminError) {
+      return callback(adminError, null);
+    }
 
     const issues = [];
     let expectedId = 1;
 
-    admins.forEach((admin, index) => {
+    (admins || []).forEach((admin, index) => {
       if (admin.id !== expectedId) {
         issues.push({
           currentId: admin.id,
@@ -39,11 +49,15 @@ function checkUserIdIntegrity(callback) {
     });
 
     callback(null, {
-      totalUsers: admins.length,
+      totalUsers: admins?.length || 0,
       issues: issues,
       isIntegrityOk: issues.length === 0,
     });
-  });
+
+  } catch (error) {
+    console.error("ID整合性チェックエラー:", error);
+    callback(error, null);
+  }
 }
 
 // ID修正機能（PostgreSQL対応・管理者のみ）
@@ -467,67 +481,80 @@ function fixUserIdsSQLite(admins, callback) {
 }
 
 // 管理者アカウント一覧表示（管理者のみ）
-router.get("/list", requireRole(["admin"]), (req, res) => {
+router.get("/list", requireRole(["admin"]), async (req, res) => {
   console.log("=== ユーザー管理ページアクセス ===");
   console.log("ユーザー:", req.session.user);
 
   // ユーザーIDの整合性をチェック
-  checkUserIdIntegrity((err, integrityInfo) => {
-    // エラーが発生した場合はデフォルト値を設定
-    if (err || !integrityInfo) {
-      console.error("ユーザーID整合性チェックエラー:", err);
-      integrityInfo = {
-        totalUsers: 0,
-        issues: [],
-        isIntegrityOk: true,
-      };
-    }
+  try {
+    await new Promise((resolve, reject) => {
+      checkUserIdIntegrity((err, integrityInfo) => {
+        if (err) {
+          console.error("ユーザーID整合性チェックエラー:", err);
+          integrityInfo = {
+            totalUsers: 0,
+            issues: [],
+            isIntegrityOk: true,
+          };
+        }
 
-    console.log("整合性チェック結果:", integrityInfo);
+        console.log("整合性チェック結果:", integrityInfo);
 
-    // 管理者アカウントのID修正処理を無効化
-    console.log("=== 管理者アカウントID修正処理は無効化されています ===");
-    console.log("ID整合性の問題があっても自動修正は行いません");
+        // 管理者アカウントのID修正処理を無効化
+        console.log("=== 管理者アカウントID修正処理は無効化されています ===");
+        console.log("ID整合性の問題があっても自動修正は行いません");
 
-    // 整合性チェック結果を表示するが、修正は行わない
-    renderUsersList(req, res, integrityInfo);
-  });
+        // 整合性チェック結果を表示するが、修正は行わない
+        renderUsersList(req, res, integrityInfo);
+        resolve();
+      });
+    });
+  } catch (error) {
+    console.error("ユーザー管理ページエラー:", error);
+    res.status(500).send("システムエラー");
+  }
 });
 
-// ユーザー一覧画面の描画関数
-function renderUsersList(req, res, integrityInfo, autoFixMessage = null) {
-  db.all(
-    "SELECT id, email, created_at FROM admins ORDER BY id",
-    [],
-    (err, admins) => {
-      if (err) {
-        console.error("管理者一覧取得エラー:", err);
-        return res.status(500).send("DBエラー: " + err.message);
-      }
+// ユーザー一覧画面の描画関数（Supabase対応）
+async function renderUsersList(req, res, integrityInfo, autoFixMessage = null) {
+  try {
+    // 管理者一覧を取得（Supabase）
+    const { data: admins, error: adminError } = await db
+      .from("admins")
+      .select("id, email, created_at")
+      .order("id");
 
-      console.log("管理者一覧取得完了:", admins.length, "件");
-
-      // 成功・エラーメッセージを取得
-      const success = req.query.success;
-      const error = req.query.error;
-
-      try {
-        res.render("users_list", {
-          users: admins, // 管理者データをusersとして渡す（テンプレート互換性のため）
-          admins: admins,
-          integrityInfo,
-          autoFixMessage,
-          success: success,
-          error: error,
-          session: req.session,
-          title: "管理者アカウント管理",
-        });
-      } catch (renderError) {
-        console.error("レンダリングエラー:", renderError);
-        res.status(500).send("レンダリングエラー: " + renderError.message);
-      }
+    if (adminError) {
+      console.error("管理者一覧取得エラー:", adminError);
+      return res.status(500).send("DBエラー: " + adminError.message);
     }
-  );
+
+    console.log("管理者一覧取得完了:", admins?.length || 0, "件");
+
+    // 成功・エラーメッセージを取得
+    const success = req.query.success;
+    const error = req.query.error;
+
+    try {
+      res.render("users_list", {
+        users: admins || [], // 管理者データをusersとして渡す（テンプレート互換性のため）
+        admins: admins || [],
+        integrityInfo,
+        autoFixMessage,
+        success: success,
+        error: error,
+        session: req.session,
+        title: "管理者アカウント管理",
+      });
+    } catch (renderError) {
+      console.error("レンダリングエラー:", renderError);
+      res.status(500).send("レンダリングエラー: " + renderError.message);
+    }
+
+  } catch (error) {
+    console.error("管理者一覧取得処理エラー:", error);
+    res.status(500).send("システムエラー: " + error.message);
+  }
 }
 
 // 新規アカウント作成画面
