@@ -287,8 +287,6 @@ app.get("/simple", (req, res) => {
 });
 
 // Vercel環境では最小限のルートのみ読み込み
-const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
-
 if (isVercel) {
   console.log("Vercel環境: 最小限のルート読み込み");
   
