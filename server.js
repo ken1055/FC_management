@@ -339,7 +339,7 @@ app.get("/api/store/statistics", (req, res) => {
   // Supabase接続を取得
   const { getSupabaseClient } = require("./config/supabase");
   const db = getSupabaseClient();
-  
+
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -362,35 +362,44 @@ app.get("/api/store/statistics", (req, res) => {
 
       // 顧客数を取得
       const { data: customerData, error: customerError } = await db
-        .from('customers')
-        .select('id', { count: 'exact' })
-        .eq('store_id', storeId);
+        .from("customers")
+        .select("id", { count: "exact" })
+        .eq("store_id", storeId);
 
       if (customerError) {
         console.error("顧客数取得エラー:", customerError);
-        return res.status(500).json({ error: "Failed to fetch customer count" });
+        return res
+          .status(500)
+          .json({ error: "Failed to fetch customer count" });
       }
 
       const customerCount = customerData?.length || 0;
       console.log("顧客数結果:", customerCount);
 
       // 当月の売上を取得
-      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+      const startDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-01`;
+      const endDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-31`;
 
       const { data: salesData, error: salesError } = await db
-        .from('customer_transactions')
-        .select('amount')
-        .eq('store_id', storeId)
-        .gte('transaction_date', startDate)
-        .lte('transaction_date', endDate);
+        .from("customer_transactions")
+        .select("amount")
+        .eq("store_id", storeId)
+        .gte("transaction_date", startDate)
+        .lte("transaction_date", endDate);
 
       if (salesError) {
         console.error("売上取得エラー:", salesError);
         return res.status(500).json({ error: "Failed to fetch sales data" });
       }
 
-      const currentMonthSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      const currentMonthSales =
+        salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
       console.log("売上結果:", currentMonthSales);
 
       const response = {
@@ -403,7 +412,6 @@ app.get("/api/store/statistics", (req, res) => {
 
       console.log("特定店舗統計最終レスポンス:", response);
       res.json(response);
-
     } catch (error) {
       console.error("特定店舗統計処理エラー:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -417,33 +425,42 @@ app.get("/api/store/statistics", (req, res) => {
 
       // 全顧客数を取得
       const { data: customerData, error: customerError } = await db
-        .from('customers')
-        .select('id', { count: 'exact' });
+        .from("customers")
+        .select("id", { count: "exact" });
 
       if (customerError) {
         console.error("全店舗顧客数取得エラー:", customerError);
-        return res.status(500).json({ error: "Failed to fetch customer count" });
+        return res
+          .status(500)
+          .json({ error: "Failed to fetch customer count" });
       }
 
       const customerCount = customerData?.length || 0;
       console.log("全店舗顧客数結果:", customerCount);
 
       // 当月の全店舗売上を取得
-      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+      const startDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-01`;
+      const endDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-31`;
 
       const { data: salesData, error: salesError } = await db
-        .from('customer_transactions')
-        .select('amount')
-        .gte('transaction_date', startDate)
-        .lte('transaction_date', endDate);
+        .from("customer_transactions")
+        .select("amount")
+        .gte("transaction_date", startDate)
+        .lte("transaction_date", endDate);
 
       if (salesError) {
         console.error("全店舗売上取得エラー:", salesError);
         return res.status(500).json({ error: "Failed to fetch sales data" });
       }
 
-      const currentMonthSales = salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      const currentMonthSales =
+        salesData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
       console.log("全店舗売上結果:", currentMonthSales);
 
       const response = {
@@ -457,7 +474,6 @@ app.get("/api/store/statistics", (req, res) => {
 
       console.log("全店舗統計最終レスポンス:", response);
       res.json(response);
-
     } catch (error) {
       console.error("全店舗統計処理エラー:", error);
       res.status(500).json({ error: "Internal server error" });

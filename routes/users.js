@@ -53,7 +53,6 @@ async function checkUserIdIntegrity(callback) {
       issues: issues,
       isIntegrityOk: issues.length === 0,
     });
-
   } catch (error) {
     console.error("ID整合性チェックエラー:", error);
     callback(error, null);
@@ -550,7 +549,6 @@ async function renderUsersList(req, res, integrityInfo, autoFixMessage = null) {
       console.error("レンダリングエラー:", renderError);
       res.status(500).send("レンダリングエラー: " + renderError.message);
     }
-
   } catch (error) {
     console.error("管理者一覧取得処理エラー:", error);
     res.status(500).send("システムエラー: " + error.message);
@@ -619,7 +617,7 @@ router.post("/", requireRole(["admin"]), (req, res) => {
         }
 
         console.log("管理者アカウント作成成功:", email);
-        res.redirect("/api/users/list");
+        res.redirect("/users/list");
       }
     );
   });
@@ -715,7 +713,7 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
   // 自分自身を削除しようとしていないかチェック
   if (req.session.user.id == adminId) {
     return res.redirect(
-      "/api/users/list?error=" +
+      "/users/list?error=" +
         encodeURIComponent("自分自身のアカウントは削除できません")
     );
   }
@@ -725,7 +723,7 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
     if (err) return res.status(500).send("DBエラー");
     if (!admin)
       return res.redirect(
-        "/api/users/list?error=" +
+        "/users/list?error=" +
           encodeURIComponent("指定された管理者が見つかりません")
       );
 
@@ -737,7 +735,7 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
 
       // ID修正処理を無効化し、削除完了メッセージのみ表示
       res.redirect(
-        "/api/users/list?success=" +
+        "/users/list?success=" +
           encodeURIComponent(`${admin.email} のアカウントを削除しました`)
       );
     });

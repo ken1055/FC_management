@@ -212,7 +212,7 @@ async function handleRoyaltyCalculationsList(year, month, req, res) {
     // 店舗情報を別途取得
     let enrichedCalculations = calculations || [];
     if (calculations && calculations.length > 0) {
-      const storeIds = [...new Set(calculations.map(c => c.store_id))];
+      const storeIds = [...new Set(calculations.map((c) => c.store_id))];
       const { data: stores, error: storeError } = await db
         .from("stores")
         .select("id, name")
@@ -220,18 +220,18 @@ async function handleRoyaltyCalculationsList(year, month, req, res) {
 
       if (!storeError && stores) {
         const storeMap = {};
-        stores.forEach(store => {
+        stores.forEach((store) => {
           storeMap[store.id] = store.name;
         });
 
-        enrichedCalculations = calculations.map(calc => ({
+        enrichedCalculations = calculations.map((calc) => ({
           ...calc,
-          store_name: storeMap[calc.store_id] || `店舗ID ${calc.store_id}`
+          store_name: storeMap[calc.store_id] || `店舗ID ${calc.store_id}`,
         }));
 
         // 店舗名でソート
-        enrichedCalculations.sort((a, b) => 
-          (a.store_name || '').localeCompare(b.store_name || '')
+        enrichedCalculations.sort((a, b) =>
+          (a.store_name || "").localeCompare(b.store_name || "")
         );
       }
     }
@@ -244,7 +244,6 @@ async function handleRoyaltyCalculationsList(year, month, req, res) {
       session: req.session,
       title: "ロイヤリティ計算結果",
     });
-
   } catch (error) {
     console.error("ロイヤリティ計算一覧エラー:", error);
     res.status(500).render("error", {

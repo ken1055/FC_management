@@ -32,7 +32,7 @@
               <a class="nav-link" href="/groups/list">グループ管理</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/api/users/list">アカウント管理</a>
+              <a class="nav-link" href="/users/list">アカウント管理</a>
             </li>
             <% } %> <% if (typeof session !== 'undefined' && session &&
             session.user && session.user.role === 'agency') { %>
@@ -80,7 +80,7 @@
     <div class="card shadow-sm p-4 mb-4">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0"><%= title %></h2>
-        <a href="/api/users/list" class="btn btn-secondary">
+        <a href="/users/list" class="btn btn-secondary">
           <i class="bi bi-arrow-left"></i> 一覧へ戻る
         </a>
       </div>
@@ -145,7 +145,7 @@
               <button type="submit" class="btn btn-success">
                 <i class="bi bi-person-plus"></i> 管理者アカウント作成
               </button>
-              <a href="/api/users/list" class="btn btn-secondary">
+              <a href="/users/list" class="btn btn-secondary">
                 <i class="bi bi-x-circle"></i> キャンセル
               </a>
             </div>
