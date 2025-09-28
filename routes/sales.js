@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const db = require("../db");
+const sqlite3 = require("sqlite3").verbose();
+
+// SQLiteデータベースに直接接続
+const db = new sqlite3.Database("./agency.db");
 
 function requireRole(roles) {
   return (req, res, next) => {

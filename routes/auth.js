@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const db = require("../db");
+const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
+
+// SQLiteデータベースに直接接続
+const db = new sqlite3.Database("./agency.db");
 
 // パスワードハッシュ化関数（後方互換性のため保持）
 function hashPassword(password) {
