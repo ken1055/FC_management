@@ -476,91 +476,159 @@ router.post("/calculations/delete", requireAdmin, (req, res) => {
 });
 
 // 月次ロイヤリティレポート
-router.get("/report", requireAdmin, (req, res) => {
+router.get("/report", requireAdmin, async (req, res) => {
   const year = req.query.year || new Date().getFullYear();
 
-  const query = `
-    SELECT 
-      rc.calculation_month,
-      COUNT(rc.id) as store_count,
-      SUM(rc.monthly_sales) as total_sales,
-      SUM(rc.royalty_amount) as total_royalty,
-      AVG(rc.royalty_rate) as avg_royalty_rate
-    FROM royalty_calculations rc
-    WHERE rc.calculation_year = ?
-    GROUP BY rc.calculation_month
-    ORDER BY rc.calculation_month
-  `;
+  try {
+    // ロイヤリティ計算データを取得（Supabase）
+    const { data: calculations, error: calculationError } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("calculation_year", year);
 
-  db.all(query, [year], (err, reportData) => {
-    if (err) {
-      console.error("ロイヤリティレポート取得エラー:", err);
+    if (calculationError) {
+      console.error("ロイヤリティレポート取得エラー:", calculationError);
       return res.status(500).render("error", {
         message: "ロイヤリティレポートの取得に失敗しました",
         session: req.session,
       });
     }
 
-    // 月別詳細データも取得
-    const detailQuery = `
-      SELECT 
-        rc.*,
-        s.name as store_name
-      FROM royalty_calculations rc
-      LEFT JOIN stores s ON rc.store_id = s.id
-      WHERE rc.calculation_year = ?
-      ORDER BY rc.calculation_month, s.name
-    `;
+    // JavaScript側で月別集計を実行
+    const monthlyData = {};
+    (calculations || []).forEach(calc => {
+      const month = calc.calculation_month;
+      if (!monthlyData[month]) {
+        monthlyData[month] = {
+          calculation_month: month,
+          store_count: 0,
+          total_sales: 0,
+          total_royalty: 0,
+          royalty_rates: []
+        };
+      }
+      monthlyData[month].store_count += 1;
+      monthlyData[month].total_sales += calc.monthly_sales || 0;
+      monthlyData[month].total_royalty += calc.royalty_amount || 0;
+      monthlyData[month].royalty_rates.push(calc.royalty_rate || 0);
+    });
 
-    db.all(detailQuery, [year], (err, detailData) => {
-      if (err) {
-        console.error("ロイヤリティ詳細取得エラー:", err);
-        return res.status(500).render("error", {
-          message: "ロイヤリティ詳細の取得に失敗しました",
-          session: req.session,
+    // 平均ロイヤリティ率を計算
+    const reportData = Object.values(monthlyData).map(data => ({
+      ...data,
+      avg_royalty_rate: data.royalty_rates.length > 0 
+        ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) / data.royalty_rates.length 
+        : 0
+    })).sort((a, b) => a.calculation_month - b.calculation_month);
+
+    console.log("ロイヤリティレポートデータ:", reportData.length, "月分");
+
+    // 詳細データも取得（Supabase）
+    await handleRoyaltyReportData(reportData, year, req, res);
+
+  } catch (error) {
+    console.error("ロイヤリティレポート処理エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
+      session: req.session,
+    });
+  }
+});
+
+// ロイヤリティレポートデータ処理関数（Supabase対応）
+async function handleRoyaltyReportData(reportData, year, req, res) {
+  try {
+    // 月別詳細データも取得（Supabase）
+    const { data: detailCalculations, error: detailError } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("calculation_year", year)
+      .order("calculation_month");
+
+    if (detailError) {
+      console.error("ロイヤリティ詳細取得エラー:", detailError);
+      return res.status(500).render("error", {
+        message: "ロイヤリティ詳細の取得に失敗しました",
+        session: req.session,
+      });
+    }
+
+    // 店舗情報を取得
+    let enrichedDetailData = detailCalculations || [];
+    if (detailCalculations && detailCalculations.length > 0) {
+      const storeIds = [...new Set(detailCalculations.map(d => d.store_id))];
+      const { data: stores, error: storeError } = await db
+        .from("stores")
+        .select("id, name")
+        .in("id", storeIds);
+
+      if (!storeError && stores) {
+        const storeMap = {};
+        stores.forEach(store => {
+          storeMap[store.id] = store.name;
+        });
+
+        enrichedDetailData = detailCalculations.map(detail => ({
+          ...detail,
+          store_name: storeMap[detail.store_id] || `店舗ID ${detail.store_id}`
+        }));
+
+        // 月、店舗名でソート
+        enrichedDetailData.sort((a, b) => {
+          if (a.calculation_month !== b.calculation_month) {
+            return a.calculation_month - b.calculation_month;
+          }
+          return (a.store_name || '').localeCompare(b.store_name || '');
         });
       }
+    }
 
-      // 集計値を計算
-      const totalSales = reportData.reduce(
-        (sum, item) => sum + (item.total_sales || 0),
-        0
-      );
-      const totalRoyalty = reportData.reduce(
-        (sum, item) => sum + (item.total_royalty || 0),
-        0
-      );
-      const totalStores = reportData.reduce(
-        (sum, item) => sum + (item.store_count || 0),
-        0
-      );
-      const avgRoyaltyRate =
-        reportData.length > 0
-          ? reportData.reduce(
-              (sum, item) => sum + (item.avg_royalty_rate || 0),
-              0
-            ) / reportData.length
-          : 0;
+    // 集計値を計算
+    const totalSales = reportData.reduce(
+      (sum, item) => sum + (item.total_sales || 0),
+      0
+    );
+    const totalRoyalty = reportData.reduce(
+      (sum, item) => sum + (item.total_royalty || 0),
+      0
+    );
+    const totalStores = reportData.reduce(
+      (sum, item) => sum + (item.store_count || 0),
+      0
+    );
+    const avgRoyaltyRate =
+      reportData.length > 0
+        ? reportData.reduce(
+            (sum, item) => sum + (item.avg_royalty_rate || 0),
+            0
+          ) / reportData.length
+        : 0;
 
-      res.render("royalty_report", {
-        reportData: reportData || [],
-        detailData: detailData || [],
-        monthlyData: reportData || [],
-        currentYear: parseInt(year),
-        start_year: parseInt(year),
-        end_year: parseInt(year),
-        start_month: 1,
-        end_month: 12,
-        totalSales: totalSales,
-        totalRoyalty: totalRoyalty,
-        totalStores: totalStores,
-        avgRoyaltyRate: avgRoyaltyRate,
-        session: req.session,
-        title: "ロイヤリティレポート",
-      });
+    res.render("royalty_report", {
+      reportData: reportData || [],
+      detailData: enrichedDetailData || [],
+      monthlyData: reportData || [],
+      currentYear: parseInt(year),
+      start_year: parseInt(year),
+      end_year: parseInt(year),
+      start_month: 1,
+      end_month: 12,
+      totalSales: totalSales,
+      totalRoyalty: totalRoyalty,
+      totalStores: totalStores,
+      avgRoyaltyRate: avgRoyaltyRate,
+      session: req.session,
+      title: "ロイヤリティレポート",
     });
-  });
-});
+
+  } catch (error) {
+    console.error("ロイヤリティレポート詳細処理エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
+      session: req.session,
+    });
+  }
+}
 
 // 請求書生成・ダウンロード
 router.get("/invoice/:calculationId", requireAdmin, (req, res) => {
