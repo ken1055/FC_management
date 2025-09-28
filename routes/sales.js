@@ -5,7 +5,7 @@ const router = express.Router();
 const { getSupabaseClient } = require("../config/supabase");
 const db = getSupabaseClient();
 
-console.log("sales.js: Vercel + Supabase環境で初期化完了");
+console.log("sales.js: Vercel + Supabase環境で初期化完了 - v2.0");
 
 // Supabase用のヘルパー関数
 
@@ -440,23 +440,29 @@ router.post("/transaction", requireRole(["admin", "agency"]), async (req, res) =
 
 // 売上管理画面（一覧・可視化）
 router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
-  if (req.session.user.role === "agency") {
-    // 代理店は自分のデータのみ（Supabase）
-    if (!req.session.user.store_id) {
-      return res.redirect("/stores/create-profile");
-    }
+  console.log("=== /sales/list アクセス開始 ===");
+  console.log("ユーザー役割:", req.session.user.role);
+  console.log("店舗ID:", req.session.user.store_id);
+  
+  try {
+    if (req.session.user.role === "agency") {
+      // 代理店は自分のデータのみ（Supabase）
+      if (!req.session.user.store_id) {
+        return res.redirect("/stores/create-profile");
+      }
 
-    await handleAgencyListData(req, res);
-  } else {
-    // 管理者・役員は全店舗統合ビューまたは代理店選択画面を表示
-    const showOverview = req.query.overview !== 'false'; // デフォルトで統合ビューを表示
-    
-    if (showOverview) {
-      // 全店舗統合の月次売上データを取得（Supabase）
-      await handleAdminOverviewData(req, res);
+      await handleAgencyListData(req, res);
     } else {
-      // 代理店選択画面を表示（Supabase）
-      await handleAgencySelectionData(req, res);
+      // 管理者・役員は全店舗統合ビューまたは代理店選択画面を表示
+      const showOverview = req.query.overview !== 'false'; // デフォルトで統合ビューを表示
+      
+      if (showOverview) {
+        // 全店舗統合の月次売上データを取得（Supabase）
+        await handleAdminOverviewData(req, res);
+      } else {
+        // 代理店選択画面を表示（Supabase）
+        await handleAgencySelectionData(req, res);
+      }
     }
   } catch (error) {
     console.error("売上管理画面エラー:", error);
