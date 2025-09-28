@@ -923,6 +923,7 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
         },
         summary: {
           total_transactions: enrichedTransactions.length,
+          transaction_count: enrichedTransactions.length,
           total_amount: totalAmount,
           average_amount: Math.round(avgAmount),
         },
