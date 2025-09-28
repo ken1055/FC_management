@@ -219,18 +219,27 @@ async function handleAgencySelectionData(req, res) {
 
 async function getMonthlySalesData(storeId = null) {
   try {
+    console.log("getMonthlySalesData呼び出し - storeId:", storeId, "型:", typeof storeId);
+    
     let query = db
       .from("customer_transactions")
       .select("transaction_date, amount, store_id")
       .not("transaction_date", "is", null);
 
     if (storeId) {
-      query = query.eq("store_id", storeId);
+      const numericStoreId = parseInt(storeId);
+      console.log("数値変換後のstoreId:", numericStoreId);
+      query = query.eq("store_id", numericStoreId);
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
+    
+    console.log("getMonthlySalesData - 取得したデータ件数:", data?.length || 0);
+    if (data && data.length > 0) {
+      console.log("最初の取引データサンプル:", data[0]);
+    }
 
     // JavaScript側で集計処理
     const monthlyData = {};
@@ -509,22 +518,31 @@ router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
 router.get("/agency/:id", requireRole(["admin"]), async (req, res) => {
   const agencyId = req.params.id;
 
+  console.log("=== 個別店舗売上表示デバッグ ===");
+  console.log("取得したagencyId:", agencyId);
+  console.log("agencyIdの型:", typeof agencyId);
+
   try {
     // 代理店情報を取得（Supabase）
     const { data: stores, error: storeError } = await db
       .from("stores")
-      .select("name")
-      .eq("id", agencyId)
+      .select("id, name")
+      .eq("id", parseInt(agencyId))
       .limit(1);
 
+    console.log("店舗クエリ結果:", { stores, storeError });
+
     if (storeError || !stores || stores.length === 0) {
+      console.log("店舗が見つからない - agencyId:", agencyId);
       return res.status(404).send("代理店が見つかりません");
     }
 
     const agency = stores[0];
+    console.log("取得した店舗情報:", agency);
 
     // 月次売上データを取得
-    const monthlySales = await getMonthlySalesData(agencyId);
+    const monthlySales = await getMonthlySalesData(parseInt(agencyId));
+    console.log("取得した月次売上データ件数:", monthlySales.length);
 
     // データがない場合の処理
     const validMonthlySales = monthlySales.filter(
