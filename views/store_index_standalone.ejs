@@ -292,22 +292,35 @@
     <% if (session && session.user && session.user.store_id) { %>
     <script>
       // 統計情報の取得
+      console.log("=== 店舗側統計情報取得開始 ===");
+      console.log("店舗ID:", "<%= session.user.store_id %>");
+      
       fetch("/api/store/statistics")
-        .then((response) => response.json())
+        .then((response) => {
+          console.log("APIレスポンス状態:", response.status);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
         .then((data) => {
+          console.log("取得した統計データ:", data);
+          
           // 顧客数を表示
-          document.getElementById("customerCount").textContent =
-            data.customerCount + "人";
+          const customerCount = data.customerCount !== undefined ? data.customerCount : 0;
+          document.getElementById("customerCount").textContent = customerCount + "人";
+          console.log("顧客数設定:", customerCount);
 
           // 今月の売上を表示
-          const salesAmount = data.currentMonthSales || 0;
-          document.getElementById("monthSales").textContent =
-            "¥" + salesAmount.toLocaleString();
+          const salesAmount = data.currentMonthSales !== undefined ? data.currentMonthSales : 0;
+          document.getElementById("monthSales").textContent = "¥" + salesAmount.toLocaleString();
+          console.log("売上設定:", salesAmount);
         })
         .catch((error) => {
           console.error("統計情報取得エラー:", error);
-          document.getElementById("customerCount").textContent = "0人";
-          document.getElementById("monthSales").textContent = "¥0";
+          console.error("エラー詳細:", error.message);
+          document.getElementById("customerCount").textContent = "エラー";
+          document.getElementById("monthSales").textContent = "エラー";
         });
     </script>
     <% } %>

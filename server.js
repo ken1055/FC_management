@@ -303,7 +303,7 @@ app.use("/royalty", require("./routes/royalty"));
 console.log("Vercel + Supabase全ルート読み込み完了");
 
 // 店舗統計情報API
-app.get("/api/store/statistics", (req, res) => {
+app.get("/api/store/statistics", async (req, res) => {
   console.log("=== 統計情報API呼び出し ===");
   console.log("セッション:", req.session?.user);
   console.log("リクエストヘッダー:", req.headers);
@@ -349,10 +349,10 @@ app.get("/api/store/statistics", (req, res) => {
 
   if (storeId) {
     // 特定店舗の統計を取得（Supabase）
-    handleStoreStatistics(storeId);
+    await handleStoreStatistics(storeId);
   } else {
     // 管理者用：全店舗統計を取得（Supabase）
-    handleGlobalStatistics();
+    await handleGlobalStatistics();
   }
 
   // 特定店舗の統計を取得する関数（Supabase）
