@@ -286,87 +286,17 @@ app.get("/simple", (req, res) => {
   `);
 });
 
-// Vercel環境では最小限のルートのみ読み込み
-if (isVercel) {
-  console.log("Vercel環境: 最小限のルート読み込み");
-  
-  // 必須ルートのみ読み込み
-  app.use("/auth", require("./routes/auth"));
-  app.use("/sales", require("./routes/sales"));
-  app.use("/stores", require("./routes/agencies"));
-  app.use("/agencies", require("./routes/agencies"));
-  app.use("/customers", require("./routes/customers"));
-  
-  console.log("Vercel最小限ルート読み込み完了");
-} else {
-  // ルート設定（エラーハンドリング強化）
-  console.log("ルート読み込み開始...");
-  try {
-    app.use("/auth", require("./routes/auth"));
-    console.log("auth ルート読み込み完了");
-  } catch (error) {
-    console.error("auth ルート読み込みエラー:", error);
-  }
+// Vercel + Supabase専用ルート読み込み
+console.log("Vercel + Supabase環境: 必須ルート読み込み");
 
-  try {
-    app.use("/api/users", require("./routes/users"));
-    console.log("users ルート読み込み完了");
-  } catch (error) {
-    console.error("users ルート読み込みエラー:", error);
-  }
+// 必須ルートのみ読み込み
+app.use("/auth", require("./routes/auth"));
+app.use("/sales", require("./routes/sales"));
+app.use("/stores", require("./routes/agencies"));
+app.use("/agencies", require("./routes/agencies"));
+app.use("/customers", require("./routes/customers"));
 
-  try {
-    app.use("/stores", require("./routes/agencies"));
-    app.use("/agencies", require("./routes/agencies")); // 後方互換性のため
-    console.log("stores ルート読み込み完了");
-  } catch (error) {
-    console.error("stores ルート読み込みエラー:", error);
-  }
-
-  try {
-    app.use("/sales", require("./routes/sales"));
-    console.log("sales ルート読み込み完了");
-  } catch (error) {
-    console.error("sales ルート読み込みエラー:", error);
-  }
-
-  try {
-    app.use("/groups", require("./routes/groups"));
-    console.log("groups ルート読み完了");
-  } catch (error) {
-    console.error("groups ルート読み込みエラー:", error);
-  }
-
-  // materials ルートは削除されました
-
-  try {
-    app.use("/settings", require("./routes/settings"));
-    console.log("settings ルート読み込み完了");
-  } catch (error) {
-    console.error("settings ルート読み込みエラー:", error);
-  }
-
-  try {
-    // デバッグ用ミドルウェア
-    app.use("/customers", (req, res, next) => {
-      console.log(`[CUSTOMERS] ${req.method} ${req.path} - Body:`, req.body);
-      next();
-    });
-    app.use("/customers", require("./routes/customers"));
-    console.log("customers ルート読み込み完了");
-  } catch (error) {
-    console.error("customers ルート読み込みエラー:", error);
-  }
-
-  try {
-    app.use("/royalty", require("./routes/royalty"));
-    console.log("royalty ルート読み込み完了");
-  } catch (error) {
-    console.error("royalty ルート読み込みエラー:", error);
-  }
-
-  console.log("全ルート読み込み処理完了");
-}
+console.log("Vercel + Supabase必須ルート読み込み完了");
 
 // 店舗統計情報API
 app.get("/api/store/statistics", (req, res) => {
@@ -636,45 +566,34 @@ app.use((err, req, res, next) => {
   }
 });
 
-// ローカル環境でのサーバー起動
-if (!isVercel) {
-  const server = app.listen(port, () => {
-    console.log(`サーバーがポート ${port} で起動しました`);
-    console.log(`http://localhost:${port} でアクセスできます`);
+// Vercel環境専用設定
+console.log("Vercel + Supabase環境で動作中");
+
+// タイムアウト設定（30秒）
+app.use((req, res, next) => {
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      console.log("Request timeout - 30秒制限");
+      res.status(408).send(`
+        <h1>Request Timeout</h1>
+        <p>処理に時間がかかりすぎています。</p>
+        <p>時刻: ${new Date().toISOString()}</p>
+        <a href="/emergency">緊急確認ページ</a>
+        <a href="/auth/login">ログイン画面</a>
+      `);
+    }
+  }, 30000); // 30秒
+
+  res.on("finish", () => {
+    clearTimeout(timeout);
   });
 
-  // タイムアウト設定
-  server.timeout = 30000; // 30秒
-} else {
-  // Vercel環境用の設定
-  console.log("Vercel環境で動作中");
-
-  // 早期タイムアウト設定（20秒）
-  app.use((req, res, next) => {
-    const timeout = setTimeout(() => {
-      if (!res.headersSent) {
-        console.log("Request timeout - 20秒制限");
-        res.status(408).send(`
-          <h1>Request Timeout</h1>
-          <p>処理に時間がかかりすぎています。</p>
-          <p>時刻: ${new Date().toISOString()}</p>
-          <a href="/emergency">緊急確認ページ</a>
-          <a href="/auth/login">ログイン画面</a>
-        `);
-      }
-    }, 20000); // 20秒
-
-    res.on("finish", () => {
-      clearTimeout(timeout);
-    });
-
-    res.on("close", () => {
-      clearTimeout(timeout);
-    });
-
-    next();
+  res.on("close", () => {
+    clearTimeout(timeout);
   });
-}
+
+  next();
+});
 
 console.log("=== サーバー設定完了 ===");
 

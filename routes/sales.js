@@ -1,29 +1,11 @@
 const express = require("express");
 const router = express.Router();
 
-// データベース接続の取得
-const { isSupabaseConfigured, getSupabaseClient } = require("../config/supabase");
+// Supabase接続（Vercel + Supabase専用）
+const { getSupabaseClient } = require("../config/supabase");
+const db = getSupabaseClient();
 
-// 環境に応じたデータベース接続
-let db;
-const useSupabase = isSupabaseConfigured();
-
-if (useSupabase) {
-  console.log("sales.js: Supabase環境を使用");
-  db = getSupabaseClient();
-} else {
-  console.log("sales.js: SQLite環境を使用");
-  try {
-    const sqlite3 = require("sqlite3").verbose();
-    db = new sqlite3.Database("./agency.db");
-  } catch (error) {
-    console.error("SQLite接続エラー:", error);
-    // Vercel環境でSQLiteファイルが開けない場合、メモリDBにフォールバック
-    const sqlite3 = require("sqlite3").verbose();
-    db = new sqlite3.Database(":memory:");
-    console.log("メモリDBにフォールバック");
-  }
-}
+console.log("sales.js: Vercel + Supabase環境で初期化完了");
 
 function requireRole(roles) {
   return (req, res, next) => {
@@ -482,27 +464,17 @@ router.get("/new", requireRole(["admin", "agency"]), (req, res) => {
 router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
   const isAdmin = req.session.user.role === "admin";
   const { store_id, start_date, end_date, customer_search } = req.query;
-  const { isSupabaseConfigured } = require("../config/supabase");
-  const useSupabase = isSupabaseConfigured();
-
   console.log("売上履歴取得リクエスト:", {
     store_id,
     start_date,
     end_date,
     customer_search,
     isAdmin,
-    useSupabase,
   });
 
-  if (useSupabase) {
-    // Supabase環境では分離クエリを使用
-    console.log("Supabase環境: 分離クエリで売上履歴を取得");
-    getTransactionsSupabase();
-  } else {
-    // SQLite環境では従来のJOINクエリを使用
-    console.log("SQLite環境: JOINクエリで売上履歴を取得");
-    getTransactionsSQLite();
-  }
+  // Supabase環境で分離クエリを使用（Vercel + Supabase専用）
+  console.log("Supabase環境: 分離クエリで売上履歴を取得");
+  getTransactionsSupabase();
 
   function getTransactionsSupabase() {
     // まず取引データを取得
@@ -689,76 +661,6 @@ router.get("/history", requireRole(["admin", "agency"]), (req, res) => {
     });
   }
 
-  function getTransactionsSQLite() {
-    // SQLite環境では従来のJOINクエリを使用
-    let baseQuery = `
-      SELECT 
-        ct.id,
-        ct.transaction_date,
-        ct.amount,
-        ct.description,
-        ct.payment_method,
-        ct.created_at,
-        c.name as customer_name,
-        c.customer_code,
-        s.name as store_name,
-        ct.store_id,
-        ct.customer_id
-      FROM customer_transactions ct
-      LEFT JOIN customers c ON ct.customer_id = c.id
-      LEFT JOIN stores s ON ct.store_id = s.id
-    `;
-
-    let whereConditions = [];
-    let params = [];
-
-    // 権限に基づく店舗フィルタ
-    if (!isAdmin) {
-      whereConditions.push("ct.store_id = ?");
-      params.push(req.session.user.store_id);
-    } else if (store_id && store_id !== "all") {
-      whereConditions.push("ct.store_id = ?");
-      params.push(parseInt(store_id));
-    }
-
-    // 日付フィルタ
-    if (start_date) {
-      whereConditions.push("ct.transaction_date >= ?");
-      params.push(start_date);
-    }
-    if (end_date) {
-      whereConditions.push("ct.transaction_date <= ?");
-      params.push(end_date);
-    }
-
-    // 顧客検索
-    if (customer_search && customer_search.trim()) {
-      whereConditions.push("(c.name LIKE ? OR c.customer_code LIKE ?)");
-      params.push(`%${customer_search.trim()}%`, `%${customer_search.trim()}%`);
-    }
-
-    if (whereConditions.length > 0) {
-      baseQuery += " WHERE " + whereConditions.join(" AND ");
-    }
-
-    baseQuery +=
-      " ORDER BY ct.transaction_date DESC, ct.created_at DESC LIMIT 100";
-
-    console.log("SQLite実行クエリ:", baseQuery, params);
-
-    db.all(baseQuery, params, (err, transactions) => {
-      if (err) {
-        console.error("SQLite売上履歴取得エラー:", err);
-        return res.status(500).render("error", {
-          message: "売上履歴の取得に失敗しました",
-          session: req.session,
-        });
-      }
-
-      console.log("SQLite取得した取引件数:", transactions.length);
-      renderHistoryPage(transactions);
-    });
-  }
 
   function renderHistoryPage(transactions) {
     // 統計情報を計算
@@ -831,18 +733,10 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
     page = 1,
     limit = 50,
   } = req.query;
-  const { isSupabaseConfigured } = require("../config/supabase");
-  const useSupabase = isSupabaseConfigured();
+  console.log("売上履歴API呼び出し:", { isAdmin, store_id });
 
-  console.log("売上履歴API呼び出し:", { useSupabase, isAdmin, store_id });
-
-  if (useSupabase) {
-    // Supabase環境では分離クエリを使用
-    getHistoryAPISupabase();
-  } else {
-    // SQLite環境では従来のJOINクエリを使用
-    getHistoryAPISQLite();
-  }
+  // Supabase環境で分離クエリを使用（Vercel + Supabase専用）
+  getHistoryAPISupabase();
 
   function getHistoryAPISupabase() {
     // まず取引データを取得
@@ -1005,98 +899,6 @@ router.get("/history/api", requireRole(["admin", "agency"]), (req, res) => {
     });
   }
 
-  function getHistoryAPISQLite() {
-    // SQLite環境では従来のJOINクエリを使用
-    let baseQuery = `
-      SELECT 
-        ct.id,
-        ct.transaction_date,
-        ct.amount,
-        ct.description,
-        ct.payment_method,
-        ct.created_at,
-        c.name as customer_name,
-        c.customer_code,
-        s.name as store_name,
-        ct.store_id,
-        ct.customer_id
-      FROM customer_transactions ct
-      LEFT JOIN customers c ON ct.customer_id = c.id
-      LEFT JOIN stores s ON ct.store_id = s.id
-    `;
-
-    let whereConditions = [];
-    let params = [];
-
-    // 権限チェック
-    if (!isAdmin) {
-      whereConditions.push("ct.store_id = ?");
-      params.push(req.session.user.store_id);
-    } else if (store_id && store_id !== "all") {
-      whereConditions.push("ct.store_id = ?");
-      params.push(parseInt(store_id));
-    }
-
-    // フィルタ条件
-    if (start_date) {
-      whereConditions.push("ct.transaction_date >= ?");
-      params.push(start_date);
-    }
-    if (end_date) {
-      whereConditions.push("ct.transaction_date <= ?");
-      params.push(end_date);
-    }
-    if (customer_search && customer_search.trim()) {
-      whereConditions.push("(c.name LIKE ? OR c.customer_code LIKE ?)");
-      params.push(`%${customer_search.trim()}%`, `%${customer_search.trim()}%`);
-    }
-
-    if (whereConditions.length > 0) {
-      baseQuery += " WHERE " + whereConditions.join(" AND ");
-    }
-
-    // 件数取得用クエリ
-    const countQuery = baseQuery.replace(
-      /SELECT[\s\S]*?FROM/,
-      "SELECT COUNT(*) as total FROM"
-    );
-
-    // 件数を取得
-    db.get(countQuery, params, (err, countResult) => {
-      if (err) {
-        console.error("SQLite件数取得エラー:", err);
-        return res.status(500).json({ error: "データ取得に失敗しました" });
-      }
-
-      const total = countResult?.total || 0;
-      const pageNum = parseInt(page);
-      const limitNum = parseInt(limit);
-      const offset = (pageNum - 1) * limitNum;
-
-      // データ取得
-      baseQuery += " ORDER BY ct.transaction_date DESC, ct.created_at DESC";
-      baseQuery += ` LIMIT ${limitNum} OFFSET ${offset}`;
-
-      db.all(baseQuery, params, (err, transactions) => {
-        if (err) {
-          console.error("SQLite取引データ取得エラー:", err);
-          return res
-            .status(500)
-            .json({ error: "取引データの取得に失敗しました" });
-        }
-
-        res.json({
-          transactions,
-          pagination: {
-            current_page: pageNum,
-            total_pages: Math.ceil(total / limitNum),
-            total_count: total,
-            limit: limitNum,
-          },
-        });
-      });
-    });
-  }
 });
 
 module.exports = router;

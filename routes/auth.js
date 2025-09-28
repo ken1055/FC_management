@@ -3,29 +3,11 @@ const router = express.Router();
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
-// データベース接続の取得
-const { isSupabaseConfigured, getSupabaseClient } = require("../config/supabase");
+// Supabase接続（Vercel + Supabase専用）
+const { getSupabaseClient } = require("../config/supabase");
+const db = getSupabaseClient();
 
-// 環境に応じたデータベース接続
-let db;
-const useSupabase = isSupabaseConfigured();
-
-if (useSupabase) {
-  console.log("auth.js: Supabase環境を使用");
-  db = getSupabaseClient();
-} else {
-  console.log("auth.js: SQLite環境を使用");
-  try {
-    const sqlite3 = require("sqlite3").verbose();
-    db = new sqlite3.Database("./agency.db");
-  } catch (error) {
-    console.error("SQLite接続エラー:", error);
-    // Vercel環境でSQLiteファイルが開けない場合、メモリDBにフォールバック
-    const sqlite3 = require("sqlite3").verbose();
-    db = new sqlite3.Database(":memory:");
-    console.log("メモリDBにフォールバック");
-  }
-}
+console.log("auth.js: Vercel + Supabase環境で初期化完了");
 
 // パスワードハッシュ化関数（後方互換性のため保持）
 function hashPassword(password) {
@@ -116,15 +98,9 @@ router.post("/login", (req, res) => {
   }
 
   try {
-    if (useSupabase) {
-      // Supabase環境での認証処理
-      console.log("Supabase環境での認証処理");
-      handleSupabaseLogin(email, password, req, res);
-    } else {
-      // SQLite環境での認証処理
-      console.log("SQLite環境での認証処理");
-      handleSQLiteLogin(email, password, req, res);
-    }
+    // Supabase環境での認証処理（Vercel + Supabase専用）
+    console.log("Supabase認証処理開始");
+    handleSupabaseLogin(email, password, req, res);
   } catch (error) {
     console.error("Login error:", error);
     return res.send(`
@@ -213,76 +189,6 @@ async function handleSupabaseLogin(email, password, req, res) {
   }
 }
 
-// SQLite環境でのログイン処理
-function handleSQLiteLogin(email, password, req, res) {
-  // まず管理者テーブルから検索
-  db.get("SELECT * FROM admins WHERE email=?", [email], (err, admin) => {
-      if (err) {
-        console.error("Database error (admins):", err);
-        return res.send(`
-            <h1>データベースエラー</h1>
-            <p>エラー: ${err.message}</p>
-            <a href="/auth/login">ログインに戻る</a>
-          `);
-      }
-
-      if (admin && verifyPassword(password, admin.password)) {
-        console.log("Admin found, creating session");
-        req.session.user = {
-          id: admin.id,
-          email: admin.email,
-          role: "admin",
-          store_id: null,
-        };
-
-        console.log("Admin session created:", req.session.user);
-        console.log("Redirecting to /");
-
-        return res.redirect("/");
-      }
-
-      // 管理者が見つからない場合、代理店テーブルから検索
-      db.get("SELECT * FROM users WHERE email=?", [email], (err, user) => {
-        console.log("DB query result (users):", {
-          err,
-          user: user
-            ? { id: user.id, email: user.email, store_id: user.store_id }
-            : null,
-        });
-
-        if (err) {
-          console.error("Database error (users):", err);
-          return res.send(`
-              <h1>データベースエラー</h1>
-              <p>エラー: ${err.message}</p>
-              <a href="/auth/login">ログインに戻る</a>
-            `);
-        }
-
-        if (user && verifyPassword(password, user.password)) {
-          console.log("User found, creating session");
-          req.session.user = {
-            id: user.id,
-            email: user.email,
-            role: "agency",
-            store_id: user.store_id,
-          };
-
-          console.log("User session created:", req.session.user);
-          console.log("Redirecting to /");
-
-          return res.redirect("/");
-        } else {
-          console.log("Invalid credentials");
-          return res.send(`
-              <h1>ログインエラー</h1>
-              <p>メールアドレスまたはパスワードが違います</p>
-              <a href="/auth/login">ログインに戻る</a>
-            `);
-        }
-      });
-    });
-}
 
 // ログアウト
 router.get("/logout", (req, res) => {
