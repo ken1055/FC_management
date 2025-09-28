@@ -235,14 +235,14 @@ async function calculateRoyaltyFromTransactions(year, month, res) {
     console.log(`ロイヤリティ計算開始: ${year}年${month}月`);
 
     // 指定月の取引データを取得
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month).padStart(2, "0")}-31`;
 
     const { data: transactions, error: transactionError } = await db
-      .from('customer_transactions')
-      .select('store_id, amount, transaction_date')
-      .gte('transaction_date', startDate)
-      .lte('transaction_date', endDate);
+      .from("customer_transactions")
+      .select("store_id, amount, transaction_date")
+      .gte("transaction_date", startDate)
+      .lte("transaction_date", endDate);
 
     if (transactionError) {
       console.error("取引データ取得エラー:", transactionError);
@@ -254,8 +254,8 @@ async function calculateRoyaltyFromTransactions(year, month, res) {
 
     // 店舗情報を取得
     const { data: stores, error: storesError } = await db
-      .from('stores')
-      .select('id, name, royalty_rate');
+      .from("stores")
+      .select("id, name, royalty_rate");
 
     if (storesError) {
       console.error("店舗情報取得エラー:", storesError);
@@ -267,19 +267,19 @@ async function calculateRoyaltyFromTransactions(year, month, res) {
 
     // 店舗ごとの売上を集計
     const storeMap = {};
-    stores.forEach(store => {
+    stores.forEach((store) => {
       storeMap[store.id] = {
         store_id: store.id,
         store_name: store.name,
         total_sales: 0,
         royalty_rate: store.royalty_rate || 0,
         year: parseInt(year),
-        month: parseInt(month)
+        month: parseInt(month),
       };
     });
 
     // 取引データを店舗ごとに集計
-    transactions.forEach(transaction => {
+    transactions.forEach((transaction) => {
       if (storeMap[transaction.store_id]) {
         storeMap[transaction.store_id].total_sales += transaction.amount || 0;
       }
@@ -308,34 +308,33 @@ async function calculateRoyaltyFromTransactions(year, month, res) {
 // ロイヤリティ計算処理を実行する関数
 async function processRoyaltyCalculations(salesData, year, month, res) {
   try {
-    let processedCount = 0;
-    let errorCount = 0;
-    const calculationResults = [];
     const totalStores = salesData.length;
 
     // 各店舗のロイヤリティ計算を並行処理
     const promises = salesData.map(async (sale) => {
-      const royaltyAmount = Math.round(sale.total_sales * (sale.royalty_rate / 100));
+      const royaltyAmount = Math.round(
+        sale.total_sales * (sale.royalty_rate / 100)
+      );
 
       try {
         // ロイヤリティ計算結果を保存（Supabase）
-        const { data, error } = await db
-          .from('royalty_calculations')
-          .upsert({
+        const { data, error } = await db.from("royalty_calculations").upsert(
+          {
             store_id: sale.store_id,
             calculation_year: year,
             calculation_month: month,
             monthly_sales: sale.total_sales,
             royalty_rate: sale.royalty_rate,
             royalty_amount: royaltyAmount,
-            status: 'calculated'
-          }, {
-            onConflict: 'store_id,calculation_year,calculation_month'
-          });
+            status: "calculated",
+          },
+          {
+            onConflict: "store_id,calculation_year,calculation_month",
+          }
+        );
 
         if (error) {
           console.error("ロイヤリティ計算保存エラー:", error);
-          errorCount++;
           return {
             store_id: sale.store_id,
             store_name: sale.store_name || `店舗ID ${sale.store_id}`,
@@ -343,9 +342,10 @@ async function processRoyaltyCalculations(salesData, year, month, res) {
             error: error.message,
           };
         } else {
-          processedCount++;
           console.log(
-            `店舗「${sale.store_name || sale.store_id}」 rate=${sale.royalty_rate}% sales=¥${sale.total_sales.toLocaleString()} royalty=¥${royaltyAmount.toLocaleString()}`
+            `店舗「${sale.store_name || sale.store_id}」 rate=${
+              sale.royalty_rate
+            }% sales=¥${sale.total_sales.toLocaleString()} royalty=¥${royaltyAmount.toLocaleString()}`
           );
           return {
             store_id: sale.store_id,
@@ -358,7 +358,6 @@ async function processRoyaltyCalculations(salesData, year, month, res) {
         }
       } catch (error) {
         console.error("ロイヤリティ計算処理エラー:", error);
-        errorCount++;
         return {
           store_id: sale.store_id,
           store_name: sale.store_name || `店舗ID ${sale.store_id}`,
@@ -370,7 +369,7 @@ async function processRoyaltyCalculations(salesData, year, month, res) {
 
     // 全ての計算を実行
     const calculationResults = await Promise.all(promises);
-    
+
     // 集計結果を計算
     const totalSales = calculationResults
       .filter((r) => r.success)
@@ -382,19 +381,20 @@ async function processRoyaltyCalculations(salesData, year, month, res) {
     // 結果をレスポンス
     res.json({
       success: true,
-      message: `ロイヤリティ計算完了: ${calculationResults.filter(r => r.success).length}件成功, ${calculationResults.filter(r => !r.success).length}件エラー`,
+      message: `ロイヤリティ計算完了: ${
+        calculationResults.filter((r) => r.success).length
+      }件成功, ${calculationResults.filter((r) => !r.success).length}件エラー`,
       summary: {
         year: parseInt(year),
         month: parseInt(month),
         total_stores: totalStores,
-        processed_stores: calculationResults.filter(r => r.success).length,
-        error_stores: calculationResults.filter(r => !r.success).length,
+        processed_stores: calculationResults.filter((r) => r.success).length,
+        error_stores: calculationResults.filter((r) => !r.success).length,
         total_sales: totalSales,
         total_royalty: totalRoyalty,
       },
       details: calculationResults,
     });
-
   } catch (error) {
     console.error("ロイヤリティ計算処理エラー:", error);
     res.status(500).json({
@@ -415,7 +415,8 @@ router.post("/calculations/delete", requireAdmin, (req, res) => {
     });
   }
 
-  const query = "DELETE FROM royalty_calculations WHERE calculation_year = ? AND calculation_month = ?";
+  const query =
+    "DELETE FROM royalty_calculations WHERE calculation_year = ? AND calculation_month = ?";
 
   db.run(query, [year, month], function (err) {
     if (err) {
@@ -906,7 +907,9 @@ function generateInvoiceHTML(calculation) {
                 </tr>
                 <tr>
                     <th>対象期間</th>
-                    <td>${calculation.calculation_year}年${calculation.calculation_month}月</td>
+                    <td>${calculation.calculation_year}年${
+    calculation.calculation_month
+  }月</td>
                     <th>支払期限</th>
                     <td>${dueDate.toLocaleDateString("ja-JP")}</td>
                 </tr>
