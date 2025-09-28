@@ -8,7 +8,8 @@
   },
   "env": {
     "FAST_INIT": "true",
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "FORCE_RELOAD": "v4-db-all-deleted"
   },
   "headers": [
     {
@@ -36,7 +37,7 @@
         },
         {
           "key": "ETag",
-          "value": "\"force-reload-v3\""
+          "value": "\"force-reload-v4-db-all-deleted\""
         },
         {
           "key": "Last-Modified",

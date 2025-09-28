@@ -5,7 +5,7 @@ const router = express.Router();
 const { getSupabaseClient } = require("../config/supabase");
 const db = getSupabaseClient();
 
-console.log("sales.js: Vercel + Supabase環境で初期化完了 - v2.0");
+console.log("sales.js: Vercel + Supabase環境で初期化完了 - v3.0 - db.all完全削除");
 
 // Supabase用のヘルパー関数
 
