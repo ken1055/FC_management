@@ -215,7 +215,7 @@ router.get("/calculations", requireAdmin, (req, res) => {
 });
 
 // ロイヤリティ自動計算実行
-router.post("/calculate", requireAdmin, (req, res) => {
+router.post("/calculate", requireAdmin, async (req, res) => {
   const { year, month } = req.body;
 
   if (!year || !month) {
