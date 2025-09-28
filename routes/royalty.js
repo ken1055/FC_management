@@ -186,33 +186,73 @@ router.get("/calculations", requireAdmin, (req, res) => {
   const year = req.query.year || new Date().getFullYear();
   const month = req.query.month || new Date().getMonth() + 1;
 
-  const query = `
-    SELECT rc.*, s.name as store_name
-    FROM royalty_calculations rc
-    LEFT JOIN stores s ON rc.store_id = s.id
-    WHERE rc.calculation_year = ? AND rc.calculation_month = ?
-    ORDER BY s.name
-  `;
+  // Supabase対応の処理に変更
+  handleRoyaltyCalculationsList(year, month, req, res);
+});
 
-  db.all(query, [year, month], (err, calculations) => {
-    if (err) {
-      console.error("ロイヤリティ計算取得エラー:", err);
+// ロイヤリティ計算一覧取得の処理関数（Supabase対応）
+async function handleRoyaltyCalculationsList(year, month, req, res) {
+  try {
+    // ロイヤリティ計算データを取得（Supabase）
+    const { data: calculations, error: calculationError } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("calculation_year", year)
+      .eq("calculation_month", month)
+      .order("store_id");
+
+    if (calculationError) {
+      console.error("ロイヤリティ計算取得エラー:", calculationError);
       return res.status(500).render("error", {
         message: "ロイヤリティ計算の取得に失敗しました",
         session: req.session,
       });
     }
 
+    // 店舗情報を別途取得
+    let enrichedCalculations = calculations || [];
+    if (calculations && calculations.length > 0) {
+      const storeIds = [...new Set(calculations.map(c => c.store_id))];
+      const { data: stores, error: storeError } = await db
+        .from("stores")
+        .select("id, name")
+        .in("id", storeIds);
+
+      if (!storeError && stores) {
+        const storeMap = {};
+        stores.forEach(store => {
+          storeMap[store.id] = store.name;
+        });
+
+        enrichedCalculations = calculations.map(calc => ({
+          ...calc,
+          store_name: storeMap[calc.store_id] || `店舗ID ${calc.store_id}`
+        }));
+
+        // 店舗名でソート
+        enrichedCalculations.sort((a, b) => 
+          (a.store_name || '').localeCompare(b.store_name || '')
+        );
+      }
+    }
+
     res.render("royalty_calculations", {
-      calculations: calculations || [],
+      calculations: enrichedCalculations,
       currentYear: parseInt(year),
       currentMonth: parseInt(month),
       store_search: req.query.store_search || "",
       session: req.session,
       title: "ロイヤリティ計算結果",
     });
-  });
-});
+
+  } catch (error) {
+    console.error("ロイヤリティ計算一覧エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
+      session: req.session,
+    });
+  }
+}
 
 // ロイヤリティ自動計算実行
 router.post("/calculate", requireAdmin, async (req, res) => {
