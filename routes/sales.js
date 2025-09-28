@@ -7,6 +7,56 @@ const db = getSupabaseClient();
 
 console.log("sales.js: Vercel + Supabase環境で初期化完了");
 
+// Supabase用のヘルパー関数
+async function getMonthlySalesData(storeId = null) {
+  try {
+    let query = db
+      .from('customer_transactions')
+      .select('transaction_date, amount, store_id')
+      .not('transaction_date', 'is', null);
+    
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    
+    // JavaScript側で集計処理
+    const monthlyData = {};
+    data.forEach(transaction => {
+      const date = new Date(transaction.transaction_date);
+      const year = date.getFullYear().toString();
+      const month = (date.getMonth() + 1).toString();
+      const key = `${year}-${month}`;
+      
+      if (!monthlyData[key]) {
+        monthlyData[key] = {
+          year,
+          month,
+          monthly_total: 0,
+          transaction_count: 0
+        };
+      }
+      
+      monthlyData[key].monthly_total += transaction.amount || 0;
+      monthlyData[key].transaction_count += 1;
+    });
+    
+    // 配列に変換して並び替え
+    return Object.values(monthlyData)
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.month - a.month;
+      });
+      
+  } catch (error) {
+    console.error("月次売上データ取得エラー:", error);
+    return [];
+  }
+}
+
 function requireRole(roles) {
   return (req, res, next) => {
     if (!req.session.user || !roles.includes(req.session.user.role)) {
@@ -17,53 +67,77 @@ function requireRole(roles) {
 }
 
 // 売上統計取得（API）- 個別取引ベース
-router.get("/", (req, res) => {
-  if (req.session.user.role === "agency") {
-    // 代理店は自分のデータのみ
-    if (!req.session.user.store_id) {
-      return res.status(400).send("代理店IDが設定されていません");
+router.get("/", async (req, res) => {
+  try {
+    if (req.session.user.role === "agency") {
+      // 代理店は自分のデータのみ
+      if (!req.session.user.store_id) {
+        return res.status(400).send("代理店IDが設定されていません");
+      }
+      
+      const monthlySales = await getMonthlySalesData(req.session.user.store_id);
+      const formattedData = monthlySales.map(sale => ({
+        year: sale.year,
+        month: sale.month,
+        amount: sale.monthly_total,
+        transaction_count: sale.transaction_count
+      }));
+      
+      res.json(formattedData);
+    } else {
+      // 役員・管理者は全店舗のデータ
+      const { data: transactions, error } = await db
+        .from('customer_transactions')
+        .select('transaction_date, amount, store_id, stores!inner(name)')
+        .not('transaction_date', 'is', null);
+      
+      if (error) {
+        console.error("全店舗データ取得エラー:", error);
+        return res.status(500).send("DBエラー");
+      }
+      
+      // JavaScript側で集計処理
+      const storeMonthlyData = {};
+      transactions.forEach(transaction => {
+        const date = new Date(transaction.transaction_date);
+        const year = date.getFullYear().toString();
+        const month = (date.getMonth() + 1).toString();
+        const storeId = transaction.store_id;
+        const storeName = transaction.stores?.name || `Store ${storeId}`;
+        const key = `${storeId}-${year}-${month}`;
+        
+        if (!storeMonthlyData[key]) {
+          storeMonthlyData[key] = {
+            store_id: storeId,
+            agency_name: storeName,
+            year,
+            month,
+            amount: 0,
+            transaction_count: 0
+          };
+        }
+        
+        storeMonthlyData[key].amount += transaction.amount || 0;
+        storeMonthlyData[key].transaction_count += 1;
+      });
+      
+      const formattedData = Object.values(storeMonthlyData)
+        .sort((a, b) => {
+          if (a.year !== b.year) return b.year - a.year;
+          if (a.month !== b.month) return b.month - a.month;
+          return a.store_id - b.store_id;
+        });
+      
+      res.json(formattedData);
     }
-    db.all(
-      `SELECT 
-        strftime('%Y', transaction_date) as year,
-        strftime('%m', transaction_date) as month,
-        SUM(amount) as amount,
-        COUNT(*) as transaction_count
-      FROM customer_transactions 
-      WHERE store_id = ? 
-      GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
-      ORDER BY year DESC, month DESC`,
-      [req.session.user.store_id],
-      (err, rows) => {
-        if (err) return res.status(500).send("DBエラー");
-        res.json(rows);
-      }
-    );
-  } else {
-    // 役員・管理者は全て
-    db.all(
-      `SELECT 
-        ct.store_id,
-        s.name as agency_name,
-        strftime('%Y', ct.transaction_date) as year,
-        strftime('%m', ct.transaction_date) as month,
-        SUM(ct.amount) as amount,
-        COUNT(*) as transaction_count
-      FROM customer_transactions ct
-      LEFT JOIN stores s ON ct.store_id = s.id 
-      GROUP BY ct.store_id, s.name, strftime('%Y', ct.transaction_date), strftime('%m', ct.transaction_date)
-      ORDER BY year DESC, month DESC`,
-      [],
-      (err, rows) => {
-        if (err) return res.status(500).send("DBエラー");
-        res.json(rows);
-      }
-    );
+  } catch (error) {
+    console.error("売上統計取得エラー:", error);
+    res.status(500).send("DBエラー");
   }
 });
 
 // 個別取引登録（API）- 新機能
-router.post("/transaction", requireRole(["admin", "agency"]), (req, res) => {
+router.post("/transaction", requireRole(["admin", "agency"]), async (req, res) => {
   const {
     store_id,
     customer_id,
@@ -110,58 +184,64 @@ router.post("/transaction", requireRole(["admin", "agency"]), (req, res) => {
     }
   }
 
-  // 顧客が指定店舗に属しているかチェック
-  db.get(
-    "SELECT id, name FROM customers WHERE id = ? AND store_id = ?",
-    [processedCustomerId, processedStoreId],
-    (err, customer) => {
-      if (err) {
-        console.error("顧客確認エラー:", err);
-        return res.status(500).json({ error: "データベースエラー" });
-      }
+  try {
+    // 顧客が指定店舗に属しているかチェック（Supabase）
+    const { data: customers, error: customerError } = await db
+      .from('customers')
+      .select('id, name')
+      .eq('id', processedCustomerId)
+      .eq('store_id', processedStoreId)
+      .limit(1);
 
-      if (!customer) {
-        return res.status(400).json({
-          error: "指定された顧客が見つからないか、店舗が一致しません",
-        });
-      }
-
-      // 取引を登録
-      db.run(
-        `INSERT INTO customer_transactions 
-         (store_id, customer_id, transaction_date, amount, description, payment_method) 
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          processedStoreId,
-          processedCustomerId,
-          transaction_date,
-          processedAmount,
-          description || "",
-          payment_method || "現金",
-        ],
-        function (err) {
-          if (err) {
-            console.error("取引登録エラー:", err);
-            return res.status(500).json({ error: "取引の登録に失敗しました" });
-          }
-
-          console.log("取引登録成功:", this.lastID);
-
-          // 成功レスポンス
-          res.json({
-            success: true,
-            transaction_id: this.lastID,
-            customer_name: customer.name,
-            message: `${customer.name}様の取引を登録しました`,
-          });
-        }
-      );
+    if (customerError) {
+      console.error("顧客確認エラー:", customerError);
+      return res.status(500).json({ error: "データベースエラー" });
     }
-  );
+
+    if (!customers || customers.length === 0) {
+      return res.status(400).json({
+        error: "指定された顧客が見つからないか、店舗が一致しません",
+      });
+    }
+
+    const customer = customers[0];
+
+    // 取引を登録（Supabase）
+    const { data: transaction, error: insertError } = await db
+      .from('customer_transactions')
+      .insert({
+        store_id: processedStoreId,
+        customer_id: processedCustomerId,
+        transaction_date,
+        amount: processedAmount,
+        description: description || "",
+        payment_method: payment_method || "現金"
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("取引登録エラー:", insertError);
+      return res.status(500).json({ error: "取引の登録に失敗しました" });
+    }
+
+    console.log("取引登録成功:", transaction.id);
+
+    // 成功レスポンス
+    res.json({
+      success: true,
+      transaction_id: transaction.id,
+      customer_name: customer.name,
+      message: `${customer.name}様の取引を登録しました`,
+    });
+  } catch (error) {
+    console.error("取引登録処理エラー:", error);
+    res.status(500).json({ error: "取引登録に失敗しました" });
+  }
 });
 
 // 売上管理画面（一覧・可視化）
-router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
+router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
   if (req.session.user.role === "agency") {
     // 代理店は自分のデータのみ
     if (!req.session.user.store_id) {
