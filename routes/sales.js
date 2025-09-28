@@ -8,6 +8,135 @@ const db = getSupabaseClient();
 console.log("sales.js: Vercel + Supabase環境で初期化完了");
 
 // Supabase用のヘルパー関数
+
+// 管理者統合ビューデータ取得
+async function handleAdminOverviewData(req, res) {
+  try {
+    // 全店舗の月次売上データを取得
+    const monthlySales = await getMonthlySalesData();
+    
+    console.log("管理者統合ビュー - 月次売上データ:", monthlySales);
+
+    // データがない場合の処理
+    const validMonthlySales = monthlySales.filter(
+      (s) => s.year && s.month && s.monthly_total !== null
+    );
+
+    // 店舗数を計算（全取引から一意の店舗IDを取得）
+    const { data: storeCountData, error: storeCountError } = await db
+      .from('customer_transactions')
+      .select('store_id')
+      .not('store_id', 'is', null);
+    
+    const uniqueStores = storeCountData ? [...new Set(storeCountData.map(t => t.store_id))] : [];
+    const totalStoreCount = uniqueStores.length;
+
+    // チャート用データ（時系列順）
+    const chartData = validMonthlySales
+      .slice()
+      .reverse()
+      .map((s) => ({
+        period: `${s.year}年${parseInt(s.month)}月`,
+        amount: s.monthly_total || 0,
+        transactions: s.transaction_count || 0,
+        stores: totalStoreCount,
+      }));
+
+    // テーブル表示用データ（新しい順）
+    const salesFormatted = validMonthlySales.map((s) => ({
+      year: parseInt(s.year) || 0,
+      month: parseInt(s.month) || 0,
+      amount: s.monthly_total || 0,
+      transaction_count: s.transaction_count || 0,
+      store_count: totalStoreCount,
+      agency_name: `全店舗統合 (${totalStoreCount}店舗)`,
+    }));
+
+    // 店舗一覧も取得（詳細表示用）
+    const { data: stores, error: storesError } = await db
+      .from('stores')
+      .select('id, name');
+
+    if (storesError) {
+      console.error("店舗一覧取得エラー:", storesError);
+    }
+
+    res.render("sales_list", {
+      sales: salesFormatted,
+      chartData: JSON.stringify(chartData),
+      agencyName: "全店舗統合ビュー",
+      stores: stores || [],
+      groups: [],
+      selectedGroupId: null,
+      session: req.session,
+      success: req.query.success,
+      title: "売上管理 - 全店舗統合",
+      isAdmin: true,
+      showOverview: true,
+    });
+  } catch (error) {
+    console.error("管理者統合ビューエラー:", error);
+    res.status(500).send("データ取得エラー");
+  }
+}
+
+// 代理店選択画面データ取得
+async function handleAgencySelectionData(req, res) {
+  try {
+    // 店舗一覧を取得
+    const { data: stores, error: storesError } = await db
+      .from('stores')
+      .select('id, name')
+      .order('name');
+
+    if (storesError) {
+      console.error("店舗一覧取得エラー:", storesError);
+      return res.status(500).send("DBエラー");
+    }
+
+    // 各店舗の取引統計を取得
+    const { data: transactionStats, error: statsError } = await db
+      .from('customer_transactions')
+      .select('store_id, amount');
+
+    if (statsError) {
+      console.error("取引統計取得エラー:", statsError);
+    }
+
+    // 店舗ごとの統計を計算
+    const storeStats = {};
+    if (transactionStats) {
+      transactionStats.forEach(transaction => {
+        const storeId = transaction.store_id;
+        if (!storeStats[storeId]) {
+          storeStats[storeId] = {
+            transaction_count: 0,
+            total_sales: 0
+          };
+        }
+        storeStats[storeId].transaction_count += 1;
+        storeStats[storeId].total_sales += transaction.amount || 0;
+      });
+    }
+
+    // 店舗データに統計を追加
+    const enrichedStores = stores.map(store => ({
+      ...store,
+      transaction_count: storeStats[store.id]?.transaction_count || 0,
+      total_sales: storeStats[store.id]?.total_sales || 0
+    }));
+
+    res.render("sales_agency_list", {
+      stores: enrichedStores,
+      session: req.session,
+      title: "売上管理 - 代理店選択",
+    });
+  } catch (error) {
+    console.error("代理店選択画面エラー:", error);
+    res.status(500).send("システムエラー");
+  }
+}
+
 async function getMonthlySalesData(storeId = null) {
   try {
     let query = db
@@ -318,108 +447,15 @@ router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
     const showOverview = req.query.overview !== 'false'; // デフォルトで統合ビューを表示
     
     if (showOverview) {
-      // 全店舗統合の月次売上データを取得
-      db.all(
-        `SELECT 
-          strftime('%Y', transaction_date) as year,
-          strftime('%m', transaction_date) as month,
-          SUM(amount) as monthly_total,
-          COUNT(*) as transaction_count,
-          COUNT(DISTINCT store_id) as store_count
-        FROM customer_transactions 
-        GROUP BY strftime('%Y', transaction_date), strftime('%m', transaction_date)
-        ORDER BY year DESC, month DESC`,
-        [],
-        (err, monthlySales) => {
-          if (err) return res.status(500).send("DBエラー");
-
-          console.log("管理者統合ビュー - 月次売上データ:", monthlySales);
-
-          // データがない場合の処理
-          const validMonthlySales = monthlySales.filter(
-            (s) => s.year && s.month && s.monthly_total !== null
-          );
-
-          // チャート用データ（時系列順）
-          const chartData = validMonthlySales
-            .slice()
-            .reverse()
-            .map((s) => ({
-              period: `${s.year}年${parseInt(s.month)}月`,
-              amount: s.monthly_total || 0,
-              transactions: s.transaction_count || 0,
-              stores: s.store_count || 0,
-            }));
-
-          // テーブル表示用データ（新しい順）
-          const salesFormatted = validMonthlySales.map((s) => ({
-            year: parseInt(s.year) || 0,
-            month: parseInt(s.month) || 0,
-            amount: s.monthly_total || 0,
-            transaction_count: s.transaction_count || 0,
-            store_count: s.store_count || 0,
-            agency_name: `全店舗統合 (${s.store_count || 0}店舗)`,
-          }));
-
-          // 店舗一覧も取得（詳細表示用）
-          db.all(
-            `SELECT 
-              s.id, 
-              s.name,
-              COALESCE(COUNT(ct.id), 0) as transaction_count,
-              COALESCE(SUM(ct.amount), 0) as total_sales
-            FROM stores s 
-            LEFT JOIN customer_transactions ct ON s.id = ct.store_id 
-            GROUP BY s.id, s.name 
-            ORDER BY s.name`,
-            [],
-            (err, stores) => {
-              if (err) {
-                console.error("店舗一覧取得エラー:", err);
-                stores = [];
-              }
-
-              res.render("sales_list", {
-                sales: salesFormatted,
-                chartData: JSON.stringify(chartData),
-                agencyName: "全店舗統合ビュー",
-                stores: stores,
-                groups: [],
-                selectedGroupId: null,
-                session: req.session,
-                success: req.query.success,
-                title: "売上管理 - 全店舗統合",
-                isAdmin: true,
-                showOverview: true,
-              });
-            }
-          );
-        }
-      );
+      // 全店舗統合の月次売上データを取得（Supabase）
+      await handleAdminOverviewData(req, res);
     } else {
-      // 従来の代理店選択画面を表示
-      db.all(
-        `SELECT 
-            s.id, 
-            s.name,
-            COALESCE(COUNT(ct.id), 0) as transaction_count,
-            COALESCE(SUM(ct.amount), 0) as total_sales
-          FROM stores s 
-          LEFT JOIN customer_transactions ct ON s.id = ct.store_id 
-          GROUP BY s.id, s.name 
-          ORDER BY s.name`,
-        [],
-        (err, stores) => {
-          if (err) return res.status(500).send("DBエラー");
-
-          res.render("sales_agency_list", {
-            stores,
-            session: req.session,
-            title: "売上管理 - 代理店選択",
-          });
-        }
-      );
+      // 代理店選択画面を表示（Supabase）
+      await handleAgencySelectionData(req, res);
     }
+  } catch (error) {
+    console.error("売上管理画面エラー:", error);
+    res.status(500).send("システムエラーが発生しました");
   }
 });
 
