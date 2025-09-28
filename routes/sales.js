@@ -290,11 +290,15 @@ function requireRole(roles) {
 // 売上統計取得（API）- 個別取引ベース
 router.get("/", async (req, res) => {
   try {
-    if (req.session.user.role === "agency") {
-      // 代理店は自分のデータのみ
-      if (!req.session.user.store_id) {
-        return res.status(400).send("代理店IDが設定されていません");
-      }
+    console.log("=== 売上統計API開始 ===");
+    console.log("ユーザー役割:", req.session.user?.role);
+    console.log("dbオブジェクト:", !!db);
+    
+  if (req.session.user.role === "agency") {
+    // 代理店は自分のデータのみ
+    if (!req.session.user.store_id) {
+      return res.status(400).send("代理店IDが設定されていません");
+    }
 
       const monthlySales = await getMonthlySalesData(req.session.user.store_id);
       const formattedData = monthlySales.map((sale) => ({
@@ -348,7 +352,7 @@ router.get("/", async (req, res) => {
         const year = date.getFullYear().toString();
         const month = (date.getMonth() + 1).toString();
         const storeId = transaction.store_id;
-        
+
         // 最初の3件のみデバッグログを出力
         if (debugCount < 3) {
           console.log(`取引データ詳細 #${debugCount + 1}:`, {
@@ -357,11 +361,11 @@ router.get("/", async (req, res) => {
             storeMapHasKey: storeMap.hasOwnProperty(storeId),
             storeMapValue: storeMap[storeId],
             transaction_date: transaction.transaction_date,
-            amount: transaction.amount
+            amount: transaction.amount,
           });
           debugCount++;
         }
-        
+
         const storeName = storeMap[storeId] || `id:${storeId}`;
         const key = `${storeId}-${year}-${month}`;
 
@@ -390,7 +394,9 @@ router.get("/", async (req, res) => {
     }
   } catch (error) {
     console.error("売上統計取得エラー:", error);
-    res.status(500).send("DBエラー");
+    console.error("エラー詳細:", error.message);
+    console.error("エラースタック:", error.stack);
+    res.status(500).send("DBエラー: " + error.message);
   }
 });
 
@@ -431,11 +437,11 @@ router.post(
       return res
         .status(400)
         .json({ error: "数値フィールドの形式が正しくありません" });
-    }
+  }
 
-    // 代理店は自分のstore_idのみ登録可能
-    if (req.session.user.role === "agency") {
-      if (!req.session.user.store_id) {
+  // 代理店は自分のstore_idのみ登録可能
+  if (req.session.user.role === "agency") {
+    if (!req.session.user.store_id) {
         return res.status(400).json({ error: "代理店IDが設定されていません" });
       }
       if (req.session.user.store_id !== processedStoreId) {
@@ -509,11 +515,11 @@ router.get("/list", requireRole(["admin", "agency"]), async (req, res) => {
   console.log("店舗ID:", req.session.user.store_id);
 
   try {
-    if (req.session.user.role === "agency") {
+  if (req.session.user.role === "agency") {
       // 代理店は自分のデータのみ（Supabase）
-      if (!req.session.user.store_id) {
-        return res.redirect("/stores/create-profile");
-      }
+    if (!req.session.user.store_id) {
+      return res.redirect("/stores/create-profile");
+    }
 
       await handleAgencyListData(req, res);
     } else {
@@ -585,24 +591,24 @@ router.get("/agency/:id", requireRole(["admin"]), async (req, res) => {
       month: parseInt(s.month) || 0,
       amount: s.monthly_total || 0,
       transaction_count: s.transaction_count || 0,
-    }));
+        }));
 
-    res.render("sales_list", {
+        res.render("sales_list", {
       sales: salesFormatted,
-      chartData: JSON.stringify(chartData),
-      agencyName: agency.name,
-      agencyId: agencyId,
-      groups: [],
-      selectedGroupId: null,
-      session: req.session,
+          chartData: JSON.stringify(chartData),
+          agencyName: agency.name,
+          agencyId: agencyId,
+          groups: [],
+          selectedGroupId: null,
+          session: req.session,
       success: req.query.success,
-      title: `${agency.name}の売上管理`,
-      isAdmin: true,
-    });
+          title: `${agency.name}の売上管理`,
+          isAdmin: true,
+        });
   } catch (error) {
     console.error("個別代理店売上表示エラー:", error);
     res.status(500).send("システムエラー");
-  }
+      }
 });
 
 // 売上登録フォーム
@@ -610,10 +616,10 @@ router.get("/new", requireRole(["admin", "agency"]), async (req, res) => {
   const preselectedAgencyId = req.query.store_id; // クエリパラメータから代理店IDを取得
 
   try {
-    if (req.session.user.role === "agency") {
-      if (!req.session.user.store_id) {
-        return res.redirect("/stores/create-profile");
-      }
+  if (req.session.user.role === "agency") {
+    if (!req.session.user.store_id) {
+      return res.redirect("/stores/create-profile");
+    }
 
       // 代理店情報を取得（Supabase）
       const { data: stores, error: storeError } = await db
@@ -629,13 +635,13 @@ router.get("/new", requireRole(["admin", "agency"]), async (req, res) => {
 
       const agency = stores && stores.length > 0 ? stores[0] : null;
 
-      res.render("sales_form", {
-        session: req.session,
-        stores: [],
-        agencyName: agency ? agency.name : "未設定",
-        sale: null, // sale変数を追加
-        title: "売上登録",
-      });
+        res.render("sales_form", {
+          session: req.session,
+          stores: [],
+          agencyName: agency ? agency.name : "未設定",
+          sale: null, // sale変数を追加
+          title: "売上登録",
+        });
     } else {
       // 管理者は代理店一覧を取得（Supabase）
       const { data: stores, error: storesError } = await db
@@ -729,7 +735,7 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
         console.error("Supabase売上履歴取得エラー:", transactionError);
         return res.status(500).render("error", {
           message: "売上履歴の取得に失敗しました",
-          session: req.session,
+                session: req.session,
         });
       }
 
@@ -972,17 +978,17 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
 
         if (storeError) {
           console.error("店舗一覧取得エラー:", storeError);
-        } else {
+    } else {
           stores = storeData || [];
         }
       }
 
       res.render("sales_history", {
         transactions: enrichedTransactions,
-        session: req.session,
+          session: req.session,
         title: "売上履歴",
         isAdmin,
-        stores,
+          stores,
         filters: {
           store_id: isAdmin ? store_id || "all" : req.session.user.store_id,
           start_date,
