@@ -206,17 +206,23 @@ router.get("/list", requireRole(["admin", "agency"]), (req, res) => {
               month: parseInt(s.month) || 0,
               amount: s.monthly_total || 0,
               transaction_count: s.transaction_count || 0,
+              agency_name: agency ? agency.name : "未設定",
             }));
+
+            console.log("店舗ユーザー - チャートデータ:", chartData);
+            console.log("店舗ユーザー - 売上データ:", salesFormatted);
 
             res.render("sales_list", {
               sales: salesFormatted,
               chartData: JSON.stringify(chartData),
               agencyName: agency ? agency.name : "未設定",
+              agencyId: req.session.user.store_id,
               groups: [],
               selectedGroupId: null,
               session: req.session,
               success: req.query.success,
               title: "売上管理",
+              isAdmin: false,
             });
           }
         );
