@@ -1,11 +1,17 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.js": {
-      "maxDuration": 60,
-      "memory": 512
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server.js"
+    }
+  ],
   "env": {
     "FAST_INIT": "true",
     "NODE_ENV": "production",
@@ -45,12 +51,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api?path=$1"
-    }
-  ],
-  "outputDirectory": "."
+  ]
 }
