@@ -7,8 +7,13 @@ session-monitor.log
 .DS_Store
 uploads/materials/*
 !uploads/materials/.gitkeep
-*.md
-!README.md
 supabase/
 railway.toml
 railway.env.example
+DEPLOYMENT*.md
+SESSION_*.md
+MIGRATION_*.md
+RAILWAY_*.md
+STATIC_*.md
+SUPABASE_*.md
+VERCEL_*.md
