@@ -5,6 +5,7 @@ const express = require("express");
 const session = require("express-session");
 const MemoryStore = require("memorystore")(session);
 const path = require("path");
+const sessionMonitor = require("./middleware/session-monitor");
 
 const app = express();
 
@@ -126,10 +127,17 @@ try {
       saveUninitialized: false,
       store: new MemoryStore({
         checkPeriod: 86400000, // 24時間
+        max: 500, // 最大セッション数を制限
+        ttl: 7 * 24 * 60 * 60 * 1000, // 7日間のTTL
+        dispose: (key, session) => {
+          // セッション破棄時の監視
+          sessionMonitor.onSessionDestroy(key, 'ttl_expired');
+        },
+        stale: false // 期限切れセッションを即座に削除
       }),
       cookie: {
-        secure: false, // HTTPSでも一時的に無効化してテスト
-        maxAge: 86400000, // 24時間
+        secure: process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS, // 本番環境でHTTPS必須
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7日間
         httpOnly: true,
         sameSite: "lax",
       },
@@ -137,6 +145,10 @@ try {
     })
   );
   console.log("セッション設定完了");
+  
+  // セッション監視ミドルウェアの追加
+  app.use(sessionMonitor.middleware());
+  console.log("セッション監視開始");
 } catch (error) {
   console.error("セッション設定エラー:", error);
   if (process.env.NODE_ENV === "production" && !process.env.VERCEL_ENV) {
