@@ -122,14 +122,16 @@ try {
   app.use(
     session({
       secret: sessionSecret || "emergency-fallback-secret-key-for-vercel",
-      resave: false,
+      resave: true, // Vercelでのセッション保持を改善
       saveUninitialized: false,
       store: new MemoryStore({
         checkPeriod: 86400000, // 24時間
+        max: 1000, // 最大セッション数を制限
+        ttl: 7 * 24 * 60 * 60 * 1000, // 7日間のTTL
       }),
       cookie: {
-        secure: false, // HTTPSでも一時的に無効化してテスト
-        maxAge: 86400000, // 24時間
+        secure: process.env.NODE_ENV === "production", // 本番環境ではHTTPS必須
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7日間（より長期間）
         httpOnly: true,
         sameSite: "lax",
       },
@@ -511,10 +513,16 @@ app.get("/", (req, res) => {
   }
 
   try {
-    // セッションチェック
+    // セッションチェック（改善版）
     if (!req.session || !req.session.user) {
       console.log("セッションなし - ログインページにリダイレクト");
-      return res.redirect(302, "/auth/login");
+      console.log("セッション詳細:", {
+        sessionExists: !!req.session,
+        sessionId: req.sessionID,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date().toISOString()
+      });
+      return res.redirect(302, "/auth/login?expired=1");
     }
 
     console.log("認証済みユーザー:", req.session.user.role);

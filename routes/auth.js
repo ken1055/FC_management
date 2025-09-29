@@ -38,9 +38,16 @@ function verifyPassword(inputPassword, storedPassword) {
 // ログイン画面
 router.get("/login", (req, res) => {
   try {
+    let message = req.query.message;
+    
+    // セッション期限切れの場合のメッセージ
+    if (req.query.expired === "1") {
+      message = "セッションの有効期限が切れました。再度ログインしてください。";
+    }
+    
     res.render("login_standalone", {
       error: null,
-      message: req.query.message,
+      message: message,
     });
   } catch (error) {
     console.error("Login page error:", error);
