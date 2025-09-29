@@ -1,6 +1,16 @@
-const sqlite3 = require("sqlite3").verbose();
+// Vercel環境での緊急修正
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+
+// Vercel環境では早期リターン
+if (isVercel) {
+  console.log("Vercel環境: db.js をスキップ（Supabase使用）");
+  module.exports = null;
+  return;
+}
+
 const path = require("path");
 const crypto = require("crypto");
+const sqlite3 = require("sqlite3").verbose();
 const {
   getSupabaseClient,
   isSupabaseConfigured,
