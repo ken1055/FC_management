@@ -12,8 +12,13 @@ class SessionMonitor {
       activeSessions: new Set(),
     };
 
-    // Vercel環境の検出
-    this.isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+    // Vercel環境の検出（複数の方法で確実に検出）
+    this.isVercel = 
+      process.env.VERCEL === "1" || 
+      process.env.VERCEL_ENV || 
+      process.env.NOW_REGION || 
+      process.cwd().startsWith("/var/task") ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME;
     
     // ログファイルパス（Vercel環境では/tmp使用）
     this.logPath = this.isVercel 
@@ -84,18 +89,23 @@ class SessionMonitor {
 
   // セッション検証の監視
   onSessionValidation(sessionId, isValid, userData) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      event: 'SESSION_VALIDATION',
-      sessionId: sessionId,
-      isValid: isValid,
-      userId: userData?.id,
-      userRole: userData?.role
-    };
-    
-    if (!isValid) {
-      console.log('⚠️ セッション検証失敗:', logEntry);
-      this.writeLog(logEntry);
+    try {
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        event: 'SESSION_VALIDATION',
+        sessionId: sessionId,
+        isValid: isValid,
+        userId: userData?.id,
+        userRole: userData?.role
+      };
+      
+      if (!isValid) {
+        console.log('⚠️ セッション検証失敗:', logEntry);
+        this.writeLog(logEntry);
+      }
+    } catch (error) {
+      // セッション検証エラーでもアプリケーションを停止させない
+      console.error('セッション検証ログエラー:', error.message);
     }
   }
 
@@ -121,22 +131,33 @@ class SessionMonitor {
     try {
       const logLine = JSON.stringify(logEntry) + "\n";
       
-      // Vercel環境では書き込みを制限（読み取り専用ファイルシステム）
-      if (this.isVercel) {
-        // コンソールログのみ
-        console.log("SESSION_LOG:", logLine.trim());
-      } else {
-        // ローカル環境ではファイル書き込み
-        fs.appendFileSync(this.logPath, logLine, "utf8");
+      // 常にコンソールログを出力
+      console.log("SESSION_LOG:", logLine.trim());
+      
+      // ファイル書き込みは安全に実行（エラーが発生しても続行）
+      try {
+        // 書き込み可能かチェック
+        if (!this.isVercel && process.env.NODE_ENV !== "production") {
+          fs.appendFileSync(this.logPath, logLine, "utf8");
+        }
+      } catch (fileError) {
+        // ファイル書き込みエラーは無視（コンソールログで十分）
+        // console.error("ファイル書き込みスキップ:", fileError.code);
       }
     } catch (error) {
-      console.error("ログ書き込みエラー:", error);
+      // 最低限のエラーログ
+      console.error("ログ処理エラー:", error.message);
     }
   }
 
   // Express ミドルウェアとして使用
   middleware() {
     return (req, res, next) => {
+      // 緊急時にセッション監視を無効化
+      if (process.env.DISABLE_SESSION_MONITOR === "true") {
+        return next();
+      }
+
       const originalSessionId = req.sessionID;
       
       // セッション検証
