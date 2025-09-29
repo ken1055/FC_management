@@ -4,7 +4,7 @@
   "description": "FC店舗管理システム",
   "main": "server.js",
   "engines": {
-    "node": "18.x"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node server.js",
