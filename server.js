@@ -122,7 +122,7 @@ try {
   app.use(
     session({
       secret: sessionSecret || "emergency-fallback-secret-key-for-vercel",
-      resave: true, // Vercelでのセッション保持を改善
+      resave: false, // セッション変更時のみ保存
       saveUninitialized: false,
       store: new MemoryStore({
         checkPeriod: 86400000, // 24時間

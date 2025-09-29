@@ -147,7 +147,20 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("Admin session created:", req.session.user);
-      return res.redirect("/");
+      
+      // セッション保存を明示的に実行
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.send(`
+            <h1>セッション保存エラー</h1>
+            <p>エラー: ${err.message}</p>
+            <a href="/auth/login">ログインに戻る</a>
+          `);
+        }
+        console.log("Admin session saved successfully");
+        return res.redirect("/");
+      });
     }
 
     // 店舗ユーザーテーブルから検索
@@ -176,7 +189,20 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("User session created:", req.session.user);
-      return res.redirect("/");
+      
+      // セッション保存を明示的に実行
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.send(`
+            <h1>セッション保存エラー</h1>
+            <p>エラー: ${err.message}</p>
+            <a href="/auth/login">ログインに戻る</a>
+          `);
+        }
+        console.log("User session saved successfully");
+        return res.redirect("/");
+      });
     }
 
     console.log("Invalid credentials");
