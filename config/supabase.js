@@ -1,8 +1,12 @@
 const { createClient } = require("@supabase/supabase-js");
 
-// Supabase設定
+// Supabase設定（Vercel最適化）
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Vercel環境の検出
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 
 let supabase = null;
 

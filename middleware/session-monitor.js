@@ -1,6 +1,6 @@
-// セッション監視ミドルウェア
-const fs = require('fs');
-const path = require('path');
+// セッション監視ミドルウェア（Vercel最適化）
+const fs = require("fs");
+const path = require("path");
 
 class SessionMonitor {
   constructor() {
@@ -9,16 +9,23 @@ class SessionMonitor {
       destroyed: 0,
       errors: 0,
       lastActivity: new Date(),
-      activeSessions: new Set()
+      activeSessions: new Set(),
     };
+
+    // Vercel環境の検出
+    this.isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
     
-    // 統計ログファイルのパス
-    this.logPath = path.join(process.cwd(), 'session-monitor.log');
-    
-    // 定期的な統計出力（5分ごと）
-    setInterval(() => {
-      this.logStats();
-    }, 5 * 60 * 1000);
+    // ログファイルパス（Vercel環境では/tmp使用）
+    this.logPath = this.isVercel 
+      ? path.join("/tmp", "session-monitor.log")
+      : path.join(process.cwd(), "session-monitor.log");
+
+    // Vercel環境では定期実行を制限（関数寿命が短いため）
+    if (!this.isVercel) {
+      setInterval(() => {
+        this.logStats();
+      }, 5 * 60 * 1000);
+    }
   }
 
   // セッション作成の監視
@@ -109,13 +116,21 @@ class SessionMonitor {
     this.writeLog(stats);
   }
 
-  // ログファイルへの書き込み
+  // ログファイルへの書き込み（Vercel最適化）
   writeLog(logEntry) {
     try {
-      const logLine = JSON.stringify(logEntry) + '\n';
-      fs.appendFileSync(this.logPath, logLine, 'utf8');
+      const logLine = JSON.stringify(logEntry) + "\n";
+      
+      // Vercel環境では書き込みを制限（読み取り専用ファイルシステム）
+      if (this.isVercel) {
+        // コンソールログのみ
+        console.log("SESSION_LOG:", logLine.trim());
+      } else {
+        // ローカル環境ではファイル書き込み
+        fs.appendFileSync(this.logPath, logLine, "utf8");
+      }
     } catch (error) {
-      console.error('ログ書き込みエラー:', error);
+      console.error("ログ書き込みエラー:", error);
     }
   }
 

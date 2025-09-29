@@ -1,5 +1,7 @@
-// 環境変数を読み込み
-require("dotenv").config();
+// 環境変数を読み込み（Vercel最適化）
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
 
 const express = require("express");
 const session = require("express-session");
@@ -131,12 +133,13 @@ try {
         ttl: 7 * 24 * 60 * 60 * 1000, // 7日間のTTL
         dispose: (key, session) => {
           // セッション破棄時の監視
-          sessionMonitor.onSessionDestroy(key, 'ttl_expired');
+          sessionMonitor.onSessionDestroy(key, "ttl_expired");
         },
-        stale: false // 期限切れセッションを即座に削除
+        stale: false, // 期限切れセッションを即座に削除
       }),
       cookie: {
-        secure: process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS, // 本番環境でHTTPS必須
+        secure:
+          process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS, // 本番環境でHTTPS必須
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7日間
         httpOnly: true,
         sameSite: "lax",
@@ -145,7 +148,7 @@ try {
     })
   );
   console.log("セッション設定完了");
-  
+
   // セッション監視ミドルウェアの追加
   app.use(sessionMonitor.middleware());
   console.log("セッション監視開始");
@@ -389,10 +392,16 @@ app.get("/api/store/statistics", async (req, res) => {
       console.log("顧客数結果:", customerCount);
 
       // 当月の売上を取得（正しい月末日を計算）
-      const startDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+      const startDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-01`;
       const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate(); // 月末日を正確に取得
-      const endDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
-      
+      const endDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-${String(lastDayOfMonth).padStart(2, "0")}`;
+
       console.log("日付範囲:", { startDate, endDate, lastDayOfMonth });
 
       const { data: salesData, error: salesError } = await db
@@ -448,10 +457,16 @@ app.get("/api/store/statistics", async (req, res) => {
       console.log("全店舗顧客数結果:", customerCount);
 
       // 当月の全店舗売上を取得（正しい月末日を計算）
-      const startDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+      const startDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-01`;
       const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate(); // 月末日を正確に取得
-      const endDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
-      
+      const endDate = `${currentYear}-${String(currentMonth).padStart(
+        2,
+        "0"
+      )}-${String(lastDayOfMonth).padStart(2, "0")}`;
+
       console.log("全店舗日付範囲:", { startDate, endDate, lastDayOfMonth });
 
       const { data: salesData, error: salesError } = await db
