@@ -11,8 +11,35 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-# Database files (開発用のローカルデータベースを除外する場合)
-# agency.db
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Development/Test files
+*_test.js
+*_debug.js
+debug_*.js
+test_*.js
+simple_*.js
+check_*.js
+quick_*.js
+
+# Cookie files
+*cookies*.txt
+
+# Export/Backup files
+database_exports/
+*.backup
+*_backup.*
+database_migration_*.sql
+supabase_migration_*.sql
+
+# Temporary test files
+test_output.*
+*-test.*
+deploy-test.*
+webhook-test.*
 
 # Logs
 logs
