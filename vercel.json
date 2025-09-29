@@ -14,8 +14,7 @@
     }
   ],
   "env": {
-    "NODE_ENV": "production",
-    "TZ": "Asia/Tokyo"
+    "NODE_ENV": "production"
   },
   "headers": [
     {
@@ -35,6 +34,5 @@
         }
       ]
     }
-  ],
-  "regions": ["nrt1"]
+  ]
 }
