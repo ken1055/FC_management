@@ -1,49 +1,14 @@
-# Vercel デプロイ時に無視するファイル
-
-# 開発用ファイル
+node_modules
+.git
+*.log
+session-monitor.log
 .env
 .env.local
-.env.development
-env.example
-
-# ログファイル
-*.log
-logs/
-
-# データベースファイル（一時的）
-*.db
-*.sqlite
-*.sqlite3
-
-# Node.js
-node_modules/
-npm-debug.log*
-
-# 開発用設定
-.vscode/
-.idea/
-
-# OS生成ファイル
 .DS_Store
-Thumbs.db
-
-# Git
-.git/
-.gitignore
-
-# 他のデプロイサービス用設定（使用しない）
-railway.json
-render.yaml
-netlify.toml
-_redirects
-
-# テスト
-test/
-coverage/
-
-# 一時ファイル
-temp/
-tmp/
-
-# 競合する特定のファイルのみを除外
-public/index.html 
+uploads/materials/*
+!uploads/materials/.gitkeep
+*.md
+!README.md
+supabase/
+railway.toml
+railway.env.example

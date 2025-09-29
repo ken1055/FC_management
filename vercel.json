@@ -1,21 +1,7 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
-    }
-  ],
   "env": {
-    "FAST_INIT": "true",
-    "NODE_ENV": "production",
-    "FORCE_RELOAD": "v4-db-all-deleted"
+    "NODE_ENV": "production"
   },
   "headers": [
     {
@@ -23,31 +9,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "private, no-cache, no-store, must-revalidate, max-age=0"
-        },
-        {
-          "key": "CDN-Cache-Control",
-          "value": "private, no-cache, no-store, must-revalidate, max-age=0"
-        },
-        {
-          "key": "Vercel-CDN-Cache-Control",
-          "value": "private, no-cache, no-store, must-revalidate, max-age=0"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
-        },
-        {
-          "key": "ETag",
-          "value": "\"force-reload-v4-db-all-deleted\""
-        },
-        {
-          "key": "Last-Modified",
-          "value": "Thu, 01 Jan 1970 00:00:00 GMT"
+          "value": "no-cache, no-store, must-revalidate"
         }
       ]
     }
