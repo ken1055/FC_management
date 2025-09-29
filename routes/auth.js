@@ -38,16 +38,9 @@ function verifyPassword(inputPassword, storedPassword) {
 // ログイン画面
 router.get("/login", (req, res) => {
   try {
-    let message = req.query.message;
-    
-    // セッション期限切れの場合のメッセージ
-    if (req.query.expired === "1") {
-      message = "セッションの有効期限が切れました。再度ログインしてください。";
-    }
-    
     res.render("login_standalone", {
       error: null,
-      message: message,
+      message: req.query.message,
     });
   } catch (error) {
     console.error("Login page error:", error);
@@ -147,20 +140,7 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("Admin session created:", req.session.user);
-      
-      // セッション保存を明示的に実行
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
-          return res.send(`
-            <h1>セッション保存エラー</h1>
-            <p>エラー: ${err.message}</p>
-            <a href="/auth/login">ログインに戻る</a>
-          `);
-        }
-        console.log("Admin session saved successfully");
-        return res.redirect("/");
-      });
+      return res.redirect("/");
     }
 
     // 店舗ユーザーテーブルから検索
@@ -189,20 +169,7 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("User session created:", req.session.user);
-      
-      // セッション保存を明示的に実行
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
-          return res.send(`
-            <h1>セッション保存エラー</h1>
-            <p>エラー: ${err.message}</p>
-            <a href="/auth/login">ログインに戻る</a>
-          `);
-        }
-        console.log("User session saved successfully");
-        return res.redirect("/");
-      });
+      return res.redirect("/");
     }
 
     console.log("Invalid credentials");
