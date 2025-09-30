@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const { isSupabaseConfigured } = require("../config/database");
+const { getSupabaseClient } = require("../config/supabase");
 const bcrypt = require("bcryptjs");
 const {
   sendProfileRegistrationNotification,
@@ -9,6 +10,10 @@ const {
   sendAgencyRegistrationNotification, // 新規追加
   getAdminEmails,
 } = require("../config/email");
+
+// Vercel環境の検出
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+const supabase = isVercel ? getSupabaseClient() : null;
 
 function requireRole(roles) {
   return (req, res, next) => {
@@ -1540,7 +1545,7 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
 });
 
 // 代理店プロフィール表示
-router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
+router.get("/profile/:id", requireRole(["admin", "agency"]), async (req, res) => {
   const agencyId = req.params.id;
 
   // 代理店ユーザーは自分のプロフィールのみ閲覧可能
@@ -1550,8 +1555,36 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
     }
   }
 
-  db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, agency) => {
-    if (err || !agency) return res.status(404).send("代理店が見つかりません");
+  try {
+    let agency;
+    
+    if (isVercel && supabase) {
+      // Vercel + Supabase環境
+      console.log("Supabase環境で代理店プロフィール取得");
+      const { data, error } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("id", agencyId)
+        .single();
+
+      if (error || !data) {
+        console.error("Supabase代理店取得エラー:", error);
+        return res.status(404).send("代理店が見つかりません");
+      }
+      
+      agency = data;
+    } else {
+      // ローカル環境（SQLite）
+      const agencyResult = await new Promise((resolve, reject) => {
+        db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      });
+      
+      if (!agencyResult) return res.status(404).send("代理店が見つかりません");
+      agency = agencyResult;
+    }
 
     const handleRender = (productsList, groupName) => {
       agency.products = (productsList || []).map((p) => ({
@@ -1616,7 +1649,10 @@ router.get("/profile/:id", requireRole(["admin", "agency"]), (req, res) => {
     fetchProducts((productsList) => {
       fetchGroupName((groupName) => handleRender(productsList, groupName));
     });
-  });
+  } catch (error) {
+    console.error("代理店プロフィール表示エラー:", error);
+    res.status(500).send("システムエラーが発生しました");
+  }
 });
 
 // 代理店プロフィール編集フォーム

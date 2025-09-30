@@ -108,9 +108,9 @@ router.get("/api/official-line-url", async (req, res) => {
       // Vercel + Supabase環境
       console.log("Supabase環境で公式LINE URL取得");
       const { data, error } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key_name', 'official_line_url')
+        .from("system_settings")
+        .select("value")
+        .eq("key_name", "official_line_url")
         .single();
 
       if (error) {
