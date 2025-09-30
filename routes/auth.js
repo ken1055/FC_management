@@ -116,9 +116,9 @@ async function handleSupabaseLogin(email, password, req, res) {
   try {
     // 管理者テーブルから検索
     const { data: admins, error: adminError } = await db
-      .from('admins')
-      .select('*')
-      .eq('email', email)
+      .from("admins")
+      .select("*")
+      .eq("email", email)
       .limit(1);
 
     if (adminError) {
@@ -130,7 +130,11 @@ async function handleSupabaseLogin(email, password, req, res) {
       `);
     }
 
-    if (admins && admins.length > 0 && verifyPassword(password, admins[0].password)) {
+    if (
+      admins &&
+      admins.length > 0 &&
+      verifyPassword(password, admins[0].password)
+    ) {
       console.log("Admin found, creating session");
       req.session.user = {
         id: admins[0].id,
@@ -140,7 +144,7 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("Admin session created:", req.session.user);
-      
+
       // Vercel環境でセッションを確実に保存
       req.session.save((err) => {
         if (err) {
@@ -152,6 +156,8 @@ async function handleSupabaseLogin(email, password, req, res) {
           `);
         }
         console.log("Admin session saved successfully");
+        console.log("保存後のセッション内容:", JSON.stringify(req.session, null, 2));
+        console.log("保存後のセッションID:", req.sessionID);
         return res.redirect("/");
       });
       return;
@@ -159,9 +165,9 @@ async function handleSupabaseLogin(email, password, req, res) {
 
     // 店舗ユーザーテーブルから検索
     const { data: users, error: userError } = await db
-      .from('users')
-      .select('*')
-      .eq('email', email)
+      .from("users")
+      .select("*")
+      .eq("email", email)
       .limit(1);
 
     if (userError) {
@@ -173,7 +179,11 @@ async function handleSupabaseLogin(email, password, req, res) {
       `);
     }
 
-    if (users && users.length > 0 && verifyPassword(password, users[0].password)) {
+    if (
+      users &&
+      users.length > 0 &&
+      verifyPassword(password, users[0].password)
+    ) {
       console.log("User found, creating session");
       req.session.user = {
         id: users[0].id,
@@ -183,7 +193,7 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("User session created:", req.session.user);
-      
+
       // Vercel環境でセッションを確実に保存
       req.session.save((err) => {
         if (err) {
@@ -195,6 +205,8 @@ async function handleSupabaseLogin(email, password, req, res) {
           `);
         }
         console.log("User session saved successfully");
+        console.log("保存後のセッション内容:", JSON.stringify(req.session, null, 2));
+        console.log("保存後のセッションID:", req.sessionID);
         return res.redirect("/");
       });
       return;
@@ -206,7 +218,6 @@ async function handleSupabaseLogin(email, password, req, res) {
       <p>メールアドレスまたはパスワードが正しくありません</p>
       <a href="/auth/login">ログインに戻る</a>
     `);
-
   } catch (error) {
     console.error("Supabase login error:", error);
     return res.send(`
@@ -216,7 +227,6 @@ async function handleSupabaseLogin(email, password, req, res) {
     `);
   }
 }
-
 
 // ログアウト
 router.get("/logout", (req, res) => {

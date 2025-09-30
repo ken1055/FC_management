@@ -511,6 +511,8 @@ app.get("/", (req, res) => {
   console.log("リクエストURL:", req.url);
   console.log("Vercel環境:", isVercel);
   console.log("セッション存在:", !!req.session);
+  console.log("セッションID:", req.sessionID);
+  console.log("セッション内容:", JSON.stringify(req.session, null, 2));
   console.log("ユーザー情報:", req.session?.user);
 
   // 強制的にキャッシュを無効化
