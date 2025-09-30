@@ -38,10 +38,19 @@ function verifyPassword(inputPassword, storedPassword) {
 // ログイン画面
 router.get("/login", (req, res) => {
   try {
+    console.log("=== ログイン画面リクエスト ===");
+    console.log("時刻:", new Date().toISOString());
+    console.log("ユーザーエージェント:", req.headers["user-agent"]);
+    console.log("セッション存在:", !!req.session);
+    console.log("セッションID:", req.sessionID);
+    console.log("login_standaloneテンプレートをレンダリング中...");
+    
     res.render("login_standalone", {
       error: null,
       message: req.query.message,
     });
+    
+    console.log("login_standaloneテンプレートレンダリング完了");
   } catch (error) {
     console.error("Login page error:", error);
     res.send(`
@@ -85,7 +94,13 @@ router.get("/login", (req, res) => {
 
 // ログイン処理
 router.post("/login", (req, res) => {
+  console.log("=== ログイン処理開始 ===");
+  console.log("時刻:", new Date().toISOString());
   console.log("Login attempt:", req.body);
+  console.log("Content-Type:", req.headers["content-type"]);
+  console.log("セッション存在:", !!req.session);
+  console.log("セッションID:", req.sessionID);
+  
   const { email, password } = req.body;
 
   // 入力値検証
@@ -156,7 +171,10 @@ async function handleSupabaseLogin(email, password, req, res) {
           `);
         }
         console.log("Admin session saved successfully");
-        console.log("保存後のセッション内容:", JSON.stringify(req.session, null, 2));
+        console.log(
+          "保存後のセッション内容:",
+          JSON.stringify(req.session, null, 2)
+        );
         console.log("保存後のセッションID:", req.sessionID);
         return res.redirect("/");
       });
@@ -205,7 +223,10 @@ async function handleSupabaseLogin(email, password, req, res) {
           `);
         }
         console.log("User session saved successfully");
-        console.log("保存後のセッション内容:", JSON.stringify(req.session, null, 2));
+        console.log(
+          "保存後のセッション内容:",
+          JSON.stringify(req.session, null, 2)
+        );
         console.log("保存後のセッションID:", req.sessionID);
         return res.redirect("/");
       });
