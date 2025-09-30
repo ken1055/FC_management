@@ -2,6 +2,11 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const { isSupabaseConfigured } = require("../config/database");
+const { getSupabaseClient } = require("../config/supabase");
+
+// Vercel環境の検出
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+const supabase = isVercel ? getSupabaseClient() : null;
 
 // 認証チェック関数
 function requireAuth(req, res, next) {
@@ -130,7 +135,7 @@ router.get("/list", requireAuth, (req, res) => {
 });
 
 // 店舗専用顧客一覧表示
-router.get("/store", requireAuth, (req, res) => {
+router.get("/store", requireAuth, async (req, res) => {
   const isAdmin = req.session.user.role === "admin";
 
   // 管理者の場合は管理者用ページにリダイレクト
@@ -138,44 +143,99 @@ router.get("/store", requireAuth, (req, res) => {
     return res.redirect("/customers/list");
   }
 
-  const searchTerm = req.query.search || "";
-  const storeId = req.session.user.store_id;
+  try {
+    const searchTerm = req.query.search || "";
+    const storeId = req.session.user.store_id;
 
-  let whereConditions = ["c.store_id = ?"];
-  let queryParams = [storeId];
+    if (isVercel && supabase) {
+      // Vercel + Supabase環境
+      console.log("Supabase環境で店舗専用顧客一覧取得");
+      console.log("Store ID:", storeId, "Search Term:", searchTerm);
 
-  if (searchTerm) {
-    whereConditions.push(
-      "(c.name LIKE ? OR c.customer_code LIKE ? OR c.email LIKE ?)"
-    );
-    queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
-  }
+      let query = supabase
+        .from('customers')
+        .select(`
+          *,
+          stores!inner(name)
+        `)
+        .eq('store_id', storeId)
+        .order('created_at', { ascending: false });
 
-  const query = `
-    SELECT c.*, s.name as store_name
-    FROM customers c
-    LEFT JOIN stores s ON c.store_id = s.id
-    WHERE ${whereConditions.join(" AND ")}
-    ORDER BY c.created_at DESC
-  `;
+      // 検索条件を追加
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      }
 
-  db.all(query, queryParams, (err, customers) => {
-    if (err) {
-      console.error("顧客一覧取得エラー:", err);
-      return res.status(500).render("error", {
-        message: "顧客一覧の取得に失敗しました",
+      const { data: customers, error } = await query;
+
+      if (error) {
+        console.error("Supabase顧客一覧取得エラー:", error);
+        return res.status(500).render("error", {
+          message: "顧客一覧の取得に失敗しました",
+          session: req.session,
+        });
+      }
+
+      // データを整形（store_nameを追加）
+      const formattedCustomers = customers.map(customer => ({
+        ...customer,
+        store_name: customer.stores?.name || null
+      }));
+
+      console.log("取得した顧客数:", formattedCustomers.length);
+
+      res.render("customers_store_list", {
+        customers: formattedCustomers || [],
+        searchTerm: searchTerm,
         session: req.session,
+        title: "顧客一覧",
+        isSupabase: isSupabaseConfigured(),
+      });
+    } else {
+      // ローカル環境（SQLite）
+      let whereConditions = ["c.store_id = ?"];
+      let queryParams = [storeId];
+
+      if (searchTerm) {
+        whereConditions.push(
+          "(c.name LIKE ? OR c.customer_code LIKE ? OR c.email LIKE ?)"
+        );
+        queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+      }
+
+      const query = `
+        SELECT c.*, s.name as store_name
+        FROM customers c
+        LEFT JOIN stores s ON c.store_id = s.id
+        WHERE ${whereConditions.join(" AND ")}
+        ORDER BY c.created_at DESC
+      `;
+
+      db.all(query, queryParams, (err, customers) => {
+        if (err) {
+          console.error("顧客一覧取得エラー:", err);
+          return res.status(500).render("error", {
+            message: "顧客一覧の取得に失敗しました",
+            session: req.session,
+          });
+        }
+
+        res.render("customers_store_list", {
+          customers: customers || [],
+          searchTerm: searchTerm,
+          session: req.session,
+          title: "顧客一覧",
+          isSupabase: isSupabaseConfigured(),
+        });
       });
     }
-
-    res.render("customers_store_list", {
-      customers: customers || [],
-      searchTerm: searchTerm,
+  } catch (error) {
+    console.error("店舗専用顧客一覧エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
       session: req.session,
-      title: "顧客一覧",
-      isSupabase: isSupabaseConfigured(),
     });
-  });
+  }
 });
 
 // 顧客詳細表示
