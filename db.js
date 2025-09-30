@@ -22,8 +22,7 @@ function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-// 環境の検出
-const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+// 環境の検出（isVercelは上部で既に宣言済み）
 const isRailway =
   process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_ENVIRONMENT;
 const databaseUrl = process.env.DATABASE_URL;

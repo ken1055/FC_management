@@ -1,4 +1,4 @@
-// Vercel API Route - メインアプリケーションのプロキシ（デバッグ強化）
+// Vercel API Route - メインアプリケーションのプロキシ（修正版）
 console.log("=== API Route 開始 ===");
 console.log("Timestamp:", new Date().toISOString());
 console.log("Environment:", {
@@ -31,7 +31,8 @@ try {
     res.status(500).json({
       error: "Server initialization failed",
       message: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      stack: error.stack
     });
   });
   
