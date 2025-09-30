@@ -138,8 +138,7 @@ try {
         stale: false, // 期限切れセッションを即座に削除
       }),
       cookie: {
-        secure:
-          process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS, // 本番環境でHTTPS必須
+        secure: false, // Vercel環境での緊急修正 - セッション永続化問題対応
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7日間
         httpOnly: true,
         sameSite: "lax",

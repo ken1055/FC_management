@@ -44,12 +44,12 @@ router.get("/login", (req, res) => {
     console.log("セッション存在:", !!req.session);
     console.log("セッションID:", req.sessionID);
     console.log("login_standaloneテンプレートをレンダリング中...");
-    
+
     res.render("login_standalone", {
       error: null,
       message: req.query.message,
     });
-    
+
     console.log("login_standaloneテンプレートレンダリング完了");
   } catch (error) {
     console.error("Login page error:", error);
@@ -100,7 +100,7 @@ router.post("/login", (req, res) => {
   console.log("Content-Type:", req.headers["content-type"]);
   console.log("セッション存在:", !!req.session);
   console.log("セッションID:", req.sessionID);
-  
+
   const { email, password } = req.body;
 
   // 入力値検証
@@ -228,6 +228,8 @@ async function handleSupabaseLogin(email, password, req, res) {
           JSON.stringify(req.session, null, 2)
         );
         console.log("保存後のセッションID:", req.sessionID);
+        console.log("Cookieヘッダー:", res.getHeaders()["set-cookie"]);
+        console.log("リダイレクト実行中...");
         return res.redirect("/");
       });
       return;
