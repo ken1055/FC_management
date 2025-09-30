@@ -140,7 +140,21 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("Admin session created:", req.session.user);
-      return res.redirect("/");
+      
+      // Vercel環境でセッションを確実に保存
+      req.session.save((err) => {
+        if (err) {
+          console.error("Admin session save error:", err);
+          return res.send(`
+            <h1>セッション保存エラー</h1>
+            <p>セッションの保存に失敗しました</p>
+            <a href="/auth/login">ログインに戻る</a>
+          `);
+        }
+        console.log("Admin session saved successfully");
+        return res.redirect("/");
+      });
+      return;
     }
 
     // 店舗ユーザーテーブルから検索
@@ -169,7 +183,21 @@ async function handleSupabaseLogin(email, password, req, res) {
       };
 
       console.log("User session created:", req.session.user);
-      return res.redirect("/");
+      
+      // Vercel環境でセッションを確実に保存
+      req.session.save((err) => {
+        if (err) {
+          console.error("User session save error:", err);
+          return res.send(`
+            <h1>セッション保存エラー</h1>
+            <p>セッションの保存に失敗しました</p>
+            <a href="/auth/login">ログインに戻る</a>
+          `);
+        }
+        console.log("User session saved successfully");
+        return res.redirect("/");
+      });
+      return;
     }
 
     console.log("Invalid credentials");
