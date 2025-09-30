@@ -1,6 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+const { getSupabaseClient } = require("../config/supabase");
+
+// Vercel環境の検出
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+const supabase = isVercel ? getSupabaseClient() : null;
 
 // 権限チェック関数
 function requireRole(allowedRoles) {
@@ -93,29 +98,58 @@ router.post("/official-line", requireRole(["admin"]), (req, res) => {
 });
 
 // 公式LINE URL取得API（代理店用）
-router.get("/api/official-line-url", (req, res) => {
+router.get("/api/official-line-url", async (req, res) => {
   console.log("=== 公式LINE URL API呼び出し ===");
   console.log("リクエスト元:", req.headers["user-agent"]);
   console.log("セッション情報:", req.session?.user?.role);
 
-  db.get(
-    "SELECT value FROM settings WHERE key_name = ?",
-    ["official_line_url"],
-    (err, row) => {
-      if (err) {
-        console.error("設定取得エラー:", err);
+  try {
+    if (isVercel && supabase) {
+      // Vercel + Supabase環境
+      console.log("Supabase環境で公式LINE URL取得");
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key_name', 'official_line_url')
+        .single();
+
+      if (error) {
+        console.error("Supabase設定取得エラー:", error);
         return res.status(500).json({ error: "設定取得エラー" });
       }
 
-      console.log("データベース取得結果:", row);
-      const url = row ? row.value : null;
+      console.log("データベース取得結果:", data);
+      const url = data ? data.value : null;
       console.log("返送するURL:", url);
 
       res.json({
         url: url,
       });
+    } else {
+      // ローカル環境（SQLite）
+      db.get(
+        "SELECT value FROM settings WHERE key_name = ?",
+        ["official_line_url"],
+        (err, row) => {
+          if (err) {
+            console.error("設定取得エラー:", err);
+            return res.status(500).json({ error: "設定取得エラー" });
+          }
+
+          console.log("データベース取得結果:", row);
+          const url = row ? row.value : null;
+          console.log("返送するURL:", url);
+
+          res.json({
+            url: url,
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error("公式LINE URL取得エラー:", error);
+    res.status(500).json({ error: "システムエラー" });
+  }
 });
 
 module.exports = router;
