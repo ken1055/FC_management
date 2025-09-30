@@ -153,17 +153,21 @@ router.get("/store", requireAuth, async (req, res) => {
       console.log("Store ID:", storeId, "Search Term:", searchTerm);
 
       let query = supabase
-        .from('customers')
-        .select(`
+        .from("customers")
+        .select(
+          `
           *,
           stores!inner(name)
-        `)
-        .eq('store_id', storeId)
-        .order('created_at', { ascending: false });
+        `
+        )
+        .eq("store_id", storeId)
+        .order("created_at", { ascending: false });
 
       // 検索条件を追加
       if (searchTerm) {
-        query = query.or(`name.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        query = query.or(
+          `name.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
+        );
       }
 
       const { data: customers, error } = await query;
@@ -177,9 +181,9 @@ router.get("/store", requireAuth, async (req, res) => {
       }
 
       // データを整形（store_nameを追加）
-      const formattedCustomers = customers.map(customer => ({
+      const formattedCustomers = customers.map((customer) => ({
         ...customer,
-        store_name: customer.stores?.name || null
+        store_name: customer.stores?.name || null,
       }));
 
       console.log("取得した顧客数:", formattedCustomers.length);
@@ -200,7 +204,11 @@ router.get("/store", requireAuth, async (req, res) => {
         whereConditions.push(
           "(c.name LIKE ? OR c.customer_code LIKE ? OR c.email LIKE ?)"
         );
-        queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        queryParams.push(
+          `%${searchTerm}%`,
+          `%${searchTerm}%`,
+          `%${searchTerm}%`
+        );
       }
 
       const query = `
@@ -239,43 +247,88 @@ router.get("/store", requireAuth, async (req, res) => {
 });
 
 // 顧客詳細表示
-router.get("/detail/:id", requireAuth, (req, res) => {
+router.get("/detail/:id", requireAuth, async (req, res) => {
   const customerId = req.params.id;
   const isAdmin = req.session.user.role === "admin";
 
-  let query, params;
-  if (isAdmin) {
-    query = `
-      SELECT c.*, s.name as store_name 
-      FROM customers c 
-      LEFT JOIN stores s ON c.store_id = s.id 
-      WHERE c.id = ?
-    `;
-    params = [customerId];
-  } else {
-    query = `
-      SELECT c.*, s.name as store_name 
-      FROM customers c 
-      LEFT JOIN stores s ON c.store_id = s.id 
-      WHERE c.id = ? AND c.store_id = ?
-    `;
-    params = [customerId, req.session.user.store_id];
-  }
+  try {
+    let customer;
 
-  db.get(query, params, (err, customer) => {
-    if (err) {
-      console.error("顧客詳細取得エラー:", err);
-      return res.status(500).render("error", {
-        message: "顧客詳細の取得に失敗しました",
-        session: req.session,
-      });
-    }
+    if (isVercel && supabase) {
+      // Vercel + Supabase環境
+      console.log("Supabase環境で顧客詳細取得");
+      
+      let query = supabase
+        .from('customers')
+        .select(`
+          *,
+          stores!inner(name)
+        `)
+        .eq('id', customerId);
 
-    if (!customer) {
-      return res.status(404).render("error", {
-        message: "顧客が見つかりません",
-        session: req.session,
+      // 管理者以外は自分の店舗のみ
+      if (!isAdmin) {
+        query = query.eq('store_id', req.session.user.store_id);
+      }
+
+      const { data, error } = await query.single();
+
+      if (error) {
+        console.error("Supabase顧客詳細取得エラー:", error);
+        return res.status(500).render("error", {
+          message: "顧客詳細の取得に失敗しました",
+          session: req.session,
+        });
+      }
+
+      if (!data) {
+        return res.status(404).render("error", {
+          message: "顧客が見つかりません",
+          session: req.session,
+        });
+      }
+
+      // データを整形
+      customer = {
+        ...data,
+        store_name: data.stores?.name || null
+      };
+    } else {
+      // ローカル環境（SQLite）
+      let query, params;
+      if (isAdmin) {
+        query = `
+          SELECT c.*, s.name as store_name 
+          FROM customers c 
+          LEFT JOIN stores s ON c.store_id = s.id 
+          WHERE c.id = ?
+        `;
+        params = [customerId];
+      } else {
+        query = `
+          SELECT c.*, s.name as store_name 
+          FROM customers c 
+          LEFT JOIN stores s ON c.store_id = s.id 
+          WHERE c.id = ? AND c.store_id = ?
+        `;
+        params = [customerId, req.session.user.store_id];
+      }
+
+      const customerResult = await new Promise((resolve, reject) => {
+        db.get(query, params, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
       });
+
+      if (!customerResult) {
+        return res.status(404).render("error", {
+          message: "顧客が見つかりません",
+          session: req.session,
+        });
+      }
+
+      customer = customerResult;
     }
 
     res.render("customers_detail", {
@@ -284,7 +337,13 @@ router.get("/detail/:id", requireAuth, (req, res) => {
       title: "顧客詳細",
       isAdmin: isAdmin,
     });
-  });
+  } catch (error) {
+    console.error("顧客詳細表示エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
+      session: req.session,
+    });
+  }
 });
 
 // 店舗専用顧客新規登録フォーム表示
@@ -304,37 +363,56 @@ router.get("/store/new", requireAuth, (req, res) => {
 });
 
 // 顧客登録フォーム表示
-router.get("/new", requireAuth, (req, res) => {
+router.get("/new", requireAuth, async (req, res) => {
   const isAdmin = req.session.user.role === "admin";
 
-  if (isAdmin) {
-    // 管理者の場合は店舗一覧も取得
-    db.all("SELECT id, name FROM stores ORDER BY name", [], (err, stores) => {
-      if (err) {
-        console.error("店舗一覧取得エラー:", err);
-        return res.status(500).render("error", {
-          message: "店舗一覧の取得に失敗しました",
-          session: req.session,
-        });
-      }
+  try {
+    let stores = [];
 
-      res.render("customers_form", {
-        customer: null,
-        stores: stores || [],
-        session: req.session,
-        title: "顧客登録",
-        isAdmin: isAdmin,
-        isSupabase: isSupabaseConfigured(),
-      });
-    });
-  } else {
+    if (isAdmin) {
+      if (isVercel && supabase) {
+        // Vercel + Supabase環境
+        console.log("Supabase環境で店舗一覧取得");
+        const { data, error } = await supabase
+          .from("stores")
+          .select("id, name")
+          .order("name");
+
+        if (error) {
+          console.error("Supabase店舗一覧取得エラー:", error);
+          return res.status(500).render("error", {
+            message: "店舗一覧の取得に失敗しました",
+            session: req.session,
+          });
+        }
+
+        stores = data || [];
+      } else {
+        // ローカル環境（SQLite）
+        const storesResult = await new Promise((resolve, reject) => {
+          db.all("SELECT id, name FROM stores ORDER BY name", [], (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          });
+        });
+
+        stores = storesResult || [];
+      }
+    }
+
     res.render("customers_form", {
       customer: null,
-      stores: [],
+      stores: stores,
       session: req.session,
       title: "顧客登録",
       isAdmin: isAdmin,
       isSupabase: isSupabaseConfigured(),
+    });
+  } catch (error) {
+    console.error("顧客登録フォーム表示エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
+      session: req.session,
     });
   }
 });

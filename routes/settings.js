@@ -110,7 +110,7 @@ router.get("/api/official-line-url", async (req, res) => {
       const { data, error } = await supabase
         .from("system_settings")
         .select("value")
-        .eq("key_name", "official_line_url")
+        .eq("key", "official_line_url")
         .single();
 
       if (error) {
