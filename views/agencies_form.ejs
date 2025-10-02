@@ -20,49 +20,42 @@
         <a class="navbar-brand" href="/">店舗管理システム</a>
         <div class="collapse navbar-collapse">
           <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <% if (typeof session !== 'undefined' && session && session.user &&
-            session.user.role === 'admin') { %>
-            <li class="nav-item">
-              <a class="nav-link" href="/stores/list">店舗一覧</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/sales/list">売上管理</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/groups/list">グループ管理</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/users/list">アカウント管理</a>
-            </li>
-            <% } %> <% if (typeof session !== 'undefined' && session &&
-            session.user && session.user.role === 'agency') { %>
-            <li class="nav-item">
-              <a class="nav-link text-warning" href="/auth/promote"
-                >管理者・役員に切り替え</a
-              >
-            </li>
-            <% if (session.user.store_id) { %>
-            <li class="nav-item">
-              <a
-                class="nav-link"
-                href="/stores/profile/<%= session.user.store_id %>"
-                >マイプロフィール</a
-              >
-            </li>
+            <% if (typeof session !== 'undefined' && session && session.user) { %>
+              <% if (session.user.role === 'admin') { %>
+                <li class="nav-item">
+                  <a class="nav-link" href="/stores/list">店舗一覧</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="/sales/list">売上管理</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="/groups/list">グループ管理</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="/users/list">アカウント管理</a>
+                </li>
+              <% } else if (session.user.role === 'agency') { %>
+                <li class="nav-item">
+                  <a class="nav-link text-warning" href="/auth/promote">管理者・役員に切り替え</a>
+                </li>
+                <% if (session.user.store_id) { %>
+                <li class="nav-item">
+                  <a class="nav-link" href="/stores/profile/<%= session.user.store_id %>">マイプロフィール</a>
+                </li>
+                <% } %>
+                <li class="nav-item">
+                  <a class="nav-link" href="/sales/list">売上管理</a>
+                </li>
+              <% } %>
             <% } %>
-            <li class="nav-item">
-              <a class="nav-link" href="/sales/list">売上管理</a>
-            </li>
-            <% } %> <% } %> <% if (typeof session !== 'undefined' && session &&
-            session.user && (session.user.role === 'admin')) { %> <% } %> <% if
-            (typeof session !== 'undefined' && session && session.user) { %>
-            <li class="nav-item">
-              <a class="nav-link" href="/auth/logout">ログアウト</a>
-            </li>
+            <% if (typeof session !== 'undefined' && session && session.user) { %>
+              <li class="nav-item">
+                <a class="nav-link" href="/auth/logout">ログアウト</a>
+              </li>
             <% } else { %>
-            <li class="nav-item">
-              <a class="nav-link" href="/auth/login">ログイン</a>
-            </li>
+              <li class="nav-item">
+                <a class="nav-link" href="/auth/login">ログイン</a>
+              </li>
             <% } %>
           </ul>
         </div>
