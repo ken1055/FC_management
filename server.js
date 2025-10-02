@@ -122,29 +122,39 @@ try {
     }
   }
 
+  const useSupabaseStore = !!process.env.SUPABASE_URL && !!process.env.SUPABASE_ANON_KEY;
+  let store;
+  if (useSupabaseStore) {
+    const SupabaseSessionStore = require("./config/session-store");
+    store = new SupabaseSessionStore({ tableName: "user_sessions" });
+    console.log("セッションストア: SupabaseSessionStore を使用");
+  } else {
+    store = new MemoryStore({
+      checkPeriod: 900000,
+      max: 500,
+      ttl: 7 * 24 * 60 * 60 * 1000,
+      dispose: (key) => {
+        sessionMonitor.onSessionDestroy(key, "ttl_expired");
+      },
+      stale: false,
+    });
+    console.log("セッションストア: MemoryStore を使用");
+  }
+
   app.use(
     session({
       secret: sessionSecret || "emergency-fallback-secret-key-for-vercel",
-      resave: true, // より頻繁にセッションを保存（Vercel環境対応）
+      resave: true,
       saveUninitialized: false,
-      store: new MemoryStore({
-        checkPeriod: 900000, // 15分でチェック間隔を短く（Vercel環境対応）
-        max: 500, // 最大セッション数を制限
-        ttl: 7 * 24 * 60 * 60 * 1000, // 7日間のTTL
-        dispose: (key, session) => {
-          // セッション破棄時の監視
-          sessionMonitor.onSessionDestroy(key, "ttl_expired");
-        },
-        stale: false, // 期限切れセッションを即座に削除
-      }),
+      store,
       cookie: {
-        secure: false, // Vercel環境での緊急修正 - セッション永続化問題対応
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7日間
+        secure: process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: "lax",
       },
-      name: "sessionId", // デフォルトのconnect.sidを変更
-      rolling: true, // リクエスト毎にセッション期限を延長
+      name: "sessionId",
+      rolling: true,
     })
   );
   console.log("セッション設定完了");
