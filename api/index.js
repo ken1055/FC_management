@@ -14,21 +14,20 @@ let appObject = null;
 try {
   console.log("server.js を読み込み中...");
 
-  // データベース初期化を待つ
-  const db = require("../db");
-  if (!db) {
-    throw new Error("データベースモジュールの読み込みに失敗");
-  }
+  // データベースモジュールはVercel環境でnullを返す場合があるため待たない
+  // 直接server.jsを読み込む
 
   // サーバーアプリケーションを読み込み
+  console.log("サーバーアプリケーション読み込み開始...");
   appObject = require("../server");
-  console.log("server.js 読み込み完了");
+  console.log("server.js 読み込み完了:", typeof appObject);
+  console.log("appObject.keys:", appObject ? Object.keys(appObject) : "null");
 
   if (!appObject) {
     throw new Error("server.js からアプリケーションが返されませんでした");
   }
 
-  console.log("API Route 設定完了");
+  console.log("API Route 設定完了 - 正常に読み込まれました");
 } catch (error) {
   console.error("=== API Route 初期化エラー ===");
   console.error("Error:", error.message);
@@ -51,6 +50,23 @@ if (appObject) {
   // JSON ミドルウェアを追加
   fallbackApp.use(express.json());
   fallbackApp.use(express.urlencoded({ extended: true }));
+
+  fallbackApp.get("/debug", (req, res) => {
+    res.json({
+      success: false,
+      error: "Server initialization failed",
+      message: "サーバーの初期化に失敗しました",
+      debug: {
+        appObject: !!appObject,
+        timestamp: new Date().toISOString(),
+        environment: {
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL: process.env.VERCEL,
+          VERCEL_ENV: process.env.VERCEL_ENV,
+        },
+      },
+    });
+  });
 
   fallbackApp.get("*", (req, res) => {
     res.status(500).json({
