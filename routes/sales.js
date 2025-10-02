@@ -290,6 +290,102 @@ async function getMonthlySalesData(storeId = null) {
   }
 }
 
+// 売上フィルター設定ページ
+router.get("/history/settings", async (req, res) => {
+  try {
+    const isAdmin = req.session.user?.role === "admin";
+
+    // 店舗一覧（管理者のみ）
+    let stores = [];
+    if (isAdmin) {
+      if (!db) {
+        return res.status(500).send("DB接続エラー");
+      }
+      const { data, error } = await db.from("stores").select("id, name").order("name");
+      if (error) {
+        console.error("店舗一覧取得エラー:", error);
+      } else {
+        stores = data || [];
+      }
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    res.render("sales_filter_settings", {
+      session: req.session,
+      isAdmin,
+      stores,
+      defaults: {
+        start_date: today.slice(0, 8) + "01",
+        end_date: today,
+        customer_search: "",
+        store_id: "all",
+      },
+      title: "売上フィルター設定",
+    });
+  } catch (error) {
+    console.error("フィルター設定ページエラー:", error);
+    res.status(500).send("システムエラー");
+  }
+});
+
+// 取引詳細ページ
+router.get("/transaction/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!db) return res.status(500).send("DB接続エラー");
+
+    const { data, error } = await db
+      .from("customer_transactions")
+      .select(
+        "id, transaction_date, amount, description, payment_method, created_at, store_id, customer_id"
+      )
+      .eq("id", id)
+      .limit(1);
+
+    if (error) {
+      console.error("取引詳細取得エラー:", error);
+      return res.status(500).send("取引詳細の取得に失敗しました");
+    }
+    if (!data || data.length === 0) {
+      return res.status(404).send("取引が見つかりません");
+    }
+
+    const tx = data[0];
+
+    // 店舗名・顧客名を補完
+    let storeName = null;
+    if (tx.store_id) {
+      const { data: stores } = await db
+        .from("stores")
+        .select("name")
+        .eq("id", tx.store_id)
+        .limit(1);
+      storeName = stores && stores[0] ? stores[0].name : null;
+    }
+
+    let customer = null;
+    if (tx.customer_id) {
+      const { data: customers } = await db
+        .from("customers")
+        .select("name, customer_code")
+        .eq("id", tx.customer_id)
+        .limit(1);
+      customer = customers && customers[0] ? customers[0] : null;
+    }
+
+    res.render("sales_transaction_detail", {
+      session: req.session,
+      transaction: tx,
+      storeName,
+      customer,
+      title: "取引詳細",
+    });
+  } catch (error) {
+    console.error("取引詳細ページエラー:", error);
+    res.status(500).send("システムエラー");
+  }
+});
+
 function requireRole(roles) {
   return (req, res, next) => {
     if (!req.session.user || !roles.includes(req.session.user.role)) {
