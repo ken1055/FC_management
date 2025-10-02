@@ -122,12 +122,30 @@ try {
     }
   }
 
-  const useSupabaseStore = !!process.env.SUPABASE_URL && !!process.env.SUPABASE_ANON_KEY;
+  const useSupabaseStore =
+    !!process.env.SUPABASE_URL &&
+    !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY);
   let store;
   if (useSupabaseStore) {
     const SupabaseSessionStore = require("./config/session-store");
-    store = new SupabaseSessionStore({ tableName: "user_sessions" });
-    console.log("セッションストア: SupabaseSessionStore を使用");
+    try {
+      store = new SupabaseSessionStore({ tableName: "user_sessions" });
+      console.log("セッションストア: SupabaseSessionStore を使用");
+    } catch (e) {
+      console.warn(
+        "SupabaseSessionStore 初期化に失敗。MemoryStoreにフォールバック:",
+        e && e.message
+      );
+      store = new MemoryStore({
+        checkPeriod: 900000,
+        max: 500,
+        ttl: 7 * 24 * 60 * 60 * 1000,
+        dispose: (key) => {
+          sessionMonitor.onSessionDestroy(key, "ttl_expired");
+        },
+        stale: false,
+      });
+    }
   } else {
     store = new MemoryStore({
       checkPeriod: 900000,
@@ -148,7 +166,8 @@ try {
       saveUninitialized: false,
       store,
       cookie: {
-        secure: process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS,
+        secure:
+          process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS,
         maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: "lax",
