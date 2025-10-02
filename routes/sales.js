@@ -301,7 +301,10 @@ router.get("/history/settings", async (req, res) => {
       if (!db) {
         return res.status(500).send("DB接続エラー");
       }
-      const { data, error } = await db.from("stores").select("id, name").order("name");
+      const { data, error } = await db
+        .from("stores")
+        .select("id, name")
+        .order("name");
       if (error) {
         console.error("店舗一覧取得エラー:", error);
       } else {
