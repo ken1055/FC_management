@@ -3,12 +3,22 @@ const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 
 // Vercel環境でもルーターから共通のDBラッパーを利用できるようにエクスポートは維持
 if (isVercel) {
-  console.log("Vercel環境: db.js ラッパーをエクスポート（Supabase/ラッパー使用）");
+  console.log(
+    "Vercel環境: db.js ラッパーをエクスポート（Supabase/ラッパー使用）"
+  );
 }
 
 const path = require("path");
 const crypto = require("crypto");
-const sqlite3 = require("sqlite3").verbose();
+// Vercel環境ではsqlite3を読み込まない（ネイティブモジュール未対応のため）
+let sqlite3 = null;
+try {
+  if (!isVercel) {
+    sqlite3 = require("sqlite3").verbose();
+  }
+} catch (e) {
+  sqlite3 = null;
+}
 const {
   getSupabaseClient,
   isSupabaseConfigured,
@@ -124,7 +134,22 @@ function initializeDatabase() {
       } else if (isVercel) {
         // Vercel環境では常にメモリDBを使用（高速）
         console.log("Vercel環境: メモリDBを使用");
-        db = new sqlite3.Database(":memory:");
+        // Vercelではsqlite3が使えないため、簡易モックを使用
+        db = {
+          get: (...args) => {
+            const callback = args[args.length - 1];
+            callback(new Error("SQLite is unavailable on Vercel"));
+          },
+          run: (...args) => {
+            const callback = args[args.length - 1];
+            callback(new Error("SQLite is unavailable on Vercel"));
+          },
+          all: (...args) => {
+            const callback = args[args.length - 1];
+            callback(new Error("SQLite is unavailable on Vercel"));
+          },
+          serialize: (cb) => cb && cb(),
+        };
         initializeInMemoryDatabase();
         console.log("=== VercelメモリDB初期化完了 ===");
         resolve();
