@@ -1,11 +1,9 @@
 // Vercel環境での緊急修正
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
 
-// Vercel環境では早期リターン
+// Vercel環境でもルーターから共通のDBラッパーを利用できるようにエクスポートは維持
 if (isVercel) {
-  console.log("Vercel環境: db.js をスキップ（Supabase使用）");
-  module.exports = null;
-  return;
+  console.log("Vercel環境: db.js ラッパーをエクスポート（Supabase/ラッパー使用）");
 }
 
 const path = require("path");
@@ -67,6 +65,7 @@ function initializeDatabase() {
   }
 
   initializationPromise = new Promise(async (resolve, reject) => {
+    console.log("=== initializeDatabase プロミス開始 ===");
     try {
       if (isSupabase) {
         // Supabase接続
@@ -78,6 +77,7 @@ function initializeDatabase() {
           console.log("Supabase接続完了");
           // Supabaseの場合、テーブル作成は手動またはマイグレーションで行う
           isInitialized = true;
+          console.log("=== Supabase初期化完了 ===");
           resolve();
         } else {
           throw new Error("Supabase初期化失敗");
@@ -126,6 +126,7 @@ function initializeDatabase() {
         console.log("Vercel環境: メモリDBを使用");
         db = new sqlite3.Database(":memory:");
         initializeInMemoryDatabase();
+        console.log("=== VercelメモリDB初期化完了 ===");
         resolve();
       } else {
         // ローカル環境では通常通り
@@ -147,6 +148,7 @@ function initializeDatabase() {
 
         db = new sqlite3.Database(dbPath);
         initializeLocalDatabase();
+        console.log("=== ローカルDB初期化完了 ===");
         resolve();
       }
     } catch (error) {
@@ -154,6 +156,7 @@ function initializeDatabase() {
       // エラー時はメモリDBにフォールバック
       db = new sqlite3.Database(":memory:");
       initializeInMemoryDatabase();
+      console.log("=== エラー時のメモリDB初期化完了 ===");
       resolve();
     }
   });
