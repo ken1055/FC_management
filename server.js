@@ -112,6 +112,8 @@ try {
 // セッション設定
 try {
   console.log("セッション設定中...");
+  // プロキシ配下（Vercel/CloudFront等）でSecure Cookieを有効にするため
+  app.set("trust proxy", 1);
 
   // セッションシークレットの検証
   const sessionSecret = process.env.SESSION_SECRET;
@@ -170,7 +172,7 @@ try {
           process.env.NODE_ENV === "production" && !process.env.DISABLE_HTTPS,
         maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: process.env.SAME_SITE || "lax",
       },
       name: "sessionId",
       rolling: true,

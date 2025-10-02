@@ -176,6 +176,7 @@ async function handleSupabaseLogin(email, password, req, res) {
           JSON.stringify(req.session, null, 2)
         );
         console.log("保存後のセッションID:", req.sessionID);
+        console.log("Set-Cookieヘッダー:", res.getHeaders()["set-cookie"]);
         return res.redirect("/");
       });
       return;
@@ -228,7 +229,7 @@ async function handleSupabaseLogin(email, password, req, res) {
           JSON.stringify(req.session, null, 2)
         );
         console.log("保存後のセッションID:", req.sessionID);
-        console.log("Cookieヘッダー:", res.getHeaders()["set-cookie"]);
+        console.log("Set-Cookieヘッダー:", res.getHeaders()["set-cookie"]);
         console.log("リダイレクト実行中...");
         return res.redirect("/");
       });

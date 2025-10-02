@@ -27,21 +27,30 @@ class SupabaseSessionStore extends session.Store {
 
   async set(sid, sessionData, callback) {
     try {
-      const expiresAt = new Date(Date.now() + (sessionData.cookie?.maxAge || 7 * 24 * 60 * 60 * 1000));
+      console.log("[SessionStore] set sid=", sid);
+      if (!sessionData || typeof sessionData !== "object") {
+        console.warn("[SessionStore] invalid session data");
+      }
+      const expiresAt = new Date(
+        Date.now() + (sessionData.cookie?.maxAge || 7 * 24 * 60 * 60 * 1000)
+      );
       const payload = {
         sid,
         data: JSON.stringify(sessionData),
         expires_at: expiresAt.toISOString(),
       };
       const { error } = await this.client.from(this.tableName).upsert(payload);
+      if (error) console.error("[SessionStore] upsert error:", error);
       return callback(error || null);
     } catch (err) {
+      console.error("[SessionStore] set exception:", err);
       return callback(err);
     }
   }
 
   async destroy(sid, callback) {
     try {
+      console.log("[SessionStore] destroy sid=", sid);
       const { error } = await this.client
         .from(this.tableName)
         .delete()
@@ -54,5 +63,3 @@ class SupabaseSessionStore extends session.Store {
 }
 
 module.exports = SupabaseSessionStore;
-
-
