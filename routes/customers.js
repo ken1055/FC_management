@@ -114,8 +114,16 @@ router.get("/list", requireAuth, (req, res) => {
     db.all(query, params, (err, customers) => {
       if (err) {
         console.error("顧客一覧取得エラー:", err);
+        console.error("SQL:", query);
+        console.error("パラメータ:", params);
+
+        let errorMessage = "顧客一覧の取得に失敗しました";
+        if (process.env.NODE_ENV !== "production") {
+          errorMessage += ` [詳細: ${err.message}]`;
+        }
+
         return res.status(500).render("error", {
-          message: "顧客一覧の取得に失敗しました",
+          message: errorMessage,
           session: req.session,
         });
       }
@@ -257,21 +265,23 @@ router.get("/detail/:id", requireAuth, async (req, res) => {
     if (isVercel && supabase) {
       // Vercel + Supabase環境
       console.log("Supabase環境で顧客詳細取得");
-      
+
       let query = supabase
-        .from('customers')
-        .select(`
+        .from("customers")
+        .select(
+          `
           *,
           stores!inner(name)
-        `)
-        .eq('id', customerId);
+        `
+        )
+        .eq("id", customerId);
 
       // 管理者以外は自分の店舗のみ
       if (!isAdmin) {
-        query = query.eq('store_id', req.session.user.store_id);
+        query = query.eq("store_id", req.session.user.store_id);
       }
 
-      const { data, error } = await query.single();
+      const { data, error } = await query;
 
       if (error) {
         console.error("Supabase顧客詳細取得エラー:", error);
@@ -281,17 +291,17 @@ router.get("/detail/:id", requireAuth, async (req, res) => {
         });
       }
 
-      if (!data) {
+      if (!data || data.length === 0) {
         return res.status(404).render("error", {
           message: "顧客が見つかりません",
           session: req.session,
         });
       }
 
-      // データを整形
+      // データを整形（最初の結果を使用）
       customer = {
-        ...data,
-        store_name: data.stores?.name || null
+        ...data[0],
+        store_name: data[0].stores?.name || null,
       };
     } else {
       // ローカル環境（SQLite）
@@ -390,10 +400,14 @@ router.get("/new", requireAuth, async (req, res) => {
       } else {
         // ローカル環境（SQLite）
         const storesResult = await new Promise((resolve, reject) => {
-          db.all("SELECT id, name FROM stores ORDER BY name", [], (err, result) => {
-            if (err) reject(err);
-            else resolve(result);
-          });
+          db.all(
+            "SELECT id, name FROM stores ORDER BY name",
+            [],
+            (err, result) => {
+              if (err) reject(err);
+              else resolve(result);
+            }
+          );
         });
 
         stores = storesResult || [];
@@ -606,8 +620,23 @@ router.post("/create", requireAuth, (req, res) => {
     db.run(query, params, function (err) {
       if (err) {
         console.error("顧客登録エラー:", err);
+        console.error("実行SQL:", query);
+        console.error("パラメータ:", params);
+
+        let errorMessage = "顧客の登録に失敗しました";
+
+        // PostgreSQLの制約エラーを識別
+        if (err.code === "23505") {
+          errorMessage =
+            "重複するデータが存在しています。顧客コードなどの重複を確認してください。";
+        } else if (err.code === "23503") {
+          errorMessage = "関連する店舗データが存在しません。";
+        } else if (process.env.NODE_ENV !== "production") {
+          errorMessage += ` [詳細: ${err.message}]`;
+        }
+
         return res.status(500).render("error", {
-          message: "顧客の登録に失敗しました",
+          message: errorMessage,
           session: req.session,
         });
       }
@@ -767,8 +796,23 @@ router.post("/update/:id", requireAuth, (req, res) => {
       db.run(query, params, function (err) {
         if (err) {
           console.error("顧客更新エラー:", err);
+          console.error("実行SQL:", query);
+          console.error("パラメータ:", params);
+
+          let errorMessage = "顧客の更新に失敗しました";
+
+          // PostgreSQLの制約エラーを識別
+          if (err.code === "23505") {
+            errorMessage =
+              "重複するデータが存在しています。顧客コードなどの重複を確認してください。";
+          } else if (err.code === "23503") {
+            errorMessage = "関連する店舗データが存在しません。";
+          } else if (process.env.NODE_ENV !== "production") {
+            errorMessage += ` [詳細: ${err.message}]`;
+          }
+
           return res.status(500).render("error", {
-            message: "顧客の更新に失敗しました",
+            message: errorMessage,
             session: req.session,
           });
         }

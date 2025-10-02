@@ -8,6 +8,11 @@ const db = getSupabaseClient();
 console.log(
   "sales.js: Vercel + Supabase環境で初期化完了 - v3.0 - db.all完全削除"
 );
+console.log("Supabaseクライアント:", !!db);
+
+if (!db) {
+  console.error("⚠️ Supabaseクライアントの初期化に失敗しました");
+}
 
 // Supabase用のヘルパー関数
 
@@ -226,6 +231,13 @@ async function getMonthlySalesData(storeId = null) {
       typeof storeId
     );
 
+    if (!db) {
+      console.error(
+        "Supabaseクライアントが利用できません - getMonthlySalesData"
+      );
+      throw new Error("データベース接続が利用できません");
+    }
+
     let query = db
       .from("customer_transactions")
       .select("transaction_date, amount, store_id")
@@ -311,6 +323,11 @@ router.get("/", async (req, res) => {
       res.json(formattedData);
     } else {
       // 役員・管理者は全店舗のデータ（分離クエリ方式）
+      if (!db) {
+        console.error("Supabaseクライアントが利用できません - 全店舗売上取得");
+        return res.status(500).json({ error: "データベース接続エラー" });
+      }
+
       const { data: transactions, error } = await db
         .from("customer_transactions")
         .select("transaction_date, amount, store_id")
@@ -550,6 +567,11 @@ router.get("/agency/:id", requireRole(["admin"]), async (req, res) => {
 
   try {
     // 代理店情報を取得（Supabase）
+    if (!db) {
+      console.error("Supabaseクライアントが利用できません - 個別店舗売上");
+      return res.status(500).send("データベース接続エラー");
+    }
+
     const { data: stores, error: storeError } = await db
       .from("stores")
       .select("id, name")

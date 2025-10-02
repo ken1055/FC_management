@@ -116,15 +116,17 @@ async function executeSupabaseQuery(supabase, query, params) {
     if (
       lower.startsWith("select") &&
       /from\s+royalty_calculations\s+rc/i.test(lower) &&
-      /left\s+join\s+stores\s+s\s+on\s+rc\.store_id\s*=\s*s\.id/i.test(
-        lower
-      )
+      /left\s+join\s+stores\s+s\s+on\s+rc\.store_id\s*=\s*s\.id/i.test(lower)
     ) {
       // パラメータ（年/月やid）の抽出
       let yearParam = null;
       let monthParam = null;
       let idParam = null;
-      if (/where\s+rc\.calculation_year\s*=\s*\?\s+and\s+rc\.calculation_month\s*=\s*\?/i.test(lower)) {
+      if (
+        /where\s+rc\.calculation_year\s*=\s*\?\s+and\s+rc\.calculation_month\s*=\s*\?/i.test(
+          lower
+        )
+      ) {
         yearParam = Number(params[0]);
         monthParam = Number(params[1]);
       } else if (/where\s+rc\.calculation_year\s*=\s*\?/i.test(lower)) {
@@ -148,12 +150,16 @@ async function executeSupabaseQuery(supabase, query, params) {
       const { data: rcRows, error: rcErr } = await rcQ;
       if (rcErr) throw rcErr;
 
-      const storeIds = Array.from(new Set((rcRows || []).map((r) => r.store_id).filter(Boolean)));
+      const storeIds = Array.from(
+        new Set((rcRows || []).map((r) => r.store_id).filter(Boolean))
+      );
       let idToStore = new Map();
       if (storeIds.length > 0) {
         const { data: stores, error: sErr } = await supabase
           .from("stores")
-          .select("id,name,manager_name,business_address,main_phone,representative_email")
+          .select(
+            "id,name,manager_name,business_address,main_phone,representative_email"
+          )
           .in("id", storeIds);
         if (sErr) throw sErr;
         idToStore = new Map((stores || []).map((s) => [s.id, s]));
@@ -174,11 +180,14 @@ async function executeSupabaseQuery(supabase, query, params) {
 
       // ORDER BY の簡易実装
       if (/order\s+by\s+s\.name/i.test(lower)) {
-        rows = rows.sort((a, b) => (a.store_name || "").localeCompare(b.store_name || ""));
+        rows = rows.sort((a, b) =>
+          (a.store_name || "").localeCompare(b.store_name || "")
+        );
       } else if (/order\s+by\s+rc\.calculation_month,\s*s\.name/i.test(lower)) {
         // ロイヤリティレポート用: 月、店舗名でソート
         rows = rows.sort((a, b) => {
-          const monthDiff = (a.calculation_month || 0) - (b.calculation_month || 0);
+          const monthDiff =
+            (a.calculation_month || 0) - (b.calculation_month || 0);
           if (monthDiff !== 0) return monthDiff;
           return (a.store_name || "").localeCompare(b.store_name || "");
         });
@@ -197,7 +206,7 @@ async function executeSupabaseQuery(supabase, query, params) {
       /where\s+rc\.calculation_year\s*=\s*\?/i.test(lower)
     ) {
       const yearParam = Number(params[0]);
-      
+
       // 指定年のロイヤリティ計算データを取得
       const { data: rcRows, error: rcErr } = await supabase
         .from("royalty_calculations")
@@ -207,7 +216,7 @@ async function executeSupabaseQuery(supabase, query, params) {
 
       // 月別に集計
       const monthlyData = {};
-      (rcRows || []).forEach(row => {
+      (rcRows || []).forEach((row) => {
         const month = row.calculation_month;
         if (!monthlyData[month]) {
           monthlyData[month] = {
@@ -215,7 +224,7 @@ async function executeSupabaseQuery(supabase, query, params) {
             store_count: 0,
             total_sales: 0,
             total_royalty: 0,
-            royalty_rates: []
+            royalty_rates: [],
           };
         }
         monthlyData[month].store_count += 1;
@@ -225,28 +234,31 @@ async function executeSupabaseQuery(supabase, query, params) {
       });
 
       // 平均ロイヤリティ率を計算して結果を生成
-      const rows = Object.values(monthlyData).map(data => ({
+      const rows = Object.values(monthlyData).map((data) => ({
         calculation_month: data.calculation_month,
         store_count: data.store_count,
         total_sales: data.total_sales,
         total_royalty: data.total_royalty,
-        avg_royalty_rate: data.royalty_rates.length > 0 
-          ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) / data.royalty_rates.length 
-          : 0
+        avg_royalty_rate:
+          data.royalty_rates.length > 0
+            ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) /
+              data.royalty_rates.length
+            : 0,
       }));
 
       // 月順でソート
       rows.sort((a, b) => a.calculation_month - b.calculation_month);
 
-      console.log("ロイヤリティレポート集計エミュレーション完了:", rows.length, "件");
+      console.log(
+        "ロイヤリティレポート集計エミュレーション完了:",
+        rows.length,
+        "件"
+      );
       return { rows };
     }
 
     // 0.2) システム設定: settings → system_settings へのマッピング（SELECT）
-    if (
-      lower.startsWith("select") &&
-      /from\s+settings/i.test(lower)
-    ) {
+    if (lower.startsWith("select") && /from\s+settings/i.test(lower)) {
       // WHERE句の解析（key_name を key にマップ）
       const { filters } = parseWhereEqConditions(originalQuery, params, 0);
       let qb = supabase
@@ -275,9 +287,7 @@ async function executeSupabaseQuery(supabase, query, params) {
     if (
       lower.startsWith("select") &&
       /from\s+customers\s+c/i.test(lower) &&
-      /left\s+join\s+stores\s+s\s+on\s+c\.store_id\s*=\s*s\.id/i.test(
-        lower
-      )
+      /left\s+join\s+stores\s+s\s+on\s+c\.store_id\s*=\s*s\.id/i.test(lower)
     ) {
       // パターン判定: 詳細 or 一覧
       const isDetail = /where\s+c\.id\s*=\s*\?/i.test(lower);
@@ -820,7 +830,10 @@ function parseWhereEqConditions(query, params, startIndex) {
     // Split by AND (allow newlines around)
     const parts = condStr.split(/\s+and\s+/i);
     for (let raw of parts) {
-      const part = raw.trim().replace(/^\((.*)\)$/s, "$1").trim();
+      const part = raw
+        .trim()
+        .replace(/^\((.*)\)$/s, "$1")
+        .trim();
 
       // Pattern: table.column = ?  or  column = ?
       const mQ = part.match(/([\w\.]+)\s*=\s*\?/);
@@ -859,8 +872,24 @@ async function get(sql, params = []) {
 
     try {
       const result = await executeSupabaseQuery(supabase, sql, params);
-      return result.rows && result.rows.length > 0 ? result.rows[0] : null;
+      // result.rowsが配列の場合は最初の要素を返し、nullの場合はnullを返す
+      if (result.rows && result.rows.length > 0) {
+        return result.rows[0];
+      }
+
+      // PGRST116エラーの場合、空の結果としてnullを返す
+      if (result.error && result.error.code === "PGRST116") {
+        console.log("Supabase get: データが存在しません");
+        return null;
+      }
+
+      return null;
     } catch (error) {
+      // PGRST116エラーは軽微な処理として扱う
+      if (error.code === "PGRST116") {
+        console.log("Supabase get: PGRST116 エラー、nullを返します");
+        return null;
+      }
       console.error("Supabase get実行エラー:", error);
       throw error;
     }

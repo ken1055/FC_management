@@ -46,6 +46,7 @@ console.log("NODE_ENV:", process.env.NODE_ENV);
 let db;
 let isInitialized = false;
 let isPostgres = false;
+let initializationPromise = null; // 初期化の競合を防ぐため
 
 // 高速な初期化フラグ
 const FAST_INIT = isVercel; // Vercel環境では高速初期化
@@ -59,92 +60,111 @@ console.log("Environment:", {
   FAST_INIT,
 });
 
-try {
-  if (isSupabase) {
-    // Supabase接続
-    console.log("Supabase環境: Supabaseデータベースを使用");
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      db = supabase;
-      isPostgres = true;
-      console.log("Supabase接続完了");
-      // Supabaseの場合、テーブル作成は手動またはマイグレーションで行う
-      isInitialized = true;
-    } else {
-      throw new Error("Supabase初期化失敗");
-    }
-  } else if (
-    databaseUrl &&
-    (isRailway || process.env.NODE_ENV === "production")
-  ) {
-    // PostgreSQL接続（Railway本番環境）
-    console.log("PostgreSQL環境: 本番データベースを使用");
-    const { Pool } = require("pg");
-    db = new Pool({
-      connectionString: databaseUrl,
-      ssl:
-        process.env.NODE_ENV === "production"
-          ? { rejectUnauthorized: false }
-          : false,
-    });
-    isPostgres = true;
+// データベース初期化をプロミス化して競合を防ぐ
+function initializeDatabase() {
+  if (initializationPromise) {
+    return initializationPromise;
+  }
 
-    // PostgreSQL初期化を同期的に実行
-    (async () => {
-      try {
-        await initializePostgresDatabase();
-      } catch (error) {
-        console.error("PostgreSQL初期化失敗:", error);
-        // SQLiteにフォールバック
-        console.log("SQLiteにフォールバック中...");
-        isPostgres = false;
+  initializationPromise = new Promise(async (resolve, reject) => {
+    try {
+      if (isSupabase) {
+        // Supabase接続
+        console.log("Supabase環境: Supabaseデータベースを使用");
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          db = supabase;
+          isPostgres = true;
+          console.log("Supabase接続完了");
+          // Supabaseの場合、テーブル作成は手動またはマイグレーションで行う
+          isInitialized = true;
+          resolve();
+        } else {
+          throw new Error("Supabase初期化失敗");
+        }
+      } else if (
+        databaseUrl &&
+        (isRailway || process.env.NODE_ENV === "production")
+      ) {
+        // PostgreSQL接続（Railway本番環境）
+        console.log("PostgreSQL環境: 本番データベースを使用");
+        const { Pool } = require("pg");
+        db = new Pool({
+          connectionString: databaseUrl,
+          ssl:
+            process.env.NODE_ENV === "production"
+              ? { rejectUnauthorized: false }
+              : false,
+        });
+        isPostgres = true;
+
+        try {
+          await initializePostgresDatabase();
+          resolve();
+        } catch (error) {
+          console.error("PostgreSQL初期化失敗:", error);
+          // SQLiteにフォールバック
+          console.log("SQLiteにフォールバック中...");
+          isPostgres = false;
+          const dbPath = isRailway ? "/app/data/agency.db" : "./agency.db";
+
+          if (isRailway) {
+            const fs = require("fs");
+            const path = require("path");
+            const dbDir = path.dirname(dbPath);
+            if (!fs.existsSync(dbDir)) {
+              fs.mkdirSync(dbDir, { recursive: true });
+            }
+          }
+
+          db = new sqlite3.Database(dbPath);
+          initializeLocalDatabase();
+          resolve();
+        }
+      } else if (isVercel) {
+        // Vercel環境では常にメモリDBを使用（高速）
+        console.log("Vercel環境: メモリDBを使用");
+        db = new sqlite3.Database(":memory:");
+        initializeInMemoryDatabase();
+        resolve();
+      } else {
+        // ローカル環境では通常通り
+        console.log("ローカル環境: 通常のデータベース接続");
+
+        // Railway環境でも永続化されるパスを使用
         const dbPath = isRailway ? "/app/data/agency.db" : "./agency.db";
 
+        // Railway環境では/app/dataディレクトリを作成
         if (isRailway) {
           const fs = require("fs");
           const path = require("path");
           const dbDir = path.dirname(dbPath);
           if (!fs.existsSync(dbDir)) {
             fs.mkdirSync(dbDir, { recursive: true });
+            console.log(`Railway: データディレクトリを作成しました: ${dbDir}`);
           }
         }
 
         db = new sqlite3.Database(dbPath);
         initializeLocalDatabase();
+        resolve();
       }
-    })();
-  } else if (isVercel) {
-    // Vercel環境では常にメモリDBを使用（高速）
-    console.log("Vercel環境: メモリDBを使用");
-    db = new sqlite3.Database(":memory:");
-    initializeInMemoryDatabase();
-  } else {
-    // ローカル環境では通常通り
-    console.log("ローカル環境: 通常のデータベース接続");
-
-    // Railway環境でも永続化されるパスを使用
-    const dbPath = isRailway ? "/app/data/agency.db" : "./agency.db";
-
-    // Railway環境では/app/dataディレクトリを作成
-    if (isRailway) {
-      const fs = require("fs");
-      const path = require("path");
-      const dbDir = path.dirname(dbPath);
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
-        console.log(`Railway: データディレクトリを作成しました: ${dbDir}`);
-      }
+    } catch (error) {
+      console.error("データベース接続エラー:", error);
+      // エラー時はメモリDBにフォールバック
+      db = new sqlite3.Database(":memory:");
+      initializeInMemoryDatabase();
+      resolve();
     }
+  });
 
-    db = new sqlite3.Database(dbPath);
-    initializeLocalDatabase();
-  }
-} catch (error) {
-  console.error("データベース接続エラー:", error);
-  // エラー時はメモリDBにフォールバック
-  db = new sqlite3.Database(":memory:");
-  initializeInMemoryDatabase();
+  return initializationPromise;
 }
+
+// 初期化を実行
+initializeDatabase().catch((error) => {
+  console.error("データベース初期化エラー:", error);
+});
 
 async function initializePostgresDatabase() {
   console.log("PostgreSQL初期化中...");
@@ -468,51 +488,88 @@ function initializeInMemoryDatabase() {
   // Vercel環境では超高速初期化
   if (isVercel) {
     console.log("Vercel超高速初期化: 最小構成でテーブル作成");
-    
+
     // 必要最小限のテーブルを同期的に作成
     db.serialize(() => {
       // 最小限のテーブル構造
-      db.run("CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT)", (err) => {
-        if (err) console.log("adminsテーブル作成スキップ:", err.message);
-      });
-      
-      db.run("CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY, name TEXT)", (err) => {
-        if (err) console.log("storesテーブル作成スキップ:", err.message);
-      });
-      
-      db.run("CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY, store_id INTEGER, name TEXT, customer_code TEXT, total_purchase_amount INTEGER DEFAULT 0)", (err) => {
-        if (err) console.log("customersテーブル作成スキップ:", err.message);
-      });
-      
-      db.run("CREATE TABLE IF NOT EXISTS customer_transactions (id INTEGER PRIMARY KEY, store_id INTEGER, customer_id INTEGER, transaction_date DATE, amount INTEGER, description TEXT, payment_method TEXT DEFAULT '現金', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)", (err) => {
-        if (err) console.log("customer_transactionsテーブル作成スキップ:", err.message);
-      });
-      
-      db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, store_id INTEGER)", (err) => {
-        if (err) console.log("usersテーブル作成スキップ:", err.message);
-      });
+      db.run(
+        "CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT)",
+        (err) => {
+          if (err) console.log("adminsテーブル作成スキップ:", err.message);
+        }
+      );
+
+      db.run(
+        "CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY, name TEXT)",
+        (err) => {
+          if (err) console.log("storesテーブル作成スキップ:", err.message);
+        }
+      );
+
+      db.run(
+        "CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY, store_id INTEGER, name TEXT, customer_code TEXT, total_purchase_amount INTEGER DEFAULT 0)",
+        (err) => {
+          if (err) console.log("customersテーブル作成スキップ:", err.message);
+        }
+      );
+
+      db.run(
+        "CREATE TABLE IF NOT EXISTS customer_transactions (id INTEGER PRIMARY KEY, store_id INTEGER, customer_id INTEGER, transaction_date DATE, amount INTEGER, description TEXT, payment_method TEXT DEFAULT '現金', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+        (err) => {
+          if (err)
+            console.log(
+              "customer_transactionsテーブル作成スキップ:",
+              err.message
+            );
+        }
+      );
+
+      db.run(
+        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, store_id INTEGER)",
+        (err) => {
+          if (err) console.log("usersテーブル作成スキップ:", err.message);
+        }
+      );
 
       // デフォルトデータ挿入
-      db.run("INSERT OR IGNORE INTO admins (email, password) VALUES ('admin', 'admin')", (err) => {
-        if (!err) console.log("管理者アカウント作成完了");
-      });
+      db.run(
+        "INSERT OR IGNORE INTO admins (email, password) VALUES ('admin', 'admin')",
+        (err) => {
+          if (!err) console.log("管理者アカウント作成完了");
+        }
+      );
 
-      db.run("INSERT OR IGNORE INTO stores (id, name) VALUES (1, 'テスト店舗')", (err) => {
-        if (!err) console.log("テスト店舗作成完了");
-      });
+      db.run(
+        "INSERT OR IGNORE INTO stores (id, name) VALUES (1, 'テスト店舗')",
+        (err) => {
+          if (!err) console.log("テスト店舗作成完了");
+        }
+      );
 
-      db.run("INSERT OR IGNORE INTO users (email, password, store_id) VALUES ('store@test.com', 'store123', 1)", (err) => {
-        if (!err) console.log("店舗ユーザー作成完了");
-      });
+      db.run(
+        "INSERT OR IGNORE INTO users (email, password, store_id) VALUES ('store@test.com', 'store123', 1)",
+        (err) => {
+          if (!err) console.log("店舗ユーザー作成完了");
+        }
+      );
 
-      db.run("INSERT OR IGNORE INTO customers (id, store_id, name, customer_code) VALUES (1, 1, '田中太郎', 'CUST001')", (err) => {
-        if (!err) console.log("テスト顧客作成完了");
-      });
+      db.run(
+        "INSERT OR IGNORE INTO customers (id, store_id, name, customer_code) VALUES (1, 1, '田中太郎', 'CUST001')",
+        (err) => {
+          if (!err) console.log("テスト顧客作成完了");
+        }
+      );
 
       // サンプル取引データ
-      db.run("INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-01-15', 5000, 'コーヒー豆購入', '現金')");
-      db.run("INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-02-10', 3000, 'ドリンク', 'クレジットカード')");
-      db.run("INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-02-15', 7000, 'ケーキセット', '現金')");
+      db.run(
+        "INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-01-15', 5000, 'コーヒー豆購入', '現金')"
+      );
+      db.run(
+        "INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-02-10', 3000, 'ドリンク', 'クレジットカード')"
+      );
+      db.run(
+        "INSERT OR IGNORE INTO customer_transactions (store_id, customer_id, transaction_date, amount, description, payment_method) VALUES (1, 1, '2025-02-15', 7000, 'ケーキセット', '現金')"
+      );
 
       isInitialized = true;
       const duration = Date.now() - startTime;
@@ -1157,8 +1214,21 @@ function initializeLocalDatabase() {
   });
 }
 
-// 初期化完了を待つ関数
-function waitForInitialization(callback, timeout = 5000) {
+// 初期化完了を待つ関数（改良版）
+function waitForInitialization(callback, timeout = 10000) {
+  if (isInitialized) {
+    return callback(null);
+  }
+
+  // 初期化プロミスが存在する場合は待機
+  if (initializationPromise) {
+    initializationPromise
+      .then(() => callback(null))
+      .catch((error) => callback(error));
+    return;
+  }
+
+  // タイムアウト処理
   const startTime = Date.now();
   const checkInterval = setInterval(() => {
     if (isInitialized) {

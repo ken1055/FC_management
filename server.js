@@ -125,10 +125,10 @@ try {
   app.use(
     session({
       secret: sessionSecret || "emergency-fallback-secret-key-for-vercel",
-      resave: false,
+      resave: true, // より頻繁にセッションを保存（Vercel環境対応）
       saveUninitialized: false,
       store: new MemoryStore({
-        checkPeriod: 86400000, // 24時間
+        checkPeriod: 900000, // 15分でチェック間隔を短く（Vercel環境対応）
         max: 500, // 最大セッション数を制限
         ttl: 7 * 24 * 60 * 60 * 1000, // 7日間のTTL
         dispose: (key, session) => {
@@ -144,6 +144,7 @@ try {
         sameSite: "lax",
       },
       name: "sessionId", // デフォルトのconnect.sidを変更
+      rolling: true, // リクエスト毎にセッション期限を延長
     })
   );
   console.log("セッション設定完了");

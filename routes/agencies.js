@@ -924,7 +924,15 @@ function renderAgenciesList(
     db.all(query, params, (err, stores) => {
       if (err) {
         console.error("代理店一覧取得エラー:", err);
-        return res.status(500).send("DBエラー: " + err.message);
+        console.error("実行SQL:", query);
+        console.error("パラメータ:", params);
+
+        let errorMessage = "店舗一覧の取得に失敗しました";
+        if (process.env.NODE_ENV !== "production") {
+          errorMessage += ` [詳細: ${err.message}]`;
+        }
+
+        return res.status(500).send(errorMessage);
       }
 
       if (stores && stores.length > 0) {
@@ -1160,7 +1168,19 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
         function (err) {
           if (err) {
             console.error("店舗作成エラー:", err);
-            return res.status(500).send(`店舗作成エラー: ${err.message}`);
+
+            let errorMessage = "店舗の作成に失敗しました";
+
+            // PostgreSQLの制約エラーを識別
+            if (err.code === "23505") {
+              errorMessage = "重複する店舗名またはデータが存在しています。";
+            } else if (err.code === "23503") {
+              errorMessage = "関連するデータが存在しません。";
+            } else if (process.env.NODE_ENV !== "production") {
+              errorMessage += ` [詳細: ${err.message}]`;
+            }
+
+            return res.status(500).send(errorMessage);
           }
 
           const agencyId = this.lastID;
@@ -1610,7 +1630,7 @@ router.get(
           }
 
           if (supa) return cb([]);
-          
+
           // ローカル環境（SQLite）
           db.all(
             "SELECT product_name FROM store_products WHERE store_id = ?",
@@ -1635,34 +1655,47 @@ router.get(
           if (isVercel && supabase) {
             // Vercel + Supabase環境
             console.log("Supabase環境でグループ名取得");
-            
-            // group_membersから取得
-            const { data: groupMember, error: gmError } = await supabase
+
+            // group_membersから取得（複数可能性があるためsingleを外す）
+            const { data: groupMembers, error: gmError } = await supabase
               .from("group_members")
               .select("group_id")
-              .eq("store_id", agencyId)
-              .single();
+              .eq("store_id", agencyId);
 
-            if (gmError || !groupMember) {
-              console.log("グループメンバーが見つかりません:", gmError);
+            if (gmError) {
+              console.log("グループメンバー取得エラー:", gmError);
               cb(null);
               return;
             }
+
+            if (!groupMembers || groupMembers.length === 0) {
+              console.log("グループメンバーが見つかりません");
+              cb(null);
+              return;
+            }
+
+            // 最初のグループを取得
+            const groupId = groupMembers[0].group_id;
 
             // groupsからグループ名を取得
-            const { data: group, error: groupError } = await supabase
+            const { data: groups, error: groupError } = await supabase
               .from("groups")
               .select("name")
-              .eq("id", groupMember.group_id)
-              .single();
+              .eq("id", groupId);
 
-            if (groupError || !group) {
-              console.log("グループが見つかりません:", groupError);
+            if (groupError) {
+              console.log("グループ取得エラー:", groupError);
               cb(null);
               return;
             }
 
-            cb(group.name);
+            if (!groups || groups.length === 0) {
+              console.log("グループが見つかりません");
+              cb(null);
+              return;
+            }
+
+            cb(groups[0].name);
           } else {
             // ローカル環境（SQLite）
             db.get(

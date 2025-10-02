@@ -110,8 +110,7 @@ router.get("/api/official-line-url", async (req, res) => {
       const { data, error } = await supabase
         .from("system_settings")
         .select("value")
-        .eq("key", "official_line_url")
-        .single();
+        .eq("key", "official_line_url");
 
       if (error) {
         console.error("Supabase設定取得エラー:", error);
@@ -119,7 +118,7 @@ router.get("/api/official-line-url", async (req, res) => {
       }
 
       console.log("データベース取得結果:", data);
-      const url = data ? data.value : null;
+      const url = data && data.length > 0 ? data[0].value : null;
       console.log("返送するURL:", url);
 
       res.json({
