@@ -1214,6 +1214,7 @@ router.get("/edit/:id", requireRole(["admin", "agency"]), async (req, res) => {
       customers: customers || [],
       transaction: transaction,
       storeName: storeName,
+      agencyName: storeName, // 編集モードでもagencyNameを設定
       title: "売上編集",
       isEdit: true,
     });
