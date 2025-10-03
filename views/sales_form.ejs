@@ -288,11 +288,20 @@
               // 成功メッセージを表示
               const successAlert = document.createElement('div');
               successAlert.className = 'alert alert-success alert-dismissible fade show';
+              
+              <% if (typeof isEdit !== 'undefined' && isEdit) { %>
               successAlert.innerHTML = `
                 <i class="bi bi-check-circle"></i>
-                <%= typeof isEdit !== "undefined" && isEdit ? "取引データが更新されました。" : result.message %>
+                取引データが更新されました。
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
               `;
+              <% } else { %>
+              successAlert.innerHTML = `
+                <i class="bi bi-check-circle"></i>
+                ${result.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              `;
+              <% } %>
               this.insertBefore(successAlert, this.firstChild);
 
               <% if (typeof isEdit === 'undefined' || !isEdit) { %>
