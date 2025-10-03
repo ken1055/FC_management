@@ -1126,6 +1126,7 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
           total_amount: totalAmount,
           average_amount: Math.round(avgAmount),
         },
+        success: req.query.success,
       });
     } catch (error) {
       console.error("履歴ページレンダリングエラー:", error);
@@ -1136,6 +1137,235 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
     }
   }
 });
+
+// 売上編集フォーム
+router.get("/edit/:id", requireRole(["admin", "agency"]), async (req, res) => {
+  try {
+    const transactionId = parseInt(req.params.id);
+    if (!db) return res.status(500).send("DB接続エラー");
+
+    // 取引データを取得
+    const { data: transaction, error } = await db
+      .from("customer_transactions")
+      .select("*")
+      .eq("id", transactionId)
+      .single();
+
+    if (error) {
+      console.error("取引取得エラー:", error);
+      return res.status(500).send("取引データの取得に失敗しました");
+    }
+
+    if (!transaction) {
+      return res.status(404).send("取引が見つかりません");
+    }
+
+    // 権限チェック - 代理店は自分のデータのみ編集可能
+    if (req.session.user.role === "agency") {
+      if (
+        !req.session.user.store_id ||
+        req.session.user.store_id !== transaction.store_id
+      ) {
+        return res.status(403).send("この取引を編集する権限がありません");
+      }
+    }
+
+    // 店舗一覧を取得（管理者のみ）
+    let stores = [];
+    if (req.session.user.role === "admin") {
+      const { data: storeData, error: storeError } = await db
+        .from("stores")
+        .select("id, name")
+        .order("name");
+
+      if (storeError) {
+        console.error("店舗一覧取得エラー:", storeError);
+      } else {
+        stores = storeData || [];
+      }
+    }
+
+    // 顧客一覧を取得（指定店舗のみ）
+    const { data: customers, error: customerError } = await db
+      .from("customers")
+      .select("id, name, customer_code")
+      .eq("store_id", transaction.store_id)
+      .order("name");
+
+    if (customerError) {
+      console.error("顧客一覧取得エラー:", customerError);
+    }
+
+    // 店舗名を取得
+    let storeName = null;
+    const { data: storeData, error: storeGetError } = await db
+      .from("stores")
+      .select("name")
+      .eq("id", transaction.store_id)
+      .single();
+
+    if (!storeGetError && storeData) {
+      storeName = storeData.name;
+    }
+
+    res.render("sales_form", {
+      session: req.session,
+      stores: stores,
+      customers: customers || [],
+      transaction: transaction,
+      storeName: storeName,
+      title: "売上編集",
+      isEdit: true,
+    });
+  } catch (error) {
+    console.error("売上編集フォームエラー:", error);
+    res.status(500).send("システムエラー");
+  }
+});
+
+// 売上更新
+router.post("/edit/:id", requireRole(["admin", "agency"]), async (req, res) => {
+  try {
+    const transactionId = parseInt(req.params.id);
+    const {
+      store_id,
+      customer_id,
+      transaction_date,
+      amount,
+      description,
+      payment_method,
+    } = req.body;
+
+    if (!db) return res.status(500).send("DB接続エラー");
+
+    // 必須項目チェック
+    if (!store_id || !customer_id || !transaction_date || !amount) {
+      return res.status(400).send("必須項目が不足しています");
+    }
+
+    // 数値変換
+    const processedStoreId = parseInt(store_id);
+    const processedCustomerId = parseInt(customer_id);
+    const processedAmount = parseInt(amount);
+
+    if (
+      isNaN(processedStoreId) ||
+      isNaN(processedCustomerId) ||
+      isNaN(processedAmount)
+    ) {
+      return res.status(400).send("数値フィールドの形式が正しくありません");
+    }
+
+    // 既存の取引データを取得して権限チェック
+    const { data: existingTransaction, error: fetchError } = await db
+      .from("customer_transactions")
+      .select("*")
+      .eq("id", transactionId)
+      .single();
+
+    if (fetchError || !existingTransaction) {
+      return res.status(404).send("取引が見つかりません");
+    }
+
+    // 権限チェック - 代理店は自分のデータのみ編集可能
+    if (req.session.user.role === "agency") {
+      if (
+        !req.session.user.store_id ||
+        req.session.user.store_id !== existingTransaction.store_id
+      ) {
+        return res.status(403).send("この取引を編集する権限がありません");
+      }
+    }
+
+    // 顧客が指定店舗に属しているかチェック
+    const { data: customers, error: customerError } = await db
+      .from("customers")
+      .select("id")
+      .eq("id", processedCustomerId)
+      .eq("store_id", processedStoreId)
+      .limit(1);
+
+    if (customerError || !customers || customers.length === 0) {
+      return res
+        .status(400)
+        .send("指定された顧客が見つからないか、店舗が一致しません");
+    }
+
+    // 取引を更新
+    const { error: updateError } = await db
+      .from("customer_transactions")
+      .update({
+        store_id: processedStoreId,
+        customer_id: processedCustomerId,
+        transaction_date,
+        amount: processedAmount,
+        description: description || "",
+        payment_method: payment_method || "現金",
+      })
+      .eq("id", transactionId);
+
+    if (updateError) {
+      console.error("取引更新エラー:", updateError);
+      return res.status(500).send("取引の更新に失敗しました");
+    }
+
+    // 成功時に履歴ページにリダイレクト
+    res.redirect("/sales/history?success=updated");
+  } catch (error) {
+    console.error("売上更新処理エラー:", error);
+    res.status(500).send("システムエラー");
+  }
+});
+
+// 売上削除
+router.post(
+  "/delete/:id",
+  requireRole(["admin", "agency"]),
+  async (req, res) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      if (!db) return res.status(500).send("DB接続エラー");
+
+      // 既存の取引データを取得して権限チェック
+      const { data: transaction, error: fetchError } = await db
+        .from("customer_transactions")
+        .select("*")
+        .eq("id", transactionId)
+        .single();
+
+      if (fetchError || !transaction) {
+        return res.status(404).send("取引が見つかりません");
+      }
+
+      // 権限チェック - 代理店は自分のデータのみ削除可能
+      if (req.session.user.role === "agency") {
+        if (
+          !req.session.user.store_id ||
+          req.session.user.store_id !== transaction.store_id
+        ) {
+          return res.status(403).send("この取引を削除する権限がありません");
+        }
+      }
+
+      // 取引を削除
+      const { error: deleteError } = await db
+        .from("customer_transactions")
+        .delete()
+        .eq("id", transactionId);
+
+      if (deleteError) {
+        console.error("取引削除エラー:", deleteError);
+        return res.status(500).send("取引の削除に失敗しました");
+      }
+
+      // 成功時に履歴ページにリダイレクト
+      res.redirect("/sales/history?success=deleted");
+    } catch (error) {
+      console.error("売上削除処理エラー:", error);
+      res.status(500).send("システムエラー");
+    }
+  }
+);
 
 // 売上履歴API
 router.get(

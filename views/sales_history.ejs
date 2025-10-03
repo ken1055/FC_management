@@ -109,6 +109,20 @@
     </nav>
 
     <div class="container">
+      <!-- 成功メッセージ -->
+      <% if (typeof success !== 'undefined' && success) { %>
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+          <% if (success === 'updated') { %>
+            <i class="bi bi-check-circle"></i> 取引データが更新されました。
+          <% } else if (success === 'deleted') { %>
+            <i class="bi bi-check-circle"></i> 取引データが削除されました。
+          <% } else { %>
+            <i class="bi bi-check-circle"></i> 操作が完了しました。
+          <% } %>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      <% } %>
+
       <!-- ページヘッダー -->
       <div class="row mb-4">
         <div class="col">
@@ -345,6 +359,19 @@
                              title="詳細">
                             <i class="bi bi-eye"></i>
                           </a>
+                          <a href="/sales/edit/<%= transaction.id %>" 
+                             class="btn btn-outline-warning btn-sm" 
+                             title="編集">
+                            <i class="bi bi-pencil"></i>
+                          </a>
+                          <form method="post" 
+                                action="/sales/delete/<%= transaction.id %>" 
+                                style="display: inline"
+                                onsubmit="return confirm('ID: <%= transaction.id %> の取引を削除しますか？\\n\\n顧客: <%= transaction.customer_name || '不明' %>\\n金額: ¥<%= transaction.amount.toLocaleString() %>\\n取引日: <%= new Date(transaction.transaction_date).toLocaleDateString('ja-JP') %>\\n\\nこの操作は取り消せません。')">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="削除">
+                              <i class="bi bi-trash"></i>
+                            </button>
+                          </form>
                         </div>
                       </td>
                     </tr>
