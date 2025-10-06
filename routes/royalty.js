@@ -948,26 +948,22 @@ async function generateInvoicePDF(calculation) {
       doc
         .fontSize(11)
         .fillColor("#333")
-        .text("ロイヤリティ、システム使用料（今は1000円）", { align: "center" });
+        .text("ロイヤリティ、システム使用料（今は1000円）", {
+          align: "center",
+        });
 
       doc.moveDown(1.2);
       const leftX = doc.x;
       const colW = 260;
 
       // 請求先
-      doc
-        .fontSize(12)
-        .fillColor("#0b54ac")
-        .text("請求先 (To)", leftX, doc.y);
-      doc
-        .fontSize(12)
-        .fillColor("#000")
-        .text(`${calculation.store_name} 御中`);
-      if (calculation.owner_name)
-        doc.text(`店長: ${calculation.owner_name}`);
+      doc.fontSize(12).fillColor("#0b54ac").text("請求先 (To)", leftX, doc.y);
+      doc.fontSize(12).fillColor("#000").text(`${calculation.store_name} 御中`);
+      if (calculation.owner_name) doc.text(`店長: ${calculation.owner_name}`);
       if (calculation.store_address) doc.text(calculation.store_address);
       if (calculation.store_phone) doc.text(`TEL: ${calculation.store_phone}`);
-      if (calculation.store_email) doc.text(`Email: ${calculation.store_email}`);
+      if (calculation.store_email)
+        doc.text(`Email: ${calculation.store_email}`);
 
       // 請求者
       const rightX = leftX + colW + 40;
@@ -989,26 +985,27 @@ async function generateInvoicePDF(calculation) {
 
       // メタ情報
       const invoiceDate = new Date();
-      const dueDate = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), 15);
+      const dueDate = new Date(
+        invoiceDate.getFullYear(),
+        invoiceDate.getMonth(),
+        15
+      );
       const pageNo = 1;
       const yyyy = invoiceDate.getFullYear();
       const mm = String(invoiceDate.getMonth() + 1).padStart(2, "0");
       const dd = String(invoiceDate.getDate()).padStart(2, "0");
       const invoiceNo = `${calculation.store_id}-${yyyy}${mm}${dd}${pageNo}`;
 
-      doc
-        .fontSize(11)
-        .fillColor("#0b54ac")
-        .text("請求情報", leftX);
+      doc.fontSize(11).fillColor("#0b54ac").text("請求情報", leftX);
       doc
         .fontSize(11)
         .fillColor("#000")
         .text(`件名: ロイヤリティ、システム使用料（今は1000円）`)
         .text(`請求No.: ${invoiceNo}`)
         .text(
-          `請求日: ${invoiceDate.toLocaleDateString("ja-JP")} ${invoiceDate.toLocaleTimeString(
+          `請求日: ${invoiceDate.toLocaleDateString(
             "ja-JP"
-          )}`
+          )} ${invoiceDate.toLocaleTimeString("ja-JP")}`
         )
         .text(
           `対象期間: ${calculation.calculation_year}年${calculation.calculation_month}月`
@@ -1018,50 +1015,47 @@ async function generateInvoicePDF(calculation) {
 
       doc.moveDown(0.8);
 
-      // 明細テーブル（簡易描画）
+      // 明細テーブル（レイアウト補正）
       const tableTop = doc.y + 10;
       const col1 = leftX;
-      const col2 = col1 + 260;
-      const col3 = col2 + 90;
-      const col4 = col3 + 90;
+      const colW1 = 260;
+      const colW2 = 90;
+      const colW3 = 90;
+      const colW4 = 120;
+      const col2 = col1 + colW1;
+      const col3 = col2 + colW2;
+      const col4 = col3 + colW3;
 
       doc
         .fontSize(11)
         .fillColor("white")
         .rect(col1 - 2, tableTop - 14, col4 - col1 + 90, 18)
         .fill("#0066cc");
-      doc
-        .fillColor("white")
-        .text("項目", col1, tableTop - 12)
-        .text("売上金額", col2, tableTop - 12)
-        .text("率", col3, tableTop - 12)
-        .text("金額", col4, tableTop - 12);
+      doc.fillColor("white");
+      doc.text("項目", col1, tableTop - 12, { width: colW1 });
+      doc.text("売上金額", col2, tableTop - 12, { width: colW2, align: "right" });
+      doc.text("率", col3, tableTop - 12, { width: colW3, align: "right" });
+      doc.text("金額", col4, tableTop - 12, { width: colW4, align: "right" });
 
       const lineY1 = tableTop + 6;
-      doc
-        .fontSize(11)
-        .fillColor("#000")
-        .text("フランチャイズロイヤリティ １式", col1, lineY1)
-        .text(`¥${(calculation.monthly_sales || 0).toLocaleString()}`, col2, lineY1)
-        .text(`${calculation.royalty_rate}%`, col3, lineY1)
-        .text(`¥${(calculation.royalty_amount || 0).toLocaleString()}`, col4, lineY1);
+      doc.fontSize(11).fillColor("#000");
+      doc.text("フランチャイズロイヤリティ １式", col1, lineY1, { width: colW1 });
+      doc.text(`¥${(calculation.monthly_sales || 0).toLocaleString()}`, col2, lineY1, { width: colW2, align: "right" });
+      doc.text(`${calculation.royalty_rate}%`, col3, lineY1, { width: colW3, align: "right" });
+      doc.text(`¥${(calculation.royalty_amount || 0).toLocaleString()}`, col4, lineY1, { width: colW4, align: "right" });
 
       const lineY2 = lineY1 + 18;
-      doc
-        .text("システム使用料 １ヶ月", col1, lineY2)
-        .text("-", col2, lineY2)
-        .text("-", col3, lineY2)
-        .text("¥1,000", col4, lineY2);
+      doc.text("システム使用料 １ヶ月", col1, lineY2, { width: colW1 });
+      doc.text("-", col2, lineY2, { width: colW2, align: "right" });
+      doc.text("-", col3, lineY2, { width: colW3, align: "right" });
+      doc.text("¥1,000", col4, lineY2, { width: colW4, align: "right" });
 
       const totalAmount = (calculation.royalty_amount || 0) + 1000;
       const totalBoxY = lineY2 + 28;
-      doc
-        .fontSize(12)
-        .fillColor("#0b54ac")
-        .text("合計請求金額 (税込)", col3 - 30, totalBoxY)
-        .fontSize(16)
-        .fillColor("#0b54ac")
-        .text(`¥${totalAmount.toLocaleString()}`, col4, totalBoxY);
+      doc.fontSize(12).fillColor("#0b54ac");
+      doc.text("合計請求金額 (税込)", col3 - 30, totalBoxY, { width: colW3 + 30, align: "right" });
+      doc.fontSize(16).fillColor("#0b54ac");
+      doc.text(`¥${totalAmount.toLocaleString()}`, col4, totalBoxY, { width: colW4, align: "right" });
 
       doc.moveDown(2);
       doc
@@ -1070,7 +1064,9 @@ async function generateInvoicePDF(calculation) {
         .text("お支払いについて")
         .fillColor("#000")
         .text(`支払期限: ${dueDate.toLocaleDateString("ja-JP")}`)
-        .text("振込先: 〇〇銀行 〇〇支店 / 普通 1234567 / FC本部 (エフシーホンブ)")
+        .text(
+          "振込先: 〇〇銀行 〇〇支店 / 普通 1234567 / FC本部 (エフシーホンブ)"
+        )
         .fontSize(10)
         .text("※振込手数料はご負担ください");
 
