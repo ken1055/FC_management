@@ -30,8 +30,9 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.0",
     "nodemailer": "^7.0.5",
-    "pg": "^8.16.3",
-    "pdfkit": "^0.15.0"
+    "pdfkit": "^0.15.0",
+    "fontkit": "^2.0.2",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
