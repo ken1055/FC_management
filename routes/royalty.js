@@ -496,7 +496,7 @@ router.get("/report", requireAdmin, async (req, res) => {
 
     // JavaScript側で月別集計を実行
     const monthlyData = {};
-    (calculations || []).forEach(calc => {
+    (calculations || []).forEach((calc) => {
       const month = calc.calculation_month;
       if (!monthlyData[month]) {
         monthlyData[month] = {
@@ -504,7 +504,7 @@ router.get("/report", requireAdmin, async (req, res) => {
           store_count: 0,
           total_sales: 0,
           total_royalty: 0,
-          royalty_rates: []
+          royalty_rates: [],
         };
       }
       monthlyData[month].store_count += 1;
@@ -514,18 +514,21 @@ router.get("/report", requireAdmin, async (req, res) => {
     });
 
     // 平均ロイヤリティ率を計算
-    const reportData = Object.values(monthlyData).map(data => ({
-      ...data,
-      avg_royalty_rate: data.royalty_rates.length > 0 
-        ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) / data.royalty_rates.length 
-        : 0
-    })).sort((a, b) => a.calculation_month - b.calculation_month);
+    const reportData = Object.values(monthlyData)
+      .map((data) => ({
+        ...data,
+        avg_royalty_rate:
+          data.royalty_rates.length > 0
+            ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) /
+              data.royalty_rates.length
+            : 0,
+      }))
+      .sort((a, b) => a.calculation_month - b.calculation_month);
 
     console.log("ロイヤリティレポートデータ:", reportData.length, "月分");
 
     // 詳細データも取得（Supabase）
     await handleRoyaltyReportData(reportData, year, req, res);
-
   } catch (error) {
     console.error("ロイヤリティレポート処理エラー:", error);
     res.status(500).render("error", {
@@ -556,7 +559,7 @@ async function handleRoyaltyReportData(reportData, year, req, res) {
     // 店舗情報を取得
     let enrichedDetailData = detailCalculations || [];
     if (detailCalculations && detailCalculations.length > 0) {
-      const storeIds = [...new Set(detailCalculations.map(d => d.store_id))];
+      const storeIds = [...new Set(detailCalculations.map((d) => d.store_id))];
       const { data: stores, error: storeError } = await db
         .from("stores")
         .select("id, name")
@@ -564,13 +567,13 @@ async function handleRoyaltyReportData(reportData, year, req, res) {
 
       if (!storeError && stores) {
         const storeMap = {};
-        stores.forEach(store => {
+        stores.forEach((store) => {
           storeMap[store.id] = store.name;
         });
 
-        enrichedDetailData = detailCalculations.map(detail => ({
+        enrichedDetailData = detailCalculations.map((detail) => ({
           ...detail,
-          store_name: storeMap[detail.store_id] || `店舗ID ${detail.store_id}`
+          store_name: storeMap[detail.store_id] || `店舗ID ${detail.store_id}`,
         }));
 
         // 月、店舗名でソート
@@ -578,7 +581,7 @@ async function handleRoyaltyReportData(reportData, year, req, res) {
           if (a.calculation_month !== b.calculation_month) {
             return a.calculation_month - b.calculation_month;
           }
-          return (a.store_name || '').localeCompare(b.store_name || '');
+          return (a.store_name || "").localeCompare(b.store_name || "");
         });
       }
     }
@@ -620,7 +623,6 @@ async function handleRoyaltyReportData(reportData, year, req, res) {
       session: req.session,
       title: "ロイヤリティレポート",
     });
-
   } catch (error) {
     console.error("ロイヤリティレポート詳細処理エラー:", error);
     res.status(500).render("error", {
@@ -944,7 +946,11 @@ async function generateInvoicePDF(calculation) {
 function generateInvoiceHTML(calculation) {
   const invoiceDate = new Date();
   // お支払い期日: 発行した月の15日まで
-  const dueDate = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), 15);
+  const dueDate = new Date(
+    invoiceDate.getFullYear(),
+    invoiceDate.getMonth(),
+    15
+  );
 
   // 請求No. = [代理店ID]-[日付YYYYMMDD][ページ番号(基本1)]
   const pageNo = 1;
@@ -990,6 +996,7 @@ function generateInvoiceHTML(calculation) {
             color: #0066cc;
             margin: 0;
         }
+        .header p { margin: 6px 0 0; color: #555; }
         .invoice-info {
             display: flex;
             justify-content: space-between;
@@ -1005,6 +1012,20 @@ function generateInvoiceHTML(calculation) {
             padding-bottom: 5px;
             margin-bottom: 10px;
         }
+        .amount-summary {
+            display: flex;
+            justify-content: flex-end;
+            margin: 10px 0 25px;
+        }
+        .total-box {
+            min-width: 320px;
+            background: #f8fbff;
+            border: 2px solid #0066cc;
+            border-radius: 6px;
+            padding: 12px 16px;
+        }
+        .total-box .label { color: #1b5fb8; font-weight: 700; }
+        .total-box .value { font-size: 20px; font-weight: 800; color: #0b54ac; }
         .invoice-details {
             background-color: #f8f9fa;
             padding: 15px;
@@ -1057,6 +1078,13 @@ function generateInvoiceHTML(calculation) {
         .payment-info h3 {
             color: #856404;
             margin-top: 0;
+        }
+        .remarks {
+            background-color: #f8f9fa;
+            padding: 12px 15px;
+            border-radius: 5px;
+            border: 1px solid #e2e6ea;
+            margin-top: 16px;
         }
         .footer {
             margin-top: 40px;
@@ -1115,6 +1143,13 @@ function generateInvoiceHTML(calculation) {
             </div>
         </div>
 
+        <div class="amount-summary">
+          <div class="total-box">
+            <div class="label">ご請求金額合計</div>
+            <div class="value">¥${totalAmount.toLocaleString()}</div>
+          </div>
+        </div>
+
         <div class="invoice-details">
             <table>
                 <tr>
@@ -1125,11 +1160,15 @@ function generateInvoiceHTML(calculation) {
                     <th>請求No.</th>
                     <td>${invoiceNo}</td>
                     <th>請求日</th>
-                    <td>${invoiceDate.toLocaleDateString("ja-JP")} ${invoiceDate.toLocaleTimeString("ja-JP")}</td>
+                    <td>${invoiceDate.toLocaleDateString(
+                      "ja-JP"
+                    )} ${invoiceDate.toLocaleTimeString("ja-JP")}</td>
                 </tr>
                 <tr>
                     <th>対象期間</th>
-                    <td>${calculation.calculation_year}年${calculation.calculation_month}月</td>
+                    <td>${calculation.calculation_year}年${
+    calculation.calculation_month
+  }月</td>
                     <th>担当</th>
                     <td>村上昌生</td>
                 </tr>
@@ -1154,9 +1193,13 @@ function generateInvoiceHTML(calculation) {
             <tbody>
                 <tr>
                     <td class="item-name">フランチャイズロイヤリティ １式</td>
-                    <td>¥${(calculation.monthly_sales || 0).toLocaleString()}</td>
+                    <td>¥${(
+                      calculation.monthly_sales || 0
+                    ).toLocaleString()}</td>
                     <td>${calculation.royalty_rate}%</td>
-                    <td class="amount">¥${(calculation.royalty_amount || 0).toLocaleString()}</td>
+                    <td class="amount">¥${(
+                      calculation.royalty_amount || 0
+                    ).toLocaleString()}</td>
                 </tr>
                 <tr>
                     <td class="item-name">システム使用料 １ヶ月</td>
@@ -1182,6 +1225,11 @@ function generateInvoiceHTML(calculation) {
             <p>普通預金 1234567</p>
             <p>FC本部 (エフシーホンブ)</p>
             <p><small>※振込手数料はご負担ください</small></p>
+        </div>
+
+        <div class="remarks">
+            <strong>備考</strong>
+            <p>本請求書に関するお問い合わせは担当（村上昌生）までご連絡ください。お支払い期限までのご入金をお願いいたします。</p>
         </div>
 
         <div class="footer">
