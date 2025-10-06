@@ -199,11 +199,12 @@ app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
     "default-src 'self'; " +
+      "connect-src 'self' https://cdn.jsdelivr.net; " +
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
       "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
       "font-src 'self' https://cdn.jsdelivr.net; " +
       "img-src 'self' data: https:; " +
-      "frame-src 'none';"
+      "frame-src 'self' blob: data:;"
   );
   next();
 });
