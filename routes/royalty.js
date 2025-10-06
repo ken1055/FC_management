@@ -3,7 +3,8 @@ const router = express.Router();
 // Supabase接続を取得
 const { getSupabaseClient } = require("../config/supabase");
 const db = getSupabaseClient();
-const puppeteer = require("puppeteer");
+const chromium = require("@sparticuz/chromium");
+const puppeteer = require("puppeteer-core");
 const fs = require("fs");
 const path = require("path");
 
@@ -661,7 +662,9 @@ router.get("/invoice/:calculationId", requireAdmin, async (req, res) => {
     if (calculation.store_id) {
       const { data: stores } = await db
         .from("stores")
-        .select("name, manager_name, business_address, main_phone, representative_email")
+        .select(
+          "name, manager_name, business_address, main_phone, representative_email"
+        )
         .eq("id", calculation.store_id)
         .limit(1);
       store = stores && stores[0] ? stores[0] : null;
@@ -742,7 +745,9 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
     if (calculation.store_id) {
       const { data: stores } = await db
         .from("stores")
-        .select("name, manager_name, business_address, main_phone, representative_email")
+        .select(
+          "name, manager_name, business_address, main_phone, representative_email"
+        )
         .eq("id", calculation.store_id)
         .limit(1);
       store = stores && stores[0] ? stores[0] : null;
@@ -835,7 +840,9 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
   try {
     const { year, month } = req.body;
     if (!year || !month) {
-      return res.status(400).json({ success: false, message: "年と月を指定してください" });
+      return res
+        .status(400)
+        .json({ success: false, message: "年と月を指定してください" });
     }
 
     const { data: calculations, error: calcErr } = await db
@@ -847,25 +854,39 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
       .order("store_id");
     if (calcErr) {
       console.error("ロイヤリティ計算取得エラー:", calcErr);
-      return res.status(500).json({ success: false, message: "ロイヤリティ計算の取得に失敗しました" });
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message: "ロイヤリティ計算の取得に失敗しました",
+        });
     }
 
     if (!calculations || calculations.length === 0) {
-      return res.json({ success: false, message: "生成対象の請求書がありません" });
+      return res.json({
+        success: false,
+        message: "生成対象の請求書がありません",
+      });
     }
 
     const storeIds = [...new Set(calculations.map((c) => c.store_id))];
     const { data: stores } = await db
       .from("stores")
-      .select("id, name, manager_name, business_address, main_phone, representative_email")
+      .select(
+        "id, name, manager_name, business_address, main_phone, representative_email"
+      )
       .in("id", storeIds);
     const storeMap = {};
     (stores || []).forEach((s) => (storeMap[s.id] = s));
 
     const invoicesDir = path.join(__dirname, "../uploads/invoices");
-    try { if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true }); } catch (_) {}
+    try {
+      if (!fs.existsSync(invoicesDir))
+        fs.mkdirSync(invoicesDir, { recursive: true });
+    } catch (_) {}
 
-    let successCount = 0, errorCount = 0;
+    let successCount = 0,
+      errorCount = 0;
     for (const calc of calculations) {
       try {
         const s = storeMap[calc.store_id] || {};
@@ -878,9 +899,14 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           store_email: s?.representative_email || null,
         };
         const pdfBuffer = await generateInvoicePDF(enriched);
-        const fileName = `invoice_${enriched.store_name}_${enriched.calculation_year}_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
+        const fileName = `invoice_${enriched.store_name}_${
+          enriched.calculation_year
+        }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
         let filePath = null;
-        try { filePath = path.join(invoicesDir, fileName); fs.writeFileSync(filePath, pdfBuffer); } catch (_) {}
+        try {
+          filePath = path.join(invoicesDir, fileName);
+          fs.writeFileSync(filePath, pdfBuffer);
+        } catch (_) {}
 
         await db
           .from("royalty_calculations")
@@ -893,39 +919,45 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`, generated: successCount, errors: errorCount });
+    res.json({
+      success: true,
+      message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
+      generated: successCount,
+      errors: errorCount,
+    });
   } catch (error) {
     console.error("一括請求書生成エラー:", error);
-    res.status(500).json({ success: false, message: "一括請求書生成に失敗しました" });
+    res
+      .status(500)
+      .json({ success: false, message: "一括請求書生成に失敗しました" });
   }
 });
 
 // PDF生成関数
 async function generateInvoicePDF(calculation) {
-  const browser = await puppeteer.launch({
-    headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
+  const launchOptions = isVercel
+    ? {
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      }
+    : {
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        headless: true,
+      };
 
+  const browser = await puppeteer.launch(launchOptions);
   try {
     const page = await browser.newPage();
-
-    // 請求書HTMLを生成
     const html = generateInvoiceHTML(calculation);
-
     await page.setContent(html, { waitUntil: "networkidle0" });
-
     const pdf = await page.pdf({
       format: "A4",
-      margin: {
-        top: "20mm",
-        right: "15mm",
-        bottom: "20mm",
-        left: "15mm",
-      },
+      margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
       printBackground: true,
     });
-
     return pdf;
   } finally {
     await browser.close();
