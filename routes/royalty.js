@@ -708,6 +708,107 @@ router.get("/invoice/:calculationId", requireAdmin, (req, res) => {
   });
 });
 
+// 請求書PDF配信（インライン表示）
+router.get("/invoice/:calculationId/pdf", requireAdmin, (req, res) => {
+  const calculationId = req.params.calculationId;
+
+  const query = `
+    SELECT 
+      rc.*,
+      s.name as store_name,
+      s.manager_name as owner_name,
+      s.business_address as store_address,
+      s.main_phone as store_phone,
+      s.representative_email as store_email
+    FROM royalty_calculations rc
+    LEFT JOIN stores s ON rc.store_id = s.id
+    WHERE rc.id = ?
+  `;
+
+  db.get(query, [calculationId], async (err, calculation) => {
+    if (err) {
+      console.error("ロイヤリティ計算取得エラー:", err);
+      return res.status(500).render("error", {
+        message: "ロイヤリティ計算の取得に失敗しました",
+        session: req.session,
+      });
+    }
+
+    if (!calculation) {
+      return res.status(404).render("error", {
+        message: "ロイヤリティ計算が見つかりません",
+        session: req.session,
+      });
+    }
+
+    try {
+      const pdfBuffer = await generateInvoicePDF(calculation);
+      const fileName = `invoice_${calculation.store_name}_${
+        calculation.calculation_year
+      }_${String(calculation.calculation_month).padStart(2, "0")}.pdf`;
+
+      // 可能ならDBを更新（生成済みフラグ）
+      const updateQuery = `
+        UPDATE royalty_calculations 
+        SET invoice_generated = TRUE
+        WHERE id = ?
+      `;
+      db.run(updateQuery, [calculationId], () => {});
+
+      // ブラウザ内でインライン表示
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${encodeURIComponent(fileName)}"`
+      );
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("PDF生成エラー:", error);
+      return res.status(500).render("error", {
+        message: "請求書の生成に失敗しました",
+        session: req.session,
+      });
+    }
+  });
+});
+
+// 請求書閲覧ページ
+router.get("/invoice/:calculationId/view", requireAdmin, (req, res) => {
+  const calculationId = req.params.calculationId;
+
+  const query = `
+    SELECT 
+      rc.*,
+      s.name as store_name
+    FROM royalty_calculations rc
+    LEFT JOIN stores s ON rc.store_id = s.id
+    WHERE rc.id = ?
+  `;
+
+  db.get(query, [calculationId], (err, calculation) => {
+    if (err) {
+      console.error("ロイヤリティ計算取得エラー:", err);
+      return res.status(500).render("error", {
+        message: "ロイヤリティ計算の取得に失敗しました",
+        session: req.session,
+      });
+    }
+
+    if (!calculation) {
+      return res.status(404).render("error", {
+        message: "ロイヤリティ計算が見つかりません",
+        session: req.session,
+      });
+    }
+
+    res.render("royalty_invoice_view", {
+      session: req.session,
+      calculation,
+      title: `${calculation.store_name} - 請求書プレビュー`,
+    });
+  });
+});
+
 // 一括請求書生成
 router.post("/invoices/bulk", requireAdmin, (req, res) => {
   const { year, month } = req.body;
