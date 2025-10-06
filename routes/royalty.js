@@ -943,8 +943,20 @@ async function generateInvoicePDF(calculation) {
 // 請求書HTML生成関数
 function generateInvoiceHTML(calculation) {
   const invoiceDate = new Date();
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 30); // 30日後が支払期限
+  // お支払い期日: 発行した月の15日まで
+  const dueDate = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), 15);
+
+  // 請求No. = [代理店ID]-[日付YYYYMMDD][ページ番号(基本1)]
+  const pageNo = 1;
+  const yyyy = invoiceDate.getFullYear();
+  const mm = String(invoiceDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(invoiceDate.getDate()).padStart(2, "0");
+  const invoiceNo = `${calculation.store_id}-${yyyy}${mm}${dd}${pageNo}`;
+
+  // 件名・固定費用（システム使用料）
+  const subject = "ロイヤリティ、システム使用料（今は1000円）";
+  const systemFee = 1000;
+  const totalAmount = (calculation.royalty_amount || 0) + systemFee;
 
   return `
 <!DOCTYPE html>
@@ -1064,8 +1076,8 @@ function generateInvoiceHTML(calculation) {
 <body>
     <div class="container">
         <div class="header">
-            <h1>ロイヤリティ請求書</h1>
-            <p>Invoice for Franchise Royalty</p>
+            <h1>ご請求書</h1>
+            <p class="mt-2">${subject}</p>
         </div>
 
         <div class="invoice-info">
@@ -1079,7 +1091,7 @@ function generateInvoiceHTML(calculation) {
             </div>
             <div class="client-info">
                 <h3>請求先 (To)</h3>
-                <p><strong>${calculation.store_name}</strong></p>
+                <p><strong>${calculation.store_name} 御中</strong></p>
                 ${
                   calculation.owner_name
                     ? `<p>店長: ${calculation.owner_name}</p>`
@@ -1106,20 +1118,26 @@ function generateInvoiceHTML(calculation) {
         <div class="invoice-details">
             <table>
                 <tr>
-                    <th>請求書番号</th>
-                    <td>INV-${calculation.calculation_year}${String(
-    calculation.calculation_month
-  ).padStart(2, "0")}-${String(calculation.store_id).padStart(3, "0")}</td>
+                    <th>件名</th>
+                    <td colspan="3">${subject}</td>
+                </tr>
+                <tr>
+                    <th>請求No.</th>
+                    <td>${invoiceNo}</td>
                     <th>請求日</th>
-                    <td>${invoiceDate.toLocaleDateString("ja-JP")}</td>
+                    <td>${invoiceDate.toLocaleDateString("ja-JP")} ${invoiceDate.toLocaleTimeString("ja-JP")}</td>
                 </tr>
                 <tr>
                     <th>対象期間</th>
-                    <td>${calculation.calculation_year}年${
-    calculation.calculation_month
-  }月</td>
-                    <th>支払期限</th>
+                    <td>${calculation.calculation_year}年${calculation.calculation_month}月</td>
+                    <th>担当</th>
+                    <td>村上昌生</td>
+                </tr>
+                <tr>
+                    <th>お支払い期日</th>
                     <td>${dueDate.toLocaleDateString("ja-JP")}</td>
+                    <th></th>
+                    <td></td>
                 </tr>
             </table>
         </div>
@@ -1130,22 +1148,26 @@ function generateInvoiceHTML(calculation) {
                     <th>項目</th>
                     <th>売上金額</th>
                     <th>ロイヤリティ率</th>
-                    <th>ロイヤリティ金額</th>
+                    <th>金額</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td class="item-name">${calculation.calculation_year}年${
-    calculation.calculation_month
-  }月 月間売上ロイヤリティ</td>
-                    <td>¥${calculation.monthly_sales.toLocaleString()}</td>
+                    <td class="item-name">フランチャイズロイヤリティ １式</td>
+                    <td>¥${(calculation.monthly_sales || 0).toLocaleString()}</td>
                     <td>${calculation.royalty_rate}%</td>
-                    <td class="amount">¥${calculation.royalty_amount.toLocaleString()}</td>
+                    <td class="amount">¥${(calculation.royalty_amount || 0).toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td class="item-name">システム使用料 １ヶ月</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td class="amount">¥${systemFee.toLocaleString()}</td>
                 </tr>
                 <tr class="total-row">
                     <td class="item-name">合計請求金額 (税込)</td>
                     <td colspan="2"></td>
-                    <td class="amount">¥${calculation.royalty_amount.toLocaleString()}</td>
+                    <td class="amount">¥${totalAmount.toLocaleString()}</td>
                 </tr>
             </tbody>
         </table>
