@@ -6,6 +6,8 @@ const db = getSupabaseClient();
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
+const fontkit = require("fontkit");
 
 // 管理者権限チェック関数
 function requireAdmin(req, res, next) {
@@ -941,23 +943,28 @@ async function generateInvoicePDF(calculation) {
 
       // 日本語フォント（ローカル or CDN）
       try {
-        const fontBuf = await (async () => {
+        const fontBuf = await(async () => {
           const localFonts = [
             path.join(__dirname, "../public/fonts/NotoSansJP-Regular.ttf"),
             path.join(__dirname, "../public/fonts/ipaexg.ttf"),
           ];
           for (const p of localFonts) {
-            try { if (fs.existsSync(p)) return fs.readFileSync(p); } catch (_) {}
+            try {
+              if (fs.existsSync(p)) return fs.readFileSync(p);
+            } catch (_) {}
           }
           // フォールバック: CDNからダウンロード
-          const url = "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf";
+          const url =
+            "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf";
           return await new Promise((resolve, reject) => {
-            https.get(url, (res) => {
-              if (res.statusCode !== 200) return resolve(null);
-              const cs = [];
-              res.on("data", (d) => cs.push(d));
-              res.on("end", () => resolve(Buffer.concat(cs)));
-            }).on("error", () => resolve(null));
+            https
+              .get(url, (res) => {
+                if (res.statusCode !== 200) return resolve(null);
+                const cs = [];
+                res.on("data", (d) => cs.push(d));
+                res.on("end", () => resolve(Buffer.concat(cs)));
+              })
+              .on("error", () => resolve(null));
           });
         })();
         if (fontBuf) {
