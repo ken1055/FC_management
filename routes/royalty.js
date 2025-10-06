@@ -943,9 +943,10 @@ async function generateInvoicePDF(calculation) {
 
       // 日本語フォント（ローカル or CDN）
       try {
-        const fontBuf = await(async () => {
+        const fontBuf = await (async () => {
           const localFonts = [
             path.join(__dirname, "../public/fonts/NotoSansJP-Regular.ttf"),
+            path.join(__dirname, "../public/fonts/NotoSansJP-VariableFont_wght.ttf"),
             path.join(__dirname, "../public/fonts/ipaexg.ttf"),
           ];
           for (const p of localFonts) {
@@ -953,10 +954,19 @@ async function generateInvoicePDF(calculation) {
               if (fs.existsSync(p)) return fs.readFileSync(p);
             } catch (_) {}
           }
+          // ディレクトリ走査で任意のTTF/OTFを探す
+          try {
+            const dir = path.join(__dirname, "../public/fonts");
+            if (fs.existsSync(dir)) {
+              const files = fs.readdirSync(dir);
+              const found = files.find((f) => /\.(ttf|otf)$/i.test(f));
+              if (found) return fs.readFileSync(path.join(dir, found));
+            }
+          } catch (_) {}
           // フォールバック: CDNからダウンロード
           const url =
             "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf";
-          return await new Promise((resolve, reject) => {
+          return await new Promise((resolve) => {
             https
               .get(url, (res) => {
                 if (res.statusCode !== 200) return resolve(null);
