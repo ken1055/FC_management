@@ -939,6 +939,33 @@ async function generateInvoicePDF(calculation) {
       doc.on("data", (d) => chunks.push(d));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
 
+      // 日本語フォント（ローカル or CDN）
+      try {
+        const fontBuf = await (async () => {
+          const localFonts = [
+            path.join(__dirname, "../public/fonts/NotoSansJP-Regular.ttf"),
+            path.join(__dirname, "../public/fonts/ipaexg.ttf"),
+          ];
+          for (const p of localFonts) {
+            try { if (fs.existsSync(p)) return fs.readFileSync(p); } catch (_) {}
+          }
+          // フォールバック: CDNからダウンロード
+          const url = "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf";
+          return await new Promise((resolve, reject) => {
+            https.get(url, (res) => {
+              if (res.statusCode !== 200) return resolve(null);
+              const cs = [];
+              res.on("data", (d) => cs.push(d));
+              res.on("end", () => resolve(Buffer.concat(cs)));
+            }).on("error", () => resolve(null));
+          });
+        })();
+        if (fontBuf) {
+          doc.registerFont("jp", fontBuf);
+          doc.font("jp");
+        }
+      } catch (_) {}
+
       // タイトル
       doc
         .fontSize(20)
@@ -1033,16 +1060,34 @@ async function generateInvoicePDF(calculation) {
         .fill("#0066cc");
       doc.fillColor("white");
       doc.text("項目", col1, tableTop - 12, { width: colW1 });
-      doc.text("売上金額", col2, tableTop - 12, { width: colW2, align: "right" });
+      doc.text("売上金額", col2, tableTop - 12, {
+        width: colW2,
+        align: "right",
+      });
       doc.text("率", col3, tableTop - 12, { width: colW3, align: "right" });
       doc.text("金額", col4, tableTop - 12, { width: colW4, align: "right" });
 
       const lineY1 = tableTop + 6;
       doc.fontSize(11).fillColor("#000");
-      doc.text("フランチャイズロイヤリティ １式", col1, lineY1, { width: colW1 });
-      doc.text(`¥${(calculation.monthly_sales || 0).toLocaleString()}`, col2, lineY1, { width: colW2, align: "right" });
-      doc.text(`${calculation.royalty_rate}%`, col3, lineY1, { width: colW3, align: "right" });
-      doc.text(`¥${(calculation.royalty_amount || 0).toLocaleString()}`, col4, lineY1, { width: colW4, align: "right" });
+      doc.text("フランチャイズロイヤリティ １式", col1, lineY1, {
+        width: colW1,
+      });
+      doc.text(
+        `¥${(calculation.monthly_sales || 0).toLocaleString()}`,
+        col2,
+        lineY1,
+        { width: colW2, align: "right" }
+      );
+      doc.text(`${calculation.royalty_rate}%`, col3, lineY1, {
+        width: colW3,
+        align: "right",
+      });
+      doc.text(
+        `¥${(calculation.royalty_amount || 0).toLocaleString()}`,
+        col4,
+        lineY1,
+        { width: colW4, align: "right" }
+      );
 
       const lineY2 = lineY1 + 18;
       doc.text("システム使用料 １ヶ月", col1, lineY2, { width: colW1 });
@@ -1053,9 +1098,15 @@ async function generateInvoicePDF(calculation) {
       const totalAmount = (calculation.royalty_amount || 0) + 1000;
       const totalBoxY = lineY2 + 28;
       doc.fontSize(12).fillColor("#0b54ac");
-      doc.text("合計請求金額 (税込)", col3 - 30, totalBoxY, { width: colW3 + 30, align: "right" });
+      doc.text("合計請求金額 (税込)", col3 - 30, totalBoxY, {
+        width: colW3 + 30,
+        align: "right",
+      });
       doc.fontSize(16).fillColor("#0b54ac");
-      doc.text(`¥${totalAmount.toLocaleString()}`, col4, totalBoxY, { width: colW4, align: "right" });
+      doc.text(`¥${totalAmount.toLocaleString()}`, col4, totalBoxY, {
+        width: colW4,
+        align: "right",
+      });
 
       doc.moveDown(2);
       doc
