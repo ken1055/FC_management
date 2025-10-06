@@ -633,31 +633,23 @@ async function handleRoyaltyReportData(reportData, year, req, res) {
 }
 
 // 請求書生成・ダウンロード
-router.get("/invoice/:calculationId", requireAdmin, (req, res) => {
-  const calculationId = req.params.calculationId;
+router.get("/invoice/:calculationId", requireAdmin, async (req, res) => {
+  try {
+    const calculationId = parseInt(req.params.calculationId);
 
-  const query = `
-    SELECT 
-      rc.*,
-      s.name as store_name,
-      s.manager_name as owner_name,
-      s.business_address as store_address,
-      s.main_phone as store_phone,
-      s.representative_email as store_email
-    FROM royalty_calculations rc
-    LEFT JOIN stores s ON rc.store_id = s.id
-    WHERE rc.id = ?
-  `;
-
-  db.get(query, [calculationId], async (err, calculation) => {
-    if (err) {
-      console.error("ロイヤリティ計算取得エラー:", err);
+    const { data: calcRows, error: calcErr } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("id", calculationId)
+      .limit(1);
+    if (calcErr) {
+      console.error("ロイヤリティ計算取得エラー:", calcErr);
       return res.status(500).render("error", {
         message: "ロイヤリティ計算の取得に失敗しました",
         session: req.session,
       });
     }
-
+    const calculation = calcRows && calcRows[0];
     if (!calculation) {
       return res.status(404).render("error", {
         message: "ロイヤリティ計算が見つかりません",
@@ -665,77 +657,80 @@ router.get("/invoice/:calculationId", requireAdmin, (req, res) => {
       });
     }
 
-    try {
-      const pdfBuffer = await generateInvoicePDF(calculation);
-      const fileName = `invoice_${calculation.store_name}_${
-        calculation.calculation_year
-      }_${String(calculation.calculation_month).padStart(2, "0")}.pdf`;
+    let store = null;
+    if (calculation.store_id) {
+      const { data: stores } = await db
+        .from("stores")
+        .select("name, manager_name, business_address, main_phone, representative_email")
+        .eq("id", calculation.store_id)
+        .limit(1);
+      store = stores && stores[0] ? stores[0] : null;
+    }
 
-      // PDFファイルを保存
+    const enriched = {
+      ...calculation,
+      store_name: store?.name || `店舗ID ${calculation.store_id}`,
+      owner_name: store?.manager_name || null,
+      store_address: store?.business_address || null,
+      store_phone: store?.main_phone || null,
+      store_email: store?.representative_email || null,
+    };
+
+    const pdfBuffer = await generateInvoicePDF(enriched);
+    const fileName = `invoice_${enriched.store_name}_${
+      enriched.calculation_year
+    }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
+
+    try {
       const invoicesDir = path.join(__dirname, "../uploads/invoices");
       if (!fs.existsSync(invoicesDir)) {
         fs.mkdirSync(invoicesDir, { recursive: true });
       }
-
       const filePath = path.join(invoicesDir, fileName);
       fs.writeFileSync(filePath, pdfBuffer);
-
-      // データベースに請求書パスを記録
-      const updateQuery = `
-        UPDATE royalty_calculations 
-        SET invoice_generated = TRUE, invoice_path = ?
-        WHERE id = ?
-      `;
-
-      db.run(updateQuery, [filePath, calculationId], (updateErr) => {
-        if (updateErr) {
-          console.error("請求書パス更新エラー:", updateErr);
-        }
-      });
-
-      // PDFをダウンロード
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${encodeURIComponent(fileName)}"`
-      );
-      res.send(pdfBuffer);
-    } catch (error) {
-      console.error("PDF生成エラー:", error);
-      return res.status(500).render("error", {
-        message: "請求書の生成に失敗しました",
-        session: req.session,
-      });
+      await db
+        .from("royalty_calculations")
+        .update({ invoice_generated: true, invoice_path: filePath })
+        .eq("id", calculationId);
+    } catch (_) {
+      await db
+        .from("royalty_calculations")
+        .update({ invoice_generated: true })
+        .eq("id", calculationId);
     }
-  });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(fileName)}"`
+    );
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("請求書生成ルートエラー:", error);
+    return res.status(500).render("error", {
+      message: "請求書の生成に失敗しました",
+      session: req.session,
+    });
+  }
 });
 
 // 請求書PDF配信（インライン表示）
-router.get("/invoice/:calculationId/pdf", requireAdmin, (req, res) => {
-  const calculationId = req.params.calculationId;
-
-  const query = `
-    SELECT 
-      rc.*,
-      s.name as store_name,
-      s.manager_name as owner_name,
-      s.business_address as store_address,
-      s.main_phone as store_phone,
-      s.representative_email as store_email
-    FROM royalty_calculations rc
-    LEFT JOIN stores s ON rc.store_id = s.id
-    WHERE rc.id = ?
-  `;
-
-  db.get(query, [calculationId], async (err, calculation) => {
-    if (err) {
-      console.error("ロイヤリティ計算取得エラー:", err);
+router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
+  try {
+    const calculationId = parseInt(req.params.calculationId);
+    const { data: calcRows, error: calcErr } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("id", calculationId)
+      .limit(1);
+    if (calcErr) {
+      console.error("ロイヤリティ計算取得エラー:", calcErr);
       return res.status(500).render("error", {
         message: "ロイヤリティ計算の取得に失敗しました",
         session: req.session,
       });
     }
-
+    const calculation = calcRows && calcRows[0];
     if (!calculation) {
       return res.status(404).render("error", {
         message: "ロイヤリティ計算が見つかりません",
@@ -743,171 +738,166 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, (req, res) => {
       });
     }
 
-    try {
-      const pdfBuffer = await generateInvoicePDF(calculation);
-      const fileName = `invoice_${calculation.store_name}_${
-        calculation.calculation_year
-      }_${String(calculation.calculation_month).padStart(2, "0")}.pdf`;
-
-      // 可能ならDBを更新（生成済みフラグ）
-      const updateQuery = `
-        UPDATE royalty_calculations 
-        SET invoice_generated = TRUE
-        WHERE id = ?
-      `;
-      db.run(updateQuery, [calculationId], () => {});
-
-      // ブラウザ内でインライン表示
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${encodeURIComponent(fileName)}"`
-      );
-      res.send(pdfBuffer);
-    } catch (error) {
-      console.error("PDF生成エラー:", error);
-      return res.status(500).render("error", {
-        message: "請求書の生成に失敗しました",
-        session: req.session,
-      });
+    let store = null;
+    if (calculation.store_id) {
+      const { data: stores } = await db
+        .from("stores")
+        .select("name, manager_name, business_address, main_phone, representative_email")
+        .eq("id", calculation.store_id)
+        .limit(1);
+      store = stores && stores[0] ? stores[0] : null;
     }
-  });
+
+    const enriched = {
+      ...calculation,
+      store_name: store?.name || `店舗ID ${calculation.store_id}`,
+      owner_name: store?.manager_name || null,
+      store_address: store?.business_address || null,
+      store_phone: store?.main_phone || null,
+      store_email: store?.representative_email || null,
+    };
+
+    const pdfBuffer = await generateInvoicePDF(enriched);
+    const fileName = `invoice_${enriched.store_name}_${
+      enriched.calculation_year
+    }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
+
+    await db
+      .from("royalty_calculations")
+      .update({ invoice_generated: true })
+      .eq("id", calculationId);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(fileName)}"`
+    );
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("請求書PDF表示エラー:", error);
+    return res.status(500).render("error", {
+      message: "請求書の生成に失敗しました",
+      session: req.session,
+    });
+  }
 });
 
 // 請求書閲覧ページ
-router.get("/invoice/:calculationId/view", requireAdmin, (req, res) => {
-  const calculationId = req.params.calculationId;
-
-  const query = `
-    SELECT 
-      rc.*,
-      s.name as store_name
-    FROM royalty_calculations rc
-    LEFT JOIN stores s ON rc.store_id = s.id
-    WHERE rc.id = ?
-  `;
-
-  db.get(query, [calculationId], (err, calculation) => {
-    if (err) {
-      console.error("ロイヤリティ計算取得エラー:", err);
+router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
+  try {
+    const calculationId = parseInt(req.params.calculationId);
+    const { data: calcRows, error: calcErr } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("id", calculationId)
+      .limit(1);
+    if (calcErr) {
+      console.error("ロイヤリティ計算取得エラー:", calcErr);
       return res.status(500).render("error", {
         message: "ロイヤリティ計算の取得に失敗しました",
         session: req.session,
       });
     }
-
+    const calculation = calcRows && calcRows[0];
     if (!calculation) {
       return res.status(404).render("error", {
         message: "ロイヤリティ計算が見つかりません",
         session: req.session,
       });
+    }
+
+    let storeName = `店舗ID ${calculation.store_id}`;
+    const { data: stores } = await db
+      .from("stores")
+      .select("name")
+      .eq("id", calculation.store_id)
+      .limit(1);
+    if (stores && stores[0]) {
+      storeName = stores[0].name;
     }
 
     res.render("royalty_invoice_view", {
       session: req.session,
-      calculation,
-      title: `${calculation.store_name} - 請求書プレビュー`,
+      calculation: { ...calculation, store_name: storeName },
+      title: `${storeName} - 請求書プレビュー`,
     });
-  });
+  } catch (error) {
+    console.error("請求書プレビューエラー:", error);
+    return res.status(500).render("error", {
+      message: "請求書プレビューの表示に失敗しました",
+      session: req.session,
+    });
+  }
 });
 
 // 一括請求書生成
-router.post("/invoices/bulk", requireAdmin, (req, res) => {
-  const { year, month } = req.body;
+router.post("/invoices/bulk", requireAdmin, async (req, res) => {
+  try {
+    const { year, month } = req.body;
+    if (!year || !month) {
+      return res.status(400).json({ success: false, message: "年と月を指定してください" });
+    }
 
-  if (!year || !month) {
-    return res.status(400).json({
-      success: false,
-      message: "年と月を指定してください",
-    });
-  }
-
-  const query = `
-    SELECT 
-      rc.*,
-      s.name as store_name,
-      s.manager_name as owner_name,
-      s.business_address as store_address,
-      s.main_phone as store_phone,
-      s.representative_email as store_email
-    FROM royalty_calculations rc
-    LEFT JOIN stores s ON rc.store_id = s.id
-    WHERE rc.calculation_year = ? AND rc.calculation_month = ? AND rc.invoice_generated = FALSE
-    ORDER BY s.name
-  `;
-
-  db.all(query, [year, month], async (err, calculations) => {
-    if (err) {
-      console.error("ロイヤリティ計算取得エラー:", err);
-      return res.status(500).json({
-        success: false,
-        message: "ロイヤリティ計算の取得に失敗しました",
-      });
+    const { data: calculations, error: calcErr } = await db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("calculation_year", parseInt(year))
+      .eq("calculation_month", parseInt(month))
+      .eq("invoice_generated", false)
+      .order("store_id");
+    if (calcErr) {
+      console.error("ロイヤリティ計算取得エラー:", calcErr);
+      return res.status(500).json({ success: false, message: "ロイヤリティ計算の取得に失敗しました" });
     }
 
     if (!calculations || calculations.length === 0) {
-      return res.json({
-        success: false,
-        message: "生成対象の請求書がありません",
-      });
+      return res.json({ success: false, message: "生成対象の請求書がありません" });
     }
 
-    try {
-      let successCount = 0;
-      let errorCount = 0;
+    const storeIds = [...new Set(calculations.map((c) => c.store_id))];
+    const { data: stores } = await db
+      .from("stores")
+      .select("id, name, manager_name, business_address, main_phone, representative_email")
+      .in("id", storeIds);
+    const storeMap = {};
+    (stores || []).forEach((s) => (storeMap[s.id] = s));
 
-      const invoicesDir = path.join(__dirname, "../uploads/invoices");
-      if (!fs.existsSync(invoicesDir)) {
-        fs.mkdirSync(invoicesDir, { recursive: true });
+    const invoicesDir = path.join(__dirname, "../uploads/invoices");
+    try { if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true }); } catch (_) {}
+
+    let successCount = 0, errorCount = 0;
+    for (const calc of calculations) {
+      try {
+        const s = storeMap[calc.store_id] || {};
+        const enriched = {
+          ...calc,
+          store_name: s?.name || `店舗ID ${calc.store_id}`,
+          owner_name: s?.manager_name || null,
+          store_address: s?.business_address || null,
+          store_phone: s?.main_phone || null,
+          store_email: s?.representative_email || null,
+        };
+        const pdfBuffer = await generateInvoicePDF(enriched);
+        const fileName = `invoice_${enriched.store_name}_${enriched.calculation_year}_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
+        let filePath = null;
+        try { filePath = path.join(invoicesDir, fileName); fs.writeFileSync(filePath, pdfBuffer); } catch (_) {}
+
+        await db
+          .from("royalty_calculations")
+          .update({ invoice_generated: true, invoice_path: filePath })
+          .eq("id", calc.id);
+        successCount++;
+      } catch (e) {
+        console.error("請求書生成エラー:", e);
+        errorCount++;
       }
-
-      // 各店舗の請求書を生成
-      for (const calculation of calculations) {
-        try {
-          const pdfBuffer = await generateInvoicePDF(calculation);
-          const fileName = `invoice_${calculation.store_name}_${
-            calculation.calculation_year
-          }_${String(calculation.calculation_month).padStart(2, "0")}.pdf`;
-          const filePath = path.join(invoicesDir, fileName);
-
-          fs.writeFileSync(filePath, pdfBuffer);
-
-          // データベースを更新
-          const updateQuery = `
-            UPDATE royalty_calculations 
-            SET invoice_generated = TRUE, invoice_path = ?
-            WHERE id = ?
-          `;
-
-          await new Promise((resolve, reject) => {
-            db.run(updateQuery, [filePath, calculation.id], (updateErr) => {
-              if (updateErr) reject(updateErr);
-              else resolve();
-            });
-          });
-
-          successCount++;
-          console.log(`請求書生成成功: ${calculation.store_name}`);
-        } catch (error) {
-          console.error(`請求書生成エラー (${calculation.store_name}):`, error);
-          errorCount++;
-        }
-      }
-
-      res.json({
-        success: true,
-        message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
-        generated: successCount,
-        errors: errorCount,
-      });
-    } catch (error) {
-      console.error("一括請求書生成エラー:", error);
-      res.status(500).json({
-        success: false,
-        message: "一括請求書生成に失敗しました",
-      });
     }
-  });
+
+    res.json({ success: true, message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`, generated: successCount, errors: errorCount });
+  } catch (error) {
+    console.error("一括請求書生成エラー:", error);
+    res.status(500).json({ success: false, message: "一括請求書生成に失敗しました" });
+  }
 });
 
 // PDF生成関数
