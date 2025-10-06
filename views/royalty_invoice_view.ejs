@@ -31,7 +31,7 @@
     </div>
 
     <div class="viewer">
-      <iframe src="/royalty/invoice/<%= calculation.id %>/pdf" title="invoice" width="100%" height="100%" style="border:0;"></iframe>
+      <iframe src="/royalty/invoice/<%= calculation.id %>/pdf?v=<%= Date.now() %>" title="invoice" width="100%" height="100%" style="border:0;"></iframe>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
