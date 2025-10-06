@@ -349,6 +349,15 @@ app.use("/royalty", require("./routes/royalty"));
 
 console.log("Vercel + Supabase全ルート読み込み完了");
 
+// favicon（/favicon.ico を /public/favicon.ico へフォールバック）
+app.get("/favicon.ico", (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, "public", "favicon.ico"));
+  } catch (e) {
+    res.status(404).end();
+  }
+});
+
 // 店舗統計情報API
 app.get("/api/store/statistics", async (req, res) => {
   console.log("=== 統計情報API呼び出し ===");
