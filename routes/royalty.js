@@ -578,7 +578,7 @@ router.get("/report", requireAdmin, async (req, res) => {
     // 平均ロイヤリティ率を計算
     const reportData = Object.values(monthlyData)
       .map((data) => ({
-      ...data,
+        ...data,
         avg_royalty_rate:
           data.royalty_rates.length > 0
             ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) /
@@ -840,23 +840,23 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
       .update({ invoice_generated: true })
       .eq("id", calculationId);
 
-      res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Type", "application/pdf");
     const asciiFallbackInline = fileName.replace(/[^\x20-\x7E]/g, "_");
-      res.setHeader(
-        "Content-Disposition",
+    res.setHeader(
+      "Content-Disposition",
       `inline; filename="${asciiFallbackInline}"; filename*=UTF-8''${encodeRFC5987(
         fileName
       )}`
-      );
-      res.send(pdfBuffer);
-    } catch (error) {
+    );
+    res.send(pdfBuffer);
+  } catch (error) {
     console.error("請求書PDF表示エラー:", error);
-      return res.status(500).render("error", {
-        message: "請求書の生成に失敗しました",
-        session: req.session,
-      });
-    }
-  });
+    return res.status(500).render("error", {
+      message: "請求書の生成に失敗しました",
+      session: req.session,
+    });
+  }
+});
 
 // 請求書閲覧ページ
 router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
@@ -909,8 +909,8 @@ router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
 // 一括請求書生成
 router.post("/invoices/bulk", requireAdmin, async (req, res) => {
   try {
-  const { year, month } = req.body;
-  if (!year || !month) {
+    const { year, month } = req.body;
+    if (!year || !month) {
       return res
         .status(400)
         .json({ success: false, message: "年と月を指定してください" });
@@ -948,7 +948,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
     const storeMap = {};
     (stores || []).forEach((s) => (storeMap[s.id] = s));
 
-      const invoicesDir = path.join(__dirname, "../uploads/invoices");
+    const invoicesDir = path.join(__dirname, "../uploads/invoices");
     try {
       if (!fs.existsSync(invoicesDir))
         fs.mkdirSync(invoicesDir, { recursive: true });
@@ -981,21 +981,21 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           .from("royalty_calculations")
           .update({ invoice_generated: true, invoice_path: filePath })
           .eq("id", calc.id);
-          successCount++;
+        successCount++;
       } catch (e) {
         console.error("請求書生成エラー:", e);
-          errorCount++;
-        }
+        errorCount++;
       }
+    }
 
-      res.json({
-        success: true,
-        message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
-        generated: successCount,
-        errors: errorCount,
-      });
-    } catch (error) {
-      console.error("一括請求書生成エラー:", error);
+    res.json({
+      success: true,
+      message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
+      generated: successCount,
+      errors: errorCount,
+    });
+  } catch (error) {
+    console.error("一括請求書生成エラー:", error);
     res
       .status(500)
       .json({ success: false, message: "一括請求書生成に失敗しました" });
@@ -1030,170 +1030,174 @@ async function generateInvoicePDF(calculation, req) {
           } catch (_) {}
         }
 
-      // タイトル
-      doc
-        .fontSize(20)
-        .fillColor("#0b54ac")
-        .text("ご請求書", { align: "center" });
-      doc.moveDown(0.5);
-      doc
-        .fontSize(11)
-        .fillColor("#333")
-        .text("ロイヤリティ、システム使用料（今は1000円）", {
-          align: "center",
+        // タイトル
+        doc
+          .fontSize(20)
+          .fillColor("#0b54ac")
+          .text("ご請求書", { align: "center" });
+        doc.moveDown(0.5);
+        doc
+          .fontSize(11)
+          .fillColor("#333")
+          .text("ロイヤリティ、システム使用料（今は1000円）", {
+            align: "center",
+          });
+
+        doc.moveDown(1.2);
+        const leftX = doc.x;
+        const colW = 260;
+
+        // 請求先
+        doc.fontSize(12).fillColor("#0b54ac").text("請求先 (To)", leftX, doc.y);
+        doc
+          .fontSize(12)
+          .fillColor("#000")
+          .text(`${calculation.store_name} 御中`);
+        if (calculation.owner_name) doc.text(`店長: ${calculation.owner_name}`);
+        if (calculation.store_address) doc.text(calculation.store_address);
+        if (calculation.store_phone)
+          doc.text(`TEL: ${calculation.store_phone}`);
+        if (calculation.store_email)
+          doc.text(`Email: ${calculation.store_email}`);
+
+        // 請求者
+        const rightX = leftX + colW + 40;
+        const currentY = doc.y - 80; // ざっくり並列に表示
+        doc
+          .fontSize(12)
+          .fillColor("#0b54ac")
+          .text("請求者 (From)", rightX, Math.max(120, currentY));
+        doc
+          .fontSize(12)
+          .fillColor("#000")
+          .text("FC本部")
+          .text("〒000-0000")
+          .text("東京都〇〇区〇〇 1-2-3")
+          .text("TEL: 03-0000-0000")
+          .text("Email: headquarters@fc-company.co.jp");
+
+        doc.moveDown(1.2);
+
+        // メタ情報
+        const invoiceDate = new Date();
+        const dueDate = new Date(
+          invoiceDate.getFullYear(),
+          invoiceDate.getMonth(),
+          15
+        );
+        const pageNo = 1;
+        const yyyy = invoiceDate.getFullYear();
+        const mm = String(invoiceDate.getMonth() + 1).padStart(2, "0");
+        const dd = String(invoiceDate.getDate()).padStart(2, "0");
+        const invoiceNo = `${calculation.store_id}-${yyyy}${mm}${dd}${pageNo}`;
+
+        doc.fontSize(11).fillColor("#0b54ac").text("請求情報", leftX);
+        doc
+          .fontSize(11)
+          .fillColor("#000")
+          .text(`件名: ロイヤリティ、システム使用料（今は1000円）`)
+          .text(`請求No.: ${invoiceNo}`)
+          .text(
+            `請求日: ${invoiceDate.toLocaleDateString(
+              "ja-JP"
+            )} ${invoiceDate.toLocaleTimeString("ja-JP")}`
+          )
+          .text(
+            `対象期間: ${calculation.calculation_year}年${calculation.calculation_month}月`
+          )
+          .text(`担当: 村上昌生`)
+          .text(`お支払い期日: ${dueDate.toLocaleDateString("ja-JP")}`);
+
+        doc.moveDown(0.8);
+
+        // 明細テーブル（レイアウト補正）
+        const tableTop = doc.y + 10;
+        const col1 = leftX;
+        const colW1 = 260;
+        const colW2 = 90;
+        const colW3 = 90;
+        const colW4 = 120;
+        const col2 = col1 + colW1;
+        const col3 = col2 + colW2;
+        const col4 = col3 + colW3;
+
+        doc
+          .fontSize(11)
+          .fillColor("white")
+          .rect(col1 - 2, tableTop - 14, col4 - col1 + 90, 18)
+          .fill("#0066cc");
+        doc.fillColor("white");
+        doc.text("項目", col1, tableTop - 12, { width: colW1 });
+        doc.text("売上金額", col2, tableTop - 12, {
+          width: colW2,
+          align: "right",
         });
+        doc.text("率", col3, tableTop - 12, { width: colW3, align: "right" });
+        doc.text("金額", col4, tableTop - 12, { width: colW4, align: "right" });
 
-      doc.moveDown(1.2);
-      const leftX = doc.x;
-      const colW = 260;
-
-      // 請求先
-      doc.fontSize(12).fillColor("#0b54ac").text("請求先 (To)", leftX, doc.y);
-      doc.fontSize(12).fillColor("#000").text(`${calculation.store_name} 御中`);
-      if (calculation.owner_name) doc.text(`店長: ${calculation.owner_name}`);
-      if (calculation.store_address) doc.text(calculation.store_address);
-      if (calculation.store_phone) doc.text(`TEL: ${calculation.store_phone}`);
-      if (calculation.store_email)
-        doc.text(`Email: ${calculation.store_email}`);
-
-      // 請求者
-      const rightX = leftX + colW + 40;
-      const currentY = doc.y - 80; // ざっくり並列に表示
-      doc
-        .fontSize(12)
-        .fillColor("#0b54ac")
-        .text("請求者 (From)", rightX, Math.max(120, currentY));
-      doc
-        .fontSize(12)
-        .fillColor("#000")
-        .text("FC本部")
-        .text("〒000-0000")
-        .text("東京都〇〇区〇〇 1-2-3")
-        .text("TEL: 03-0000-0000")
-        .text("Email: headquarters@fc-company.co.jp");
-
-      doc.moveDown(1.2);
-
-      // メタ情報
-      const invoiceDate = new Date();
-      const dueDate = new Date(
-        invoiceDate.getFullYear(),
-        invoiceDate.getMonth(),
-        15
-      );
-      const pageNo = 1;
-      const yyyy = invoiceDate.getFullYear();
-      const mm = String(invoiceDate.getMonth() + 1).padStart(2, "0");
-      const dd = String(invoiceDate.getDate()).padStart(2, "0");
-      const invoiceNo = `${calculation.store_id}-${yyyy}${mm}${dd}${pageNo}`;
-
-      doc.fontSize(11).fillColor("#0b54ac").text("請求情報", leftX);
-      doc
-        .fontSize(11)
-        .fillColor("#000")
-        .text(`件名: ロイヤリティ、システム使用料（今は1000円）`)
-        .text(`請求No.: ${invoiceNo}`)
-        .text(
-          `請求日: ${invoiceDate.toLocaleDateString(
-            "ja-JP"
-          )} ${invoiceDate.toLocaleTimeString("ja-JP")}`
-        )
-        .text(
-          `対象期間: ${calculation.calculation_year}年${calculation.calculation_month}月`
-        )
-        .text(`担当: 村上昌生`)
-        .text(`お支払い期日: ${dueDate.toLocaleDateString("ja-JP")}`);
-
-      doc.moveDown(0.8);
-
-      // 明細テーブル（レイアウト補正）
-      const tableTop = doc.y + 10;
-      const col1 = leftX;
-      const colW1 = 260;
-      const colW2 = 90;
-      const colW3 = 90;
-      const colW4 = 120;
-      const col2 = col1 + colW1;
-      const col3 = col2 + colW2;
-      const col4 = col3 + colW3;
-
-      doc
-        .fontSize(11)
-        .fillColor("white")
-        .rect(col1 - 2, tableTop - 14, col4 - col1 + 90, 18)
-        .fill("#0066cc");
-      doc.fillColor("white");
-      doc.text("項目", col1, tableTop - 12, { width: colW1 });
-      doc.text("売上金額", col2, tableTop - 12, {
-        width: colW2,
-        align: "right",
-      });
-      doc.text("率", col3, tableTop - 12, { width: colW3, align: "right" });
-      doc.text("金額", col4, tableTop - 12, { width: colW4, align: "right" });
-
-      const lineY1 = tableTop + 6;
-      doc.fontSize(11).fillColor("#000");
-      doc.text("フランチャイズロイヤリティ １式", col1, lineY1, {
-        width: colW1,
-      });
-      doc.text(
-        `¥${(calculation.monthly_sales || 0).toLocaleString()}`,
-        col2,
-        lineY1,
-        { width: colW2, align: "right" }
-      );
-      doc.text(`${calculation.royalty_rate}%`, col3, lineY1, {
-        width: colW3,
-        align: "right",
-      });
-      doc.text(
-        `¥${(calculation.royalty_amount || 0).toLocaleString()}`,
-        col4,
-        lineY1,
-        { width: colW4, align: "right" }
-      );
-
-      const lineY2 = lineY1 + 18;
-      doc.text("システム使用料 １ヶ月", col1, lineY2, { width: colW1 });
-      doc.text("-", col2, lineY2, { width: colW2, align: "right" });
-      doc.text("-", col3, lineY2, { width: colW3, align: "right" });
-      doc.text("¥1,000", col4, lineY2, { width: colW4, align: "right" });
-
-      const totalAmount = (calculation.royalty_amount || 0) + 1000;
-      const totalBoxY = lineY2 + 28;
-      doc.fontSize(12).fillColor("#0b54ac");
-      doc.text("合計請求金額 (税込)", col3 - 30, totalBoxY, {
-        width: colW3 + 30,
-        align: "right",
-      });
-      doc.fontSize(16).fillColor("#0b54ac");
-      doc.text(`¥${totalAmount.toLocaleString()}`, col4, totalBoxY, {
-        width: colW4,
-        align: "right",
-      });
-
-      doc.moveDown(2);
-      doc
-        .fontSize(11)
-        .fillColor("#856404")
-        .text("お支払いについて")
-        .fillColor("#000")
-        .text(`支払期限: ${dueDate.toLocaleDateString("ja-JP")}`)
-        .text(
-          "振込先: 〇〇銀行 〇〇支店 / 普通 1234567 / FC本部 (エフシーホンブ)"
-        )
-        .fontSize(10)
-        .text("※振込手数料はご負担ください");
-
-      doc.moveDown(1);
-      doc
-        .fontSize(10)
-        .fillColor("#333")
-        .text(
-          "備考: 本請求書に関するお問い合わせは担当（村上昌生）までご連絡ください。お支払い期限までのご入金をお願いいたします。"
+        const lineY1 = tableTop + 6;
+        doc.fontSize(11).fillColor("#000");
+        doc.text("フランチャイズロイヤリティ １式", col1, lineY1, {
+          width: colW1,
+        });
+        doc.text(
+          `¥${(calculation.monthly_sales || 0).toLocaleString()}`,
+          col2,
+          lineY1,
+          { width: colW2, align: "right" }
+        );
+        doc.text(`${calculation.royalty_rate}%`, col3, lineY1, {
+          width: colW3,
+          align: "right",
+        });
+        doc.text(
+          `¥${(calculation.royalty_amount || 0).toLocaleString()}`,
+          col4,
+          lineY1,
+          { width: colW4, align: "right" }
         );
 
-      doc.end();
+        const lineY2 = lineY1 + 18;
+        doc.text("システム使用料 １ヶ月", col1, lineY2, { width: colW1 });
+        doc.text("-", col2, lineY2, { width: colW2, align: "right" });
+        doc.text("-", col3, lineY2, { width: colW3, align: "right" });
+        doc.text("¥1,000", col4, lineY2, { width: colW4, align: "right" });
+
+        const totalAmount = (calculation.royalty_amount || 0) + 1000;
+        const totalBoxY = lineY2 + 28;
+        doc.fontSize(12).fillColor("#0b54ac");
+        doc.text("合計請求金額 (税込)", col3 - 30, totalBoxY, {
+          width: colW3 + 30,
+          align: "right",
+        });
+        doc.fontSize(16).fillColor("#0b54ac");
+        doc.text(`¥${totalAmount.toLocaleString()}`, col4, totalBoxY, {
+          width: colW4,
+          align: "right",
+        });
+
+        doc.moveDown(2);
+        doc
+          .fontSize(11)
+          .fillColor("#856404")
+          .text("お支払いについて")
+          .fillColor("#000")
+          .text(`支払期限: ${dueDate.toLocaleDateString("ja-JP")}`)
+          .text(
+            "振込先: 〇〇銀行 〇〇支店 / 普通 1234567 / FC本部 (エフシーホンブ)"
+          )
+          .fontSize(10)
+          .text("※振込手数料はご負担ください");
+
+        doc.moveDown(1);
+        doc
+          .fontSize(10)
+          .fillColor("#333")
+          .text(
+            "備考: 本請求書に関するお問い合わせは担当（村上昌生）までご連絡ください。お支払い期限までのご入金をお願いいたします。"
+          );
+
+        doc.end();
       })();
     } catch (e) {
       reject(e);
