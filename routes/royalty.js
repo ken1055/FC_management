@@ -809,7 +809,10 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
     };
 
     const pdfBuffer = await generateInvoicePDF(enriched);
-    const safeInlineStoreName = enriched.store_name.replace(/[\\/:*?"<>|]/g, "_");
+    const safeInlineStoreName = enriched.store_name.replace(
+      /[\\/:*?"<>|]/g,
+      "_"
+    );
     const fileName = `invoice_${safeInlineStoreName}_${
       enriched.calculation_year
     }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
@@ -820,9 +823,10 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
       .eq("id", calculationId);
 
       res.setHeader("Content-Type", "application/pdf");
+    const asciiFallbackInline = fileName.replace(/[^\x20-\x7E]/g, '_');
       res.setHeader(
         "Content-Disposition",
-      `inline; filename="${encodeURIComponent(fileName)}"; filename*=UTF-8''${encodeRFC5987(fileName)}`
+      `inline; filename="${asciiFallbackInline}"; filename*=UTF-8''${encodeRFC5987(fileName)}`
       );
       res.send(pdfBuffer);
     } catch (error) {
