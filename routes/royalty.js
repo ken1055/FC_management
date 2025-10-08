@@ -1205,10 +1205,18 @@ async function generateInvoicePDF(calculation, req) {
           doc.y
         );
 
-        // 備考欄（空欄）
+        // 備考欄（枠で囲む）
         doc.moveDown(2);
+        const remarksY = doc.y;
         doc.fontSize(10).fillColor("#000");
-        doc.text("備考", leftX, doc.y);
+        doc.text("備考", leftX, remarksY);
+        
+        // 備考欄の枠線
+        const remarksBoxY = remarksY + 20;
+        const remarksBoxHeight = 60;
+        doc
+          .rect(leftX, remarksBoxY, tableWidth, remarksBoxHeight)
+          .stroke();
 
         doc.end();
       })();
