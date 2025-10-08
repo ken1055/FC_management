@@ -540,13 +540,17 @@ router.post("/calculations/delete", requireAdmin, (req, res) => {
 // 月次ロイヤリティレポート
 router.get("/report", requireAdmin, async (req, res) => {
   const year = req.query.year || new Date().getFullYear();
+  const startMonth = parseInt(req.query.start_month) || 1;
+  const endMonth = parseInt(req.query.end_month) || 12;
 
   try {
     // ロイヤリティ計算データを取得（Supabase）
     const { data: calculations, error: calculationError } = await db
       .from("royalty_calculations")
       .select("*")
-      .eq("calculation_year", year);
+      .eq("calculation_year", year)
+      .gte("calculation_month", startMonth)
+      .lte("calculation_month", endMonth);
 
     if (calculationError) {
       console.error("ロイヤリティレポート取得エラー:", calculationError);
@@ -590,7 +594,7 @@ router.get("/report", requireAdmin, async (req, res) => {
     console.log("ロイヤリティレポートデータ:", reportData.length, "月分");
 
     // 詳細データも取得（Supabase）
-    await handleRoyaltyReportData(reportData, year, req, res);
+    await handleRoyaltyReportData(reportData, year, startMonth, endMonth, req, res);
   } catch (error) {
     console.error("ロイヤリティレポート処理エラー:", error);
     res.status(500).render("error", {
@@ -601,13 +605,15 @@ router.get("/report", requireAdmin, async (req, res) => {
 });
 
 // ロイヤリティレポートデータ処理関数（Supabase対応）
-async function handleRoyaltyReportData(reportData, year, req, res) {
+async function handleRoyaltyReportData(reportData, year, startMonth, endMonth, req, res) {
   try {
-    // 月別詳細データも取得（Supabase）
+    // 月別詳細データも取得（Supabase）- 月範囲でフィルタ
     const { data: detailCalculations, error: detailError } = await db
       .from("royalty_calculations")
       .select("*")
       .eq("calculation_year", year)
+      .gte("calculation_month", startMonth)
+      .lte("calculation_month", endMonth)
       .order("calculation_month");
 
     if (detailError) {
@@ -676,8 +682,8 @@ async function handleRoyaltyReportData(reportData, year, req, res) {
       currentYear: parseInt(year),
       start_year: parseInt(year),
       end_year: parseInt(year),
-      start_month: 1,
-      end_month: 12,
+      start_month: parseInt(startMonth),
+      end_month: parseInt(endMonth),
       totalSales: totalSales,
       totalRoyalty: totalRoyalty,
       totalStores: totalStores,
@@ -1209,10 +1215,10 @@ async function generateInvoicePDF(calculation, req) {
         doc.moveDown(2);
         const remarksY = doc.y;
         const remarksBoxHeight = 60;
-        
+
         // 備考欄の枠線
         doc.rect(leftX, remarksY, tableWidth, remarksBoxHeight).stroke();
-        
+
         // 枠の中に「備考」の文字
         doc.fontSize(10).fillColor("#000");
         doc.text("備考", leftX + 5, remarksY + 5);
