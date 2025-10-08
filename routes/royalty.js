@@ -1057,7 +1057,7 @@ async function generateInvoicePDF(calculation, req) {
         // 左側：件名
         doc.fontSize(10).fillColor("#000");
         doc.text(`件名：ロイヤリティ、システム使用料`, leftX, topY);
-        
+
         // 件名の下に二重線
         const underlineY = doc.y + 2;
         doc
@@ -1068,7 +1068,7 @@ async function generateInvoicePDF(calculation, req) {
           .moveTo(leftX, underlineY + 2)
           .lineTo(leftX + 200, underlineY + 2)
           .stroke();
-        
+
         doc.moveDown(0.8);
         doc.text("下記の通り、ご請求申し上げます。", leftX, doc.y);
 
@@ -1076,7 +1076,7 @@ async function generateInvoicePDF(calculation, req) {
         doc.fontSize(9).fillColor("#000");
         doc.text(`請求No：${invoiceNo}`, rightX, topY);
         doc.text(`請求日：${yyyy}年${mm}月${dd}日`, rightX, doc.y);
-        
+
         // 右側：株式会社LOCAL不動産フランチャイズ事業本部（請求日の下）
         doc.moveDown(0.5);
         doc.fontSize(10).fillColor("#000");
@@ -1102,13 +1102,13 @@ async function generateInvoicePDF(calculation, req) {
         );
 
         doc.moveDown(2);
-        
+
         // 左側：合計金額（表の前）
         const totalAmount = (calculation.royalty_amount || 0) + 1000;
         const totalY = doc.y;
         doc.fontSize(12).fillColor("#000");
         doc.text(`合計金額：¥${totalAmount.toLocaleString()}`, leftX, totalY);
-        
+
         // 合計金額の下に二重線
         const totalUnderlineY = doc.y + 2;
         doc
@@ -1127,7 +1127,7 @@ async function generateInvoicePDF(calculation, req) {
         doc.fontSize(10).fillColor("#000");
         doc.text(`お支払い期日：${dueDateStr}`, rightX, totalY);
         doc.text(`担当：村上昌生`, rightX, doc.y);
-        
+
         doc.moveDown(1.5);
 
         // 摘要テーブル
@@ -1176,8 +1176,7 @@ async function generateInvoicePDF(calculation, req) {
           width: col3Width - 10,
         });
 
-        // 合計金額
-        const totalAmount = (calculation.royalty_amount || 0) + 1000;
+        // 合計金額（テーブル内）
         currentY += 20;
         doc.fontSize(11).fillColor("#000");
         doc.rect(col1X, currentY, col1Width, 25).stroke();
