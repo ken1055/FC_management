@@ -18,6 +18,24 @@ function encodeRFC5987(str) {
     .replace(/%5E/g, "%5E");
 }
 
+// Buffer downloader via HTTPS
+function fetchUrlBuffer(url) {
+  return new Promise((resolve) => {
+    try {
+      https
+        .get(url, (res) => {
+          if (res.statusCode !== 200) return resolve(null);
+          const chunks = [];
+          res.on("data", (d) => chunks.push(d));
+          res.on("end", () => resolve(Buffer.concat(chunks)));
+        })
+        .on("error", () => resolve(null));
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+
 // フォント検出ヘルパー（デバッグ用）
 function detectLocalJapaneseFont() {
   try {
@@ -560,7 +578,7 @@ router.get("/report", requireAdmin, async (req, res) => {
     // 平均ロイヤリティ率を計算
     const reportData = Object.values(monthlyData)
       .map((data) => ({
-        ...data,
+      ...data,
         avg_royalty_rate:
           data.royalty_rates.length > 0
             ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) /
@@ -722,7 +740,7 @@ router.get("/invoice/:calculationId", requireAdmin, async (req, res) => {
       store_email: store?.representative_email || null,
     };
 
-    const pdfBuffer = await generateInvoicePDF(enriched);
+    const pdfBuffer = await generateInvoicePDF(enriched, req);
     const safeStoreName = enriched.store_name.replace(/[\\/:*?"<>|]/g, "_");
     const fileName = `invoice_${safeStoreName}_${
       enriched.calculation_year
@@ -808,7 +826,7 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
       store_email: store?.representative_email || null,
     };
 
-    const pdfBuffer = await generateInvoicePDF(enriched);
+    const pdfBuffer = await generateInvoicePDF(enriched, req);
     const safeInlineStoreName = enriched.store_name.replace(
       /[\\/:*?"<>|]/g,
       "_"
@@ -822,23 +840,23 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
       .update({ invoice_generated: true })
       .eq("id", calculationId);
 
-    res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Type", "application/pdf");
     const asciiFallbackInline = fileName.replace(/[^\x20-\x7E]/g, "_");
-    res.setHeader(
-      "Content-Disposition",
+      res.setHeader(
+        "Content-Disposition",
       `inline; filename="${asciiFallbackInline}"; filename*=UTF-8''${encodeRFC5987(
         fileName
       )}`
-    );
-    res.send(pdfBuffer);
-  } catch (error) {
+      );
+      res.send(pdfBuffer);
+    } catch (error) {
     console.error("請求書PDF表示エラー:", error);
-    return res.status(500).render("error", {
-      message: "請求書の生成に失敗しました",
-      session: req.session,
-    });
-  }
-});
+      return res.status(500).render("error", {
+        message: "請求書の生成に失敗しました",
+        session: req.session,
+      });
+    }
+  });
 
 // 請求書閲覧ページ
 router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
@@ -891,8 +909,8 @@ router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
 // 一括請求書生成
 router.post("/invoices/bulk", requireAdmin, async (req, res) => {
   try {
-    const { year, month } = req.body;
-    if (!year || !month) {
+  const { year, month } = req.body;
+  if (!year || !month) {
       return res
         .status(400)
         .json({ success: false, message: "年と月を指定してください" });
@@ -930,7 +948,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
     const storeMap = {};
     (stores || []).forEach((s) => (storeMap[s.id] = s));
 
-    const invoicesDir = path.join(__dirname, "../uploads/invoices");
+      const invoicesDir = path.join(__dirname, "../uploads/invoices");
     try {
       if (!fs.existsSync(invoicesDir))
         fs.mkdirSync(invoicesDir, { recursive: true });
@@ -963,21 +981,21 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           .from("royalty_calculations")
           .update({ invoice_generated: true, invoice_path: filePath })
           .eq("id", calc.id);
-        successCount++;
+          successCount++;
       } catch (e) {
         console.error("請求書生成エラー:", e);
-        errorCount++;
+          errorCount++;
+        }
       }
-    }
 
-    res.json({
-      success: true,
-      message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
-      generated: successCount,
-      errors: errorCount,
-    });
-  } catch (error) {
-    console.error("一括請求書生成エラー:", error);
+      res.json({
+        success: true,
+        message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
+        generated: successCount,
+        errors: errorCount,
+      });
+    } catch (error) {
+      console.error("一括請求書生成エラー:", error);
     res
       .status(500)
       .json({ success: false, message: "一括請求書生成に失敗しました" });
@@ -985,7 +1003,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
 });
 
 // PDF生成関数
-async function generateInvoicePDF(calculation) {
+async function generateInvoicePDF(calculation, req) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -993,50 +1011,24 @@ async function generateInvoicePDF(calculation) {
       doc.on("data", (d) => chunks.push(d));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
 
-      // 日本語フォント（ローカル or CDN）
-      try {
-        const fontBuf = await(async () => {
-          const localFonts = [
-            path.join(__dirname, "../public/fonts/NotoSansJP-Regular.ttf"),
-            path.join(
-              __dirname,
-              "../public/fonts/NotoSansJP-VariableFont_wght.ttf"
-            ),
-            path.join(__dirname, "../public/fonts/ipaexg.ttf"),
-          ];
-          for (const p of localFonts) {
-            try {
-              if (fs.existsSync(p)) return fs.readFileSync(p);
-            } catch (_) {}
-          }
-          // ディレクトリ走査で任意のTTF/OTFを探す
-          try {
-            const dir = path.join(__dirname, "../public/fonts");
-            if (fs.existsSync(dir)) {
-              const files = fs.readdirSync(dir);
-              const found = files.find((f) => /(ttf|otf)$/i.test(f));
-              if (found) return fs.readFileSync(path.join(dir, found));
-            }
-          } catch (_) {}
-          // フォールバック: CDNからダウンロード
-          const url =
-            "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf";
-          return await new Promise((resolve) => {
-            https
-              .get(url, (res) => {
-                if (res.statusCode !== 200) return resolve(null);
-                const cs = [];
-                res.on("data", (d) => cs.push(d));
-                res.on("end", () => resolve(Buffer.concat(cs)));
-              })
-              .on("error", () => resolve(null));
-          });
-        })();
-        if (fontBuf) {
-          doc.registerFont("jp", fontBuf);
-          doc.font("jp");
+      // 日本語フォント（自己ホストHTTP優先 → CDNフォールバック）
+      (async () => {
+        let buf = null;
+        if (req && req.headers && req.headers.host) {
+          const selfUrl = `https://${req.headers.host}/static/fonts/NotoSansJP-Regular.ttf`;
+          buf = await fetchUrlBuffer(selfUrl);
         }
-      } catch (_) {}
+        if (!buf) {
+          buf = await fetchUrlBuffer(
+            "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
+          );
+        }
+        if (buf) {
+          try {
+            doc.registerFont("jp", buf);
+            doc.font("jp");
+          } catch (_) {}
+        }
 
       // タイトル
       doc
@@ -1202,6 +1194,7 @@ async function generateInvoicePDF(calculation) {
         );
 
       doc.end();
+      })();
     } catch (e) {
       reject(e);
     }
