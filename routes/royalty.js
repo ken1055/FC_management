@@ -9,6 +9,39 @@ const path = require("path");
 const https = require("https");
 const fontkit = require("fontkit");
 
+// フォント検出ヘルパー（デバッグ用）
+function detectLocalJapaneseFont() {
+  try {
+    const baseDir = path.join(__dirname, "../public/fonts");
+    const candidates = [
+      path.join(baseDir, "NotoSansJP-Regular.ttf"),
+      path.join(baseDir, "NotoSansJP-VariableFont_wght.ttf"),
+      path.join(baseDir, "ipaexg.ttf"),
+    ];
+    for (const p of candidates) {
+      try {
+        if (fs.existsSync(p)) {
+          const stat = fs.statSync(p);
+          return { found: true, type: "candidate", path: p, size: stat.size };
+        }
+      } catch (_) {}
+    }
+    // ディレクトリ走査（最初の TTF/OTF）
+    if (fs.existsSync(baseDir)) {
+      const files = fs.readdirSync(baseDir);
+      const f = files.find((n) => /\.(ttf|otf)$/i.test(n));
+      if (f) {
+        const fp = path.join(baseDir, f);
+        const stat = fs.statSync(fp);
+        return { found: true, type: "scanned", path: fp, size: stat.size };
+      }
+    }
+    return { found: false };
+  } catch (e) {
+    return { found: false, error: e && e.message };
+  }
+}
+
 // 管理者権限チェック関数
 function requireAdmin(req, res, next) {
   if (!req.session || !req.session.user || req.session.user.role !== "admin") {
@@ -943,10 +976,13 @@ async function generateInvoicePDF(calculation) {
 
       // 日本語フォント（ローカル or CDN）
       try {
-        const fontBuf = await (async () => {
+        const fontBuf = await(async () => {
           const localFonts = [
             path.join(__dirname, "../public/fonts/NotoSansJP-Regular.ttf"),
-            path.join(__dirname, "../public/fonts/NotoSansJP-VariableFont_wght.ttf"),
+            path.join(
+              __dirname,
+              "../public/fonts/NotoSansJP-VariableFont_wght.ttf"
+            ),
             path.join(__dirname, "../public/fonts/ipaexg.ttf"),
           ];
           for (const p of localFonts) {
@@ -1358,7 +1394,7 @@ function generateInvoiceHTML(calculation) {
           <div class="total-box">
             <div class="label">ご請求金額合計</div>
             <div class="value">¥${totalAmount.toLocaleString()}</div>
-          </div>
+            </div>
         </div>
 
         <div class="invoice-details">
