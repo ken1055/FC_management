@@ -9,6 +9,15 @@ const path = require("path");
 const https = require("https");
 const fontkit = require("fontkit");
 
+// RFC 5987 encoder for Content-Disposition filename*
+function encodeRFC5987(str) {
+  return encodeURIComponent(str)
+    .replace(/['()*]/g, (c) => "%" + c.charCodeAt(0).toString(16))
+    .replace(/%7C/g, "%7C")
+    .replace(/%60/g, "%60")
+    .replace(/%5E/g, "%5E");
+}
+
 // フォント検出ヘルパー（デバッグ用）
 function detectLocalJapaneseFont() {
   try {
@@ -714,7 +723,8 @@ router.get("/invoice/:calculationId", requireAdmin, async (req, res) => {
     };
 
     const pdfBuffer = await generateInvoicePDF(enriched);
-    const fileName = `invoice_${enriched.store_name}_${
+    const safeStoreName = enriched.store_name.replace(/[\\/:*?"<>|]/g, "_");
+    const fileName = `invoice_${safeStoreName}_${
       enriched.calculation_year
     }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
 
@@ -739,7 +749,9 @@ router.get("/invoice/:calculationId", requireAdmin, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(fileName)}"`
+      `inline; filename="${encodeURIComponent(
+        fileName
+      )}"; filename*=UTF-8''${encodeRFC5987(fileName)}`
     );
     res.send(pdfBuffer);
   } catch (error) {
