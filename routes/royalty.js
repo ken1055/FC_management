@@ -1050,22 +1050,37 @@ async function generateInvoicePDF(calculation, req) {
           .text("ご請求書", { align: "center" });
         doc.moveDown(1.5);
 
-        // 左側：請求先（〇〇様）
         const leftX = 50;
         const rightX = 320;
-        const startY = doc.y;
+        const topY = doc.y;
 
-        doc.fontSize(12).fillColor("#000");
-        doc.text(
-          `${calculation.owner_name || calculation.store_name} 様`,
-          leftX,
-          startY
-        );
-        doc.moveDown(2.5);
-
-        // 右側：株式会社LOCAL不動産フランチャイズ事業本部
+        // 左側：件名
         doc.fontSize(10).fillColor("#000");
-        doc.text("株式会社LOCAL不動産フランチャイズ事業本部", rightX, startY, {
+        doc.text(`件名：ロイヤリティ、システム使用料`, leftX, topY);
+        
+        // 件名の下に二重線
+        const underlineY = doc.y + 2;
+        doc
+          .moveTo(leftX, underlineY)
+          .lineTo(leftX + 200, underlineY)
+          .stroke();
+        doc
+          .moveTo(leftX, underlineY + 2)
+          .lineTo(leftX + 200, underlineY + 2)
+          .stroke();
+        
+        doc.moveDown(0.8);
+        doc.text("下記の通り、ご請求申し上げます。", leftX, doc.y);
+
+        // 右側：請求No、請求日（上部）
+        doc.fontSize(9).fillColor("#000");
+        doc.text(`請求No：${invoiceNo}`, rightX, topY);
+        doc.text(`請求日：${yyyy}年${mm}月${dd}日`, rightX, doc.y);
+        
+        // 右側：株式会社LOCAL不動産フランチャイズ事業本部（請求日の下）
+        doc.moveDown(0.5);
+        doc.fontSize(10).fillColor("#000");
+        doc.text("株式会社LOCAL不動産フランチャイズ事業本部", rightX, doc.y, {
           width: 200,
           align: "left",
         });
@@ -1076,28 +1091,41 @@ async function generateInvoicePDF(calculation, req) {
         doc.text("FAX：０852-69-9546", rightX, doc.y);
         doc.text("事業者登録番号T2280001007741", rightX, doc.y);
 
-        // 「下記の通り、ご請求申し上げます。」
+        // 左側：〇〇様
         doc.moveDown(1);
-        doc.fontSize(10).fillColor("#000");
-        doc.text("下記の通り、ご請求申し上げます。", leftX, doc.y, {
-          align: "left",
-        });
-        doc.moveDown(1);
+        const customerY = doc.y;
+        doc.fontSize(12).fillColor("#000");
+        doc.text(
+          `${calculation.owner_name || calculation.store_name} 様`,
+          leftX,
+          customerY
+        );
 
-        // 件名、No、請求日、お支払い期日を左右に配置
-        const infoY = doc.y;
-        doc.fontSize(9).fillColor("#000");
+        doc.moveDown(2);
         
-        // 左側
-        doc.text(`件名：ロイヤリティ、システム使用料`, leftX, infoY);
-        doc.text(`No：${invoiceNo}`, leftX, doc.y);
+        // 左側：合計金額（表の前）
+        const totalAmount = (calculation.royalty_amount || 0) + 1000;
+        const totalY = doc.y;
+        doc.fontSize(12).fillColor("#000");
+        doc.text(`合計金額：¥${totalAmount.toLocaleString()}`, leftX, totalY);
         
-        // 右側
-        doc.text(`請求日：${yyyy}年${mm}月${dd}日`, rightX, infoY);
+        // 合計金額の下に二重線
+        const totalUnderlineY = doc.y + 2;
+        doc
+          .moveTo(leftX, totalUnderlineY)
+          .lineTo(leftX + 180, totalUnderlineY)
+          .stroke();
+        doc
+          .moveTo(leftX, totalUnderlineY + 2)
+          .lineTo(leftX + 180, totalUnderlineY + 2)
+          .stroke();
+
+        // 右側：お支払い期日、担当（合計金額と同じ高さ）
         const dueDateStr = `${dueDate.getFullYear()}年${String(
           dueDate.getMonth() + 1
         ).padStart(2, "0")}月${String(dueDate.getDate()).padStart(2, "0")}日`;
-        doc.text(`お支払い期日：${dueDateStr}`, rightX, doc.y);
+        doc.fontSize(10).fillColor("#000");
+        doc.text(`お支払い期日：${dueDateStr}`, rightX, totalY);
         doc.text(`担当：村上昌生`, rightX, doc.y);
         
         doc.moveDown(1.5);
@@ -1178,23 +1206,10 @@ async function generateInvoicePDF(calculation, req) {
           doc.y
         );
 
-        // 備考欄
+        // 備考欄（空欄）
         doc.moveDown(2);
         doc.fontSize(10).fillColor("#000");
         doc.text("備考", leftX, doc.y);
-        doc.moveDown(0.5);
-        doc.fontSize(9).fillColor("#333");
-        doc.text(
-          "※お振込手数料はご負担ください。",
-          leftX,
-          doc.y
-        );
-        doc.text(
-          "※ご不明な点がございましたら、担当（村上昌生）までお問い合わせください。",
-          leftX,
-          doc.y,
-          { width: 495 }
-        );
 
         doc.end();
       })();
