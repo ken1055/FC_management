@@ -1006,7 +1006,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
 async function generateInvoicePDF(calculation, req) {
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ size: "A4", margin: 40 });
+      const doc = new PDFDocument({ size: "A4", margin: 50 });
       const chunks = [];
       doc.on("data", (d) => chunks.push(d));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -1030,62 +1030,7 @@ async function generateInvoicePDF(calculation, req) {
           } catch (_) {}
         }
 
-        // タイトル
-        doc
-          .fontSize(20)
-          .fillColor("#0b54ac")
-          .text("ご請求書", { align: "center" });
-        doc.moveDown(0.5);
-        doc
-          .fontSize(11)
-          .fillColor("#333")
-          .text("ロイヤリティ、システム使用料（今は1000円）", {
-            align: "center",
-          });
-
-        doc.moveDown(1.5);
-        const leftX = 40;
-        const pageWidth = 515; // A4幅 - マージン
-        const colW = 240;
-
-        // 請求先と請求者を横並びで配置
-        const toY = doc.y;
-
-        // 請求先（左側）
-        doc.fontSize(11).fillColor("#0b54ac").text("請求先 (To)", leftX, toY);
-        doc.moveDown(0.3);
-        doc
-          .fontSize(10)
-          .fillColor("#000")
-          .text(`${calculation.store_name} 御中`, leftX);
-        if (calculation.owner_name)
-          doc.text(`店長: ${calculation.owner_name}`, leftX);
-        if (calculation.store_address)
-          doc.text(calculation.store_address, leftX);
-        if (calculation.store_phone)
-          doc.text(`TEL: ${calculation.store_phone}`, leftX);
-        if (calculation.store_email)
-          doc.text(`Email: ${calculation.store_email}`, leftX);
-
-        // 請求者（右側）
-        const rightX = leftX + colW + 35;
-        doc
-          .fontSize(11)
-          .fillColor("#0b54ac")
-          .text("請求者 (From)", rightX, toY);
-        doc.moveDown(0.3);
-        doc
-          .fontSize(10)
-          .fillColor("#000")
-          .text("FC本部", rightX)
-          .text("〒000-0000", rightX)
-          .text("東京都〇〇区〇〇 1-2-3", rightX)
-          .text("TEL: 03-0000-0000", rightX)
-          .text("Email: headquarters@fc-company.co.jp", rightX);
-
-        doc.moveDown(1.5);
-
-        // メタ情報
+        // 日付情報の計算
         const invoiceDate = new Date();
         const dueDate = new Date(
           invoiceDate.getFullYear(),
@@ -1098,130 +1043,133 @@ async function generateInvoicePDF(calculation, req) {
         const dd = String(invoiceDate.getDate()).padStart(2, "0");
         const invoiceNo = `${calculation.store_id}-${yyyy}${mm}${dd}${pageNo}`;
 
-        doc.fontSize(11).fillColor("#0b54ac").text("請求情報", leftX);
-        doc.moveDown(0.3);
+        // タイトル「ご請求書」
+        doc
+          .fontSize(24)
+          .fillColor("#000")
+          .text("ご請求書", { align: "center" });
+        doc.moveDown(1.5);
+
+        // 左側：請求先（〇〇様）
+        const leftX = 50;
+        const rightX = 320;
+        const startY = doc.y;
+
+        doc.fontSize(12).fillColor("#000");
+        doc.text(`${calculation.owner_name || calculation.store_name} 様`, leftX, startY);
+        doc.moveDown(2.5);
+
+        // 右側：株式会社LOCAL不動産フランチャイズ事業本部
+        doc.fontSize(10).fillColor("#000");
+        doc.text("株式会社LOCAL不動産フランチャイズ事業本部", rightX, startY, {
+          width: 200,
+          align: "left",
+        });
+        doc.fontSize(9);
+        doc.text("〒699-0201", rightX, doc.y);
+        doc.text("島根県松江市玉湯町玉造1423番地7", rightX, doc.y);
+        doc.text("TEL：0120-588-336", rightX, doc.y);
+        doc.text("FAX：０852-69-9546", rightX, doc.y);
+        doc.text("事業者登録番号T2280001007741", rightX, doc.y);
+
+        // 「下記の通り、ご請求申し上げます。」
+        doc.moveDown(1);
+        doc.fontSize(10).fillColor("#000");
+        doc.text("下記の通り、ご請求申し上げます。", leftX, doc.y, { align: "left" });
+        doc.moveDown(1.5);
+
+        // 件名、請求No、請求日
+        const metaY = doc.y;
+        doc.fontSize(9).fillColor("#000");
+        doc.text(`件名：ロイヤリティ、システム使用料`, leftX, metaY);
+        doc.text(`No：${invoiceNo}`, leftX, doc.y);
+        doc.text(
+          `請求日：${yyyy}年${mm}月${dd}日`,
+          leftX,
+          doc.y
+        );
+        doc.moveDown(1.5);
+
+        // お支払い期日
+        doc.fontSize(10).fillColor("#000");
+        const dueDateStr = `${dueDate.getFullYear()}年${String(
+          dueDate.getMonth() + 1
+        ).padStart(2, "0")}月${String(dueDate.getDate()).padStart(2, "0")}日`;
+        doc.text(`お支払い期日：${dueDateStr}`, leftX, doc.y);
+        doc.moveDown(1.5);
+
+        // 摘要テーブル
+        const tableTop = doc.y;
+        const col1X = leftX;
+        const col2X = 350;
+        const col3X = 450;
+        const tableWidth = 495;
+
+        // テーブルヘッダー
         doc
           .fontSize(10)
           .fillColor("#000")
-          .text(`件名: ロイヤリティ、システム使用料（今は1000円）`, leftX)
-          .text(`請求No.: ${invoiceNo}`, leftX)
-          .text(
-            `請求日: ${invoiceDate.toLocaleDateString(
-              "ja-JP"
-            )} ${invoiceDate.toLocaleTimeString("ja-JP")}`,
-            leftX
-          )
-          .text(
-            `対象期間: ${calculation.calculation_year}年${calculation.calculation_month}月`,
-            leftX
-          )
-          .text(`担当: 村上昌生`, leftX)
-          .text(`お支払い期日: ${dueDate.toLocaleDateString("ja-JP")}`, leftX);
+          .rect(col1X, tableTop, tableWidth, 20)
+          .stroke();
+        doc.text("摘要", col1X + 5, tableTop + 5);
+        doc.text("数量", col2X + 5, tableTop + 5);
+        doc.text("金額", col3X + 5, tableTop + 5);
 
-        doc.moveDown(0.8);
-
-        // 明細テーブル（レイアウト補正）- A4幅515ptに収める
-        const tableTop = doc.y + 10;
-        const col1 = leftX;
-        const colW1 = 220; // 項目
-        const colW2 = 100; // 売上金額
-        const colW3 = 60; // 率
-        const colW4 = 100; // 金額
-        const totalTableWidth = colW1 + colW2 + colW3 + colW4; // 480pt
-        const col2 = col1 + colW1;
-        const col3 = col2 + colW2;
-        const col4 = col3 + colW3;
-
+        // 行1：フランチャイズロイヤリティ
+        let currentY = tableTop + 20;
         doc
-          .fontSize(11)
-          .fillColor("white")
-          .rect(col1, tableTop - 14, totalTableWidth, 18)
-          .fill("#0066cc");
-        doc.fillColor("white");
-        doc.text("項目", col1 + 5, tableTop - 12, { width: colW1 - 10 });
-        doc.text("売上金額", col2 + 5, tableTop - 12, {
-          width: colW2 - 10,
-          align: "right",
-        });
-        doc.text("率", col3 + 5, tableTop - 12, {
-          width: colW3 - 10,
-          align: "right",
-        });
-        doc.text("金額", col4 + 5, tableTop - 12, {
-          width: colW4 - 10,
-          align: "right",
-        });
-
-        const lineY1 = tableTop + 6;
-        doc.fontSize(10).fillColor("#000");
-        doc.text("フランチャイズロイヤリティ １式", col1 + 5, lineY1, {
-          width: colW1 - 10,
-        });
-        doc.text(
-          `¥${(calculation.monthly_sales || 0).toLocaleString()}`,
-          col2 + 5,
-          lineY1,
-          { width: colW2 - 10, align: "right" }
-        );
-        doc.text(`${calculation.royalty_rate}%`, col3 + 5, lineY1, {
-          width: colW3 - 10,
-          align: "right",
-        });
+          .rect(col1X, currentY, tableWidth, 20)
+          .stroke();
+        doc.fontSize(9);
+        doc.text("フランチャイズロイヤリティ　１式", col1X + 5, currentY + 5);
+        doc.text("1", col2X + 5, currentY + 5);
         doc.text(
           `¥${(calculation.royalty_amount || 0).toLocaleString()}`,
-          col4 + 5,
-          lineY1,
-          { width: colW4 - 10, align: "right" }
+          col3X + 5,
+          currentY + 5,
+          { align: "right", width: 85 }
         );
 
-        const lineY2 = lineY1 + 18;
-        doc.text("システム使用料 １ヶ月", col1 + 5, lineY2, {
-          width: colW1 - 10,
-        });
-        doc.text("-", col2 + 5, lineY2, { width: colW2 - 10, align: "right" });
-        doc.text("-", col3 + 5, lineY2, { width: colW3 - 10, align: "right" });
-        doc.text("¥1,000", col4 + 5, lineY2, {
-          width: colW4 - 10,
-          align: "right",
-        });
+        // 行2：システム使用料
+        currentY += 20;
+        doc
+          .rect(col1X, currentY, tableWidth, 20)
+          .stroke();
+        doc.text("システム使用料　１ヶ月", col1X + 5, currentY + 5);
+        doc.text("1", col2X + 5, currentY + 5);
+        doc.text("¥1,000", col3X + 5, currentY + 5, { align: "right", width: 85 });
 
+        // 合計金額
         const totalAmount = (calculation.royalty_amount || 0) + 1000;
-        const totalBoxY = lineY2 + 28;
-        doc.fontSize(11).fillColor("#0b54ac");
-        doc.text("合計請求金額 (税込)", col2 + 5, totalBoxY, {
-          width: colW2 + colW3 - 10,
-          align: "right",
-        });
-        doc.fontSize(14).fillColor("#0b54ac");
-        doc.text(`¥${totalAmount.toLocaleString()}`, col4 + 5, totalBoxY, {
-          width: colW4 - 10,
-          align: "right",
-        });
-
-        doc.moveDown(2);
-        doc.fontSize(11).fillColor("#856404").text("お支払いについて", leftX);
-        doc.moveDown(0.3);
+        currentY += 20;
         doc
-          .fontSize(10)
-          .fillColor("#000")
-          .text(`支払期限: ${dueDate.toLocaleDateString("ja-JP")}`, leftX)
-          .text(
-            "振込先: 〇〇銀行 〇〇支店 / 普通 1234567 / FC本部 (エフシーホンブ)",
-            leftX
-          )
-          .fontSize(9)
-          .text("※振込手数料はご負担ください", leftX);
+          .rect(col1X, currentY, tableWidth, 25)
+          .stroke();
+        doc.fontSize(11).fillColor("#000");
+        doc.text("合計", col1X + 5, currentY + 7, { continued: false });
+        doc.fontSize(12);
+        doc.text(
+          `¥${totalAmount.toLocaleString()}`,
+          col3X + 5,
+          currentY + 7,
+          { align: "right", width: 85 }
+        );
 
-        doc.moveDown(1.5);
-        doc
-          .fontSize(9)
-          .fillColor("#666")
-          .text(
-            "備考: 本請求書に関するお問い合わせは担当（村上昌生）までご連絡ください。お支払い期限までのご入金をお願いいたします。",
-            leftX,
-            doc.y,
-            { width: 515, align: "left" }
-          );
+        doc.moveDown(3);
+
+        // お振込先
+        doc.fontSize(10).fillColor("#000");
+        doc.text("お振込先", leftX, doc.y);
+        doc.moveDown(0.5);
+        doc.fontSize(9);
+        doc.text("山陰合同銀行　本店営業部", leftX, doc.y);
+        doc.text("普通　4541367", leftX, doc.y);
+        doc.text("株式会社LOCAL不動産　代表取締役　村上　昌生", leftX, doc.y);
+        doc.text(
+          "（ｶﾌﾞｼｷｲｶｲｼｬﾛｰｶﾙﾌﾄﾞｳｻﾝ ﾀﾞｲﾋｮｳﾄﾘｼﾏﾘﾔｸ ﾑﾗｶﾐﾏｻｵ）",
+          leftX,
+          doc.y
+        );
 
         doc.end();
       })();
