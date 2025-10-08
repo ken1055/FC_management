@@ -560,7 +560,7 @@ router.get("/report", requireAdmin, async (req, res) => {
     // 平均ロイヤリティ率を計算
     const reportData = Object.values(monthlyData)
       .map((data) => ({
-      ...data,
+        ...data,
         avg_royalty_rate:
           data.royalty_rates.length > 0
             ? data.royalty_rates.reduce((sum, rate) => sum + rate, 0) /
@@ -822,21 +822,23 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
       .update({ invoice_generated: true })
       .eq("id", calculationId);
 
-      res.setHeader("Content-Type", "application/pdf");
-    const asciiFallbackInline = fileName.replace(/[^\x20-\x7E]/g, '_');
-      res.setHeader(
-        "Content-Disposition",
-      `inline; filename="${asciiFallbackInline}"; filename*=UTF-8''${encodeRFC5987(fileName)}`
-      );
-      res.send(pdfBuffer);
-    } catch (error) {
+    res.setHeader("Content-Type", "application/pdf");
+    const asciiFallbackInline = fileName.replace(/[^\x20-\x7E]/g, "_");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${asciiFallbackInline}"; filename*=UTF-8''${encodeRFC5987(
+        fileName
+      )}`
+    );
+    res.send(pdfBuffer);
+  } catch (error) {
     console.error("請求書PDF表示エラー:", error);
-      return res.status(500).render("error", {
-        message: "請求書の生成に失敗しました",
-        session: req.session,
-      });
-    }
-  });
+    return res.status(500).render("error", {
+      message: "請求書の生成に失敗しました",
+      session: req.session,
+    });
+  }
+});
 
 // 請求書閲覧ページ
 router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
@@ -889,8 +891,8 @@ router.get("/invoice/:calculationId/view", requireAdmin, async (req, res) => {
 // 一括請求書生成
 router.post("/invoices/bulk", requireAdmin, async (req, res) => {
   try {
-  const { year, month } = req.body;
-  if (!year || !month) {
+    const { year, month } = req.body;
+    if (!year || !month) {
       return res
         .status(400)
         .json({ success: false, message: "年と月を指定してください" });
@@ -928,7 +930,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
     const storeMap = {};
     (stores || []).forEach((s) => (storeMap[s.id] = s));
 
-      const invoicesDir = path.join(__dirname, "../uploads/invoices");
+    const invoicesDir = path.join(__dirname, "../uploads/invoices");
     try {
       if (!fs.existsSync(invoicesDir))
         fs.mkdirSync(invoicesDir, { recursive: true });
@@ -961,21 +963,21 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           .from("royalty_calculations")
           .update({ invoice_generated: true, invoice_path: filePath })
           .eq("id", calc.id);
-          successCount++;
+        successCount++;
       } catch (e) {
         console.error("請求書生成エラー:", e);
-          errorCount++;
-        }
+        errorCount++;
       }
+    }
 
-      res.json({
-        success: true,
-        message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
-        generated: successCount,
-        errors: errorCount,
-      });
-    } catch (error) {
-      console.error("一括請求書生成エラー:", error);
+    res.json({
+      success: true,
+      message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
+      generated: successCount,
+      errors: errorCount,
+    });
+  } catch (error) {
+    console.error("一括請求書生成エラー:", error);
     res
       .status(500)
       .json({ success: false, message: "一括請求書生成に失敗しました" });
@@ -1012,7 +1014,7 @@ async function generateInvoicePDF(calculation) {
             const dir = path.join(__dirname, "../public/fonts");
             if (fs.existsSync(dir)) {
               const files = fs.readdirSync(dir);
-              const found = files.find((f) => /\.(ttf|otf)$/i.test(f));
+              const found = files.find((f) => /(ttf|otf)$/i.test(f));
               if (found) return fs.readFileSync(path.join(dir, found));
             }
           } catch (_) {}
