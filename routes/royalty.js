@@ -762,7 +762,7 @@ router.get("/invoice/:calculationId", requireAdmin, async (req, res) => {
 
     const pdfBuffer = await generateInvoicePDF(enriched, req);
     const safeStoreName = enriched.store_name.replace(/[\\/:*?"<>|]/g, "_");
-    const fileName = `invoice_${safeStoreName}_${
+    const fileName = `invoice_${calculationId}_${safeStoreName}_${
       enriched.calculation_year
     }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
 
@@ -851,7 +851,7 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
       /[\\/:*?"<>|]/g,
       "_"
     );
-    const fileName = `invoice_${safeInlineStoreName}_${
+    const fileName = `invoice_${calculationId}_${safeInlineStoreName}_${
       enriched.calculation_year
     }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
 
@@ -873,6 +873,92 @@ router.get("/invoice/:calculationId/pdf", requireAdmin, async (req, res) => {
     console.error("請求書PDF表示エラー:", error);
     return res.status(500).render("error", {
       message: "請求書の生成に失敗しました",
+      session: req.session,
+    });
+  }
+});
+
+// 請求書一覧（代理店別・月別）
+router.get("/invoices", requireAdmin, async (req, res) => {
+  try {
+    const searchQuery = req.query.search || "";
+    const year = req.query.year ? parseInt(req.query.year) : null;
+    const month = req.query.month ? parseInt(req.query.month) : null;
+    const storeId = req.query.store_id ? parseInt(req.query.store_id) : null;
+
+    // クエリビルダー
+    let query = db
+      .from("royalty_calculations")
+      .select("*")
+      .eq("invoice_generated", true)
+      .order("calculation_year", { ascending: false })
+      .order("calculation_month", { ascending: false })
+      .order("store_id");
+
+    // フィルタ適用
+    if (year) query = query.eq("calculation_year", year);
+    if (month) query = query.eq("calculation_month", month);
+    if (storeId) query = query.eq("store_id", storeId);
+
+    const { data: invoices, error: invoiceError } = await query;
+
+    if (invoiceError) {
+      console.error("請求書取得エラー:", invoiceError);
+      return res.status(500).render("error", {
+        message: "請求書の取得に失敗しました",
+        session: req.session,
+      });
+    }
+
+    // 店舗情報を取得
+    let enrichedInvoices = invoices || [];
+    if (invoices && invoices.length > 0) {
+      const storeIds = [...new Set(invoices.map((i) => i.store_id))];
+      const { data: stores, error: storeError } = await db
+        .from("stores")
+        .select("id, name")
+        .in("id", storeIds);
+
+      if (!storeError && stores) {
+        const storeMap = {};
+        stores.forEach((store) => {
+          storeMap[store.id] = store.name;
+        });
+
+        enrichedInvoices = invoices.map((invoice) => ({
+          ...invoice,
+          store_name: storeMap[invoice.store_id] || `店舗ID ${invoice.store_id}`,
+        }));
+      }
+    }
+
+    // 検索フィルタ適用
+    if (searchQuery) {
+      enrichedInvoices = enrichedInvoices.filter((invoice) =>
+        invoice.store_name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // 店舗一覧を取得（フィルタ用）
+    const { data: allStores } = await db
+      .from("stores")
+      .select("id, name")
+      .order("name");
+
+    res.render("invoices_list", {
+      invoices: enrichedInvoices,
+      stores: allStores || [],
+      searchQuery,
+      selectedYear: year,
+      selectedMonth: month,
+      selectedStoreId: storeId,
+      session: req.session,
+      title: "請求書一覧",
+    });
+  } catch (error) {
+    console.error("請求書一覧エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
       session: req.session,
     });
   }
@@ -976,7 +1062,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
     let successCount = 0,
       errorCount = 0;
     const generatedInvoices = [];
-    
+
     for (const calc of calculations) {
       try {
         const s = storeMap[calc.store_id] || {};
@@ -990,7 +1076,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
         };
         const pdfBuffer = await generateInvoicePDF(enriched, req);
         const safeStoreName = enriched.store_name.replace(/[\\/:*?"<>|]/g, "_");
-        const fileName = `invoice_${safeStoreName}_${
+        const fileName = `invoice_${calc.id}_${safeStoreName}_${
           enriched.calculation_year
         }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
         let filePath = null;
@@ -1003,13 +1089,13 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           .from("royalty_calculations")
           .update({ invoice_generated: true, invoice_path: filePath })
           .eq("id", calc.id);
-        
+
         generatedInvoices.push({
           calculationId: calc.id,
           storeName: enriched.store_name,
-          fileName: fileName
+          fileName: fileName,
         });
-        
+
         successCount++;
       } catch (e) {
         console.error("請求書生成エラー:", e);

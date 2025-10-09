@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> - FC店舗管理システム</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+</head>
+<body>
+    <!-- ナビゲーション -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-shop"></i> FC店舗管理システム
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-house-door"></i> ホーム
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/royalty/invoices">
+                            <i class="bi bi-file-pdf"></i> 請求書一覧
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/royalty/calculations">
+                            <i class="bi bi-calculator"></i> ロイヤリティ計算
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <span class="nav-link">
+                            <i class="bi bi-person-circle"></i> <%= session.user.username %>
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/auth/logout">
+                            <i class="bi bi-box-arrow-right"></i> ログアウト
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="bi bi-file-pdf"></i> 請求書一覧</h2>
+                    <a href="/royalty/calculations" class="btn btn-primary">
+                        <i class="bi bi-calculator"></i> ロイヤリティ計算へ
+                    </a>
+                </div>
+
+                <!-- 検索・フィルター -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="bi bi-funnel"></i> 検索・フィルター</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="GET" action="/royalty/invoices">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label for="search" class="form-label">店舗名検索</label>
+                                    <input type="text" class="form-control" id="search" name="search" 
+                                           value="<%= searchQuery || '' %>" placeholder="店舗名で検索">
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="year" class="form-label">年</label>
+                                    <select class="form-select" id="year" name="year">
+                                        <option value="">全て</option>
+                                        <% for(let y = new Date().getFullYear(); y >= 2020; y--) { %>
+                                            <option value="<%= y %>" <%= selectedYear == y ? 'selected' : '' %>><%= y %>年</option>
+                                        <% } %>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="month" class="form-label">月</label>
+                                    <select class="form-select" id="month" name="month">
+                                        <option value="">全て</option>
+                                        <% for(let m = 1; m <= 12; m++) { %>
+                                            <option value="<%= m %>" <%= selectedMonth == m ? 'selected' : '' %>><%= m %>月</option>
+                                        <% } %>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="store_id" class="form-label">店舗</label>
+                                    <select class="form-select" id="store_id" name="store_id">
+                                        <option value="">全て</option>
+                                        <% stores.forEach(store => { %>
+                                            <option value="<%= store.id %>" <%= selectedStoreId == store.id ? 'selected' : '' %>>
+                                                <%= store.name %>
+                                            </option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button type="submit" class="btn btn-primary d-block w-100">
+                                        <i class="bi bi-search"></i> 検索
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col">
+                                    <a href="/royalty/invoices" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-arrow-clockwise"></i> リセット
+                                    </a>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 請求書一覧 -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-list-ul"></i> 請求書一覧
+                            <span class="badge bg-light text-dark ms-2"><%= invoices.length %>件</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <% if (invoices && invoices.length > 0) { %>
+                            <div class="table-responsive">
+                                <table class="table table-hover table-striped">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>店舗名</th>
+                                            <th>対象年月</th>
+                                            <th>月次売上</th>
+                                            <th>ロイヤリティ額</th>
+                                            <th>計算日時</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% invoices.forEach(invoice => { %>
+                                            <tr>
+                                                <td>
+                                                    <strong><%= invoice.store_name %></strong>
+                                                </td>
+                                                <td>
+                                                    <%= invoice.calculation_year %>年<%= invoice.calculation_month %>月
+                                                </td>
+                                                <td>¥<%= invoice.monthly_sales.toLocaleString() %></td>
+                                                <td class="fw-bold text-primary">
+                                                    ¥<%= invoice.royalty_amount.toLocaleString() %>
+                                                </td>
+                                                <td>
+                                                    <small><%= new Date(invoice.calculated_at).toLocaleString('ja-JP') %></small>
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group" role="group">
+                                                        <a href="/royalty/invoice/<%= invoice.id %>/pdf" 
+                                                           target="_blank"
+                                                           class="btn btn-sm btn-danger"
+                                                           title="PDFで表示">
+                                                            <i class="bi bi-file-pdf"></i> PDF
+                                                        </a>
+                                                        <a href="/royalty/invoice/<%= invoice.id %>/view" 
+                                                           class="btn btn-sm btn-info"
+                                                           title="詳細を表示">
+                                                            <i class="bi bi-eye"></i> 詳細
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <% }); %>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <% } else { %>
+                            <div class="text-center py-5">
+                                <i class="bi bi-inbox display-1 text-muted"></i>
+                                <h5 class="mt-3 text-muted">請求書がありません</h5>
+                                <p class="text-muted">検索条件に一致する請求書が見つかりませんでした。</p>
+                                <a href="/royalty/calculations" class="btn btn-primary">
+                                    <i class="bi bi-calculator"></i> ロイヤリティ計算に移動
+                                </a>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
