@@ -88,7 +88,7 @@
 
       <!-- メイン機能 -->
       <div class="row g-3 mb-5">
-        <div class="col-md-4">
+        <div class="col-md-3">
           <div class="card h-100 border-primary">
             <div class="card-header bg-primary text-white">
               <h5 class="mb-0"><i class="bi bi-people-fill"></i> 店舗管理</h5>
@@ -102,7 +102,7 @@
           </div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-3">
           <div class="card h-100 border-success">
             <div class="card-header bg-success text-white">
               <h5 class="mb-0"><i class="bi bi-graph-up"></i> 売上管理</h5>
@@ -114,7 +114,7 @@
           </div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-3">
           <div class="card h-100 border-info">
             <div class="card-header bg-info text-white">
               <h5 class="mb-0">
@@ -127,11 +127,23 @@
             </div>
           </div>
         </div>
+
+        <div class="col-md-3">
+          <div class="card h-100 border-danger">
+            <div class="card-header bg-danger text-white">
+              <h5 class="mb-0"><i class="bi bi-file-pdf-fill"></i> 請求書管理</h5>
+            </div>
+            <div class="card-body">
+              <p class="card-text">請求書の一覧表示・検索・PDF確認を行います。</p>
+              <a href="/royalty/invoices" class="btn btn-danger">請求書一覧</a>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 追加機能 -->
       <div class="row g-3 mb-5">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <div class="card h-100 border-warning">
             <div class="card-header bg-warning text-dark">
               <h5 class="mb-0">
@@ -149,7 +161,7 @@
           </div>
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-4">
           <div class="card h-100 border-secondary">
             <div class="card-header bg-secondary text-white">
               <h5 class="mb-0"><i class="bi bi-folder-fill"></i> 資料管理</h5>
@@ -160,6 +172,22 @@
               </p>
               <a href="/materials/" class="btn btn-secondary">
                 <i class="bi bi-files"></i> 全体資料を見る
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card h-100" style="border-color: #20c997;">
+            <div class="card-header text-white" style="background-color: #20c997;">
+              <h5 class="mb-0"><i class="bi bi-calculator-fill"></i> ロイヤリティ計算</h5>
+            </div>
+            <div class="card-body">
+              <p class="card-text">
+                月次ロイヤリティ計算の実行とレポート表示を行います。
+              </p>
+              <a href="/royalty/calculations" class="btn text-white" style="background-color: #20c997;">
+                <i class="bi bi-calculator"></i> 計算画面へ
               </a>
             </div>
           </div>
