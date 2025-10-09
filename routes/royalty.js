@@ -975,6 +975,8 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
 
     let successCount = 0,
       errorCount = 0;
+    const generatedInvoices = [];
+    
     for (const calc of calculations) {
       try {
         const s = storeMap[calc.store_id] || {};
@@ -1001,6 +1003,13 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           .from("royalty_calculations")
           .update({ invoice_generated: true, invoice_path: filePath })
           .eq("id", calc.id);
+        
+        generatedInvoices.push({
+          calculationId: calc.id,
+          storeName: enriched.store_name,
+          fileName: fileName
+        });
+        
         successCount++;
       } catch (e) {
         console.error("請求書生成エラー:", e);
@@ -1013,6 +1022,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
       message: `一括請求書生成完了: ${successCount}件成功, ${errorCount}件エラー`,
       generated: successCount,
       errors: errorCount,
+      invoices: generatedInvoices,
     });
   } catch (error) {
     console.error("一括請求書生成エラー:", error);
