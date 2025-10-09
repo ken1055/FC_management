@@ -52,9 +52,9 @@
           <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#calculateModal">
             <i class="bi bi-play"></i> 月次計算実行
           </button>
-          <a href="/royalty/calculations/bulk-invoice" class="btn btn-primary">
+          <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bulkInvoiceModal">
             <i class="bi bi-file-pdf"></i> 一括請求書生成
-          </a>
+          </button>
         </div>
       </div>
 
@@ -229,6 +229,48 @@
   </div>
 </div>
 
+<!-- 一括請求書生成モーダル -->
+<div class="modal fade" id="bulkInvoiceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">一括請求書生成</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="bulkInvoiceForm">
+          <div class="mb-3">
+            <label for="invoice_year" class="form-label">対象年</label>
+            <select class="form-select" id="invoice_year" name="year" required>
+              <% for(let y = new Date().getFullYear(); y >= 2020; y--) { %>
+                <option value="<%= y %>" <% if (currentYear == y) { %>selected<% } %>><%= y %>年</option>
+              <% } %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="invoice_month" class="form-label">対象月</label>
+            <select class="form-select" id="invoice_month" name="month" required>
+              <% for(let m = 1; m <= 12; m++) { %>
+                <option value="<%= m %>" <% if (currentMonth == m) { %>selected<% } %>><%= m %>月</option>
+              <% } %>
+            </select>
+          </div>
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            この操作により、指定された月の全店舗の請求書PDFが一括生成されます。
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" id="bulkInvoiceBtn" class="btn btn-primary">
+          <i class="bi bi-file-pdf"></i> 一括生成
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
@@ -340,6 +382,92 @@ function showCalculationResult(result) {
       alert.remove();
     }
   }, 8000);
+}
+
+// 一括請求書生成の処理
+document.getElementById('bulkInvoiceBtn').addEventListener('click', async function() {
+  const year = document.getElementById('invoice_year').value;
+  const month = document.getElementById('invoice_month').value;
+  
+  if (!year || !month) {
+    alert('年月を選択してください');
+    return;
+  }
+  
+  // 確認ダイアログ
+  if (!confirm(`${year}年${month}月の全店舗の請求書を一括生成しますか？`)) {
+    return;
+  }
+  
+  // ローディング表示
+  const btn = this;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 生成中...';
+  btn.disabled = true;
+  
+  try {
+    const response = await fetch('/royalty/invoices/bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ year: parseInt(year), month: parseInt(month) })
+    });
+    
+    const result = await response.json();
+    
+    // モーダルを閉じる
+    const modal = bootstrap.Modal.getInstance(document.getElementById('bulkInvoiceModal'));
+    modal.hide();
+    
+    // 結果を表示
+    showBulkInvoiceResult(result);
+    
+    // ページをリロードして最新のデータを表示
+    if (result.success) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+    }
+    
+  } catch (error) {
+    console.error('一括請求書生成エラー:', error);
+    alert('一括請求書生成でエラーが発生しました: ' + error.message);
+  } finally {
+    // ボタンを元に戻す
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+});
+
+// 一括請求書生成結果を表示する関数
+function showBulkInvoiceResult(result) {
+  const alertClass = result.success ? 'alert-success' : 'alert-danger';
+  const icon = result.success ? '✅' : '❌';
+  
+  const alertHtml = `
+    <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+      <h5>${icon} ${result.message}</h5>
+      <p class="mb-0">
+        成功: ${result.generated || 0}件 / エラー: ${result.errors || 0}件
+      </p>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  `;
+  
+  // アラートを表示
+  const container = document.querySelector('.container');
+  const alertDiv = document.createElement('div');
+  alertDiv.innerHTML = alertHtml;
+  container.insertBefore(alertDiv.firstElementChild, container.firstElementChild);
+  
+  // 5秒後に自動で非表示
+  setTimeout(() => {
+    const alert = document.querySelector('.alert');
+    if (alert) {
+      alert.remove();
+    }
+  }, 5000);
 }
 </script>
 </body>

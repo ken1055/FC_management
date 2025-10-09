@@ -594,7 +594,14 @@ router.get("/report", requireAdmin, async (req, res) => {
     console.log("ロイヤリティレポートデータ:", reportData.length, "月分");
 
     // 詳細データも取得（Supabase）
-    await handleRoyaltyReportData(reportData, year, startMonth, endMonth, req, res);
+    await handleRoyaltyReportData(
+      reportData,
+      year,
+      startMonth,
+      endMonth,
+      req,
+      res
+    );
   } catch (error) {
     console.error("ロイヤリティレポート処理エラー:", error);
     res.status(500).render("error", {
@@ -605,7 +612,14 @@ router.get("/report", requireAdmin, async (req, res) => {
 });
 
 // ロイヤリティレポートデータ処理関数（Supabase対応）
-async function handleRoyaltyReportData(reportData, year, startMonth, endMonth, req, res) {
+async function handleRoyaltyReportData(
+  reportData,
+  year,
+  startMonth,
+  endMonth,
+  req,
+  res
+) {
   try {
     // 月別詳細データも取得（Supabase）- 月範囲でフィルタ
     const { data: detailCalculations, error: detailError } = await db
@@ -927,7 +941,6 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
       .select("*")
       .eq("calculation_year", parseInt(year))
       .eq("calculation_month", parseInt(month))
-      .eq("invoice_generated", false)
       .order("store_id");
     if (calcErr) {
       console.error("ロイヤリティ計算取得エラー:", calcErr);
@@ -940,7 +953,7 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
     if (!calculations || calculations.length === 0) {
       return res.json({
         success: false,
-        message: "生成対象の請求書がありません",
+        message: "指定された年月のロイヤリティ計算データがありません",
       });
     }
 
@@ -973,8 +986,9 @@ router.post("/invoices/bulk", requireAdmin, async (req, res) => {
           store_phone: s?.main_phone || null,
           store_email: s?.representative_email || null,
         };
-        const pdfBuffer = await generateInvoicePDF(enriched);
-        const fileName = `invoice_${enriched.store_name}_${
+        const pdfBuffer = await generateInvoicePDF(enriched, req);
+        const safeStoreName = enriched.store_name.replace(/[\\/:*?"<>|]/g, "_");
+        const fileName = `invoice_${safeStoreName}_${
           enriched.calculation_year
         }_${String(enriched.calculation_month).padStart(2, "0")}.pdf`;
         let filePath = null;
