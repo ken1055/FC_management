@@ -81,36 +81,77 @@ function requireAdmin(req, res, next) {
 }
 
 // ロイヤリティ設定一覧
-router.get("/settings", requireAdmin, (req, res) => {
-  const query = `
-    SELECT rs.id, rs.store_id, rs.royalty_rate as royalty_rate, rs.effective_date, rs.created_at, s.name as store_name
-    FROM royalty_settings rs
-    LEFT JOIN stores s ON rs.store_id = s.id
-    ORDER BY rs.effective_date DESC, s.name
-  `;
+router.get("/settings", requireAdmin, async (req, res) => {
+  try {
+    // ロイヤリティ設定を取得
+    const { data: settings, error } = await db
+      .from("royalty_settings")
+      .select("id, store_id, rate, effective_date, created_at");
 
-  db.all(query, [], (err, settings) => {
-    if (err) {
-      console.error("ロイヤリティ設定取得エラー:", err);
+    if (error) {
+      console.error("ロイヤリティ設定取得エラー:", error);
       return res.status(500).render("error", {
         message: "ロイヤリティ設定の取得に失敗しました",
         session: req.session,
       });
     }
 
+    // 店舗名を取得
+    const storeIds = Array.from(
+      new Set((settings || []).map((s) => s.store_id).filter(Boolean))
+    );
+    let storeMap = {};
+    if (storeIds.length > 0) {
+      const { data: stores, error: storesError } = await db
+        .from("stores")
+        .select("id, name")
+        .in("id", storeIds);
+
+      if (!storesError) {
+        storeMap = Object.fromEntries(
+          (stores || []).map((s) => [s.id, s.name])
+        );
+      }
+    }
+
+    // store_nameを追加してソート
+    const enrichedSettings = (settings || [])
+      .map((s) => ({
+        ...s,
+        royalty_rate: s.rate,
+        store_name: storeMap[s.store_id] || null,
+      }))
+      .sort((a, b) => {
+        const dateA = new Date(a.effective_date);
+        const dateB = new Date(b.effective_date);
+        if (dateA !== dateB) return dateB - dateA;
+        return (a.store_name || "").localeCompare(b.store_name || "");
+      });
+
     res.render("royalty_settings", {
-      settings: settings || [],
+      settings: enrichedSettings,
       session: req.session,
       title: "ロイヤリティ設定",
     });
-  });
+  } catch (error) {
+    console.error("ロイヤリティ設定取得エラー:", error);
+    return res.status(500).render("error", {
+      message: "ロイヤリティ設定の取得に失敗しました",
+      session: req.session,
+    });
+  }
 });
 
 // ロイヤリティ設定フォーム表示
-router.get("/settings/new", requireAdmin, (req, res) => {
-  db.all("SELECT id, name FROM stores ORDER BY name", [], (err, stores) => {
-    if (err) {
-      console.error("店舗一覧取得エラー:", err);
+router.get("/settings/new", requireAdmin, async (req, res) => {
+  try {
+    const { data: stores, error } = await db
+      .from("stores")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("店舗一覧取得エラー:", error);
       return res.status(500).render("error", {
         message: "店舗一覧の取得に失敗しました",
         session: req.session,
@@ -123,53 +164,75 @@ router.get("/settings/new", requireAdmin, (req, res) => {
       session: req.session,
       title: "ロイヤリティ設定追加",
     });
-  });
+  } catch (error) {
+    console.error("店舗一覧取得エラー:", error);
+    return res.status(500).render("error", {
+      message: "店舗一覧の取得に失敗しました",
+      session: req.session,
+    });
+  }
 });
 
 // ロイヤリティ設定編集フォーム表示
-router.get("/settings/edit/:id", requireAdmin, (req, res) => {
+router.get("/settings/edit/:id", requireAdmin, async (req, res) => {
   const settingId = req.params.id;
 
-  const settingQuery = "SELECT * FROM royalty_settings WHERE id = ?";
-  const storesQuery = "SELECT id, name FROM stores ORDER BY name";
+  try {
+    const { data: settings, error: settingError } = await db
+      .from("royalty_settings")
+      .select("*")
+      .eq("id", settingId)
+      .limit(1);
 
-  db.get(settingQuery, [settingId], (err, setting) => {
-    if (err) {
-      console.error("ロイヤリティ設定取得エラー:", err);
+    if (settingError) {
+      console.error("ロイヤリティ設定取得エラー:", settingError);
       return res.status(500).render("error", {
         message: "ロイヤリティ設定の取得に失敗しました",
         session: req.session,
       });
     }
 
-    if (!setting) {
+    if (!settings || settings.length === 0) {
       return res.status(404).render("error", {
         message: "ロイヤリティ設定が見つかりません",
         session: req.session,
       });
     }
 
-    db.all(storesQuery, [], (err, stores) => {
-      if (err) {
-        console.error("店舗一覧取得エラー:", err);
-        return res.status(500).render("error", {
-          message: "店舗一覧の取得に失敗しました",
-          session: req.session,
-        });
-      }
+    const setting = settings[0];
+    // rateをroyalty_rateに変換（ビュー互換性）
+    setting.royalty_rate = setting.rate;
 
-      res.render("royalty_settings_form", {
-        setting: setting,
-        stores: stores || [],
+    const { data: stores, error: storesError } = await db
+      .from("stores")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (storesError) {
+      console.error("店舗一覧取得エラー:", storesError);
+      return res.status(500).render("error", {
+        message: "店舗一覧の取得に失敗しました",
         session: req.session,
-        title: "ロイヤリティ設定編集",
       });
+    }
+
+    res.render("royalty_settings_form", {
+      setting: setting,
+      stores: stores || [],
+      session: req.session,
+      title: "ロイヤリティ設定編集",
     });
-  });
+  } catch (error) {
+    console.error("ロイヤリティ設定編集フォーム表示エラー:", error);
+    return res.status(500).render("error", {
+      message: "エラーが発生しました",
+      session: req.session,
+    });
+  }
 });
 
 // ロイヤリティ設定保存
-router.post("/settings/save", requireAdmin, (req, res) => {
+router.post("/settings/save", requireAdmin, async (req, res) => {
   const { id, store_id, royalty_rate, effective_date } = req.body;
 
   if (!store_id || !royalty_rate || !effective_date) {
@@ -179,17 +242,21 @@ router.post("/settings/save", requireAdmin, (req, res) => {
     });
   }
 
-  if (id) {
-    // 更新
-    const query = `
-      UPDATE royalty_settings 
-      SET store_id = ?, royalty_rate = ?, effective_date = ?
-      WHERE id = ?
-    `;
+  try {
+    if (id) {
+      // 更新
+      const { error } = await db
+        .from("royalty_settings")
+        .update({
+          store_id: store_id,
+          rate: royalty_rate,
+          effective_date: effective_date,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
 
-    db.run(query, [store_id, royalty_rate, effective_date, id], function (err) {
-      if (err) {
-        console.error("ロイヤリティ設定更新エラー:", err);
+      if (error) {
+        console.error("ロイヤリティ設定更新エラー:", error);
         return res.status(500).render("error", {
           message: "ロイヤリティ設定の更新に失敗しました",
           session: req.session,
@@ -198,49 +265,64 @@ router.post("/settings/save", requireAdmin, (req, res) => {
 
       console.log("ロイヤリティ設定更新成功:", id);
       res.redirect("/royalty/settings");
-    });
-  } else {
-    // 新規作成
-    const query = `
-      INSERT INTO royalty_settings (store_id, royalty_rate, effective_date)
-      VALUES (?, ?, ?)
-    `;
+    } else {
+      // 新規作成
+      const { data, error } = await db
+        .from("royalty_settings")
+        .insert({
+          store_id: store_id,
+          rate: royalty_rate,
+          effective_date: effective_date,
+        })
+        .select();
 
-    db.run(query, [store_id, royalty_rate, effective_date], function (err) {
-      if (err) {
-        console.error("ロイヤリティ設定作成エラー:", err);
+      if (error) {
+        console.error("ロイヤリティ設定作成エラー:", error);
         return res.status(500).render("error", {
           message: "ロイヤリティ設定の作成に失敗しました",
           session: req.session,
         });
       }
 
-      console.log("ロイヤリティ設定作成成功:", this.lastID);
+      console.log("ロイヤリティ設定作成成功:", data?.[0]?.id);
       res.redirect("/royalty/settings");
+    }
+  } catch (error) {
+    console.error("ロイヤリティ設定保存エラー:", error);
+    return res.status(500).render("error", {
+      message: "エラーが発生しました",
+      session: req.session,
     });
   }
 });
 
 // ロイヤリティ設定削除
-router.post("/settings/delete/:id", requireAdmin, (req, res) => {
+router.post("/settings/delete/:id", requireAdmin, async (req, res) => {
   const settingId = req.params.id;
 
-  db.run(
-    "DELETE FROM royalty_settings WHERE id = ?",
-    [settingId],
-    function (err) {
-      if (err) {
-        console.error("ロイヤリティ設定削除エラー:", err);
-        return res.status(500).render("error", {
-          message: "ロイヤリティ設定の削除に失敗しました",
-          session: req.session,
-        });
-      }
+  try {
+    const { error } = await db
+      .from("royalty_settings")
+      .delete()
+      .eq("id", settingId);
 
-      console.log("ロイヤリティ設定削除成功:", settingId);
-      res.redirect("/royalty/settings");
+    if (error) {
+      console.error("ロイヤリティ設定削除エラー:", error);
+      return res.status(500).render("error", {
+        message: "ロイヤリティ設定の削除に失敗しました",
+        session: req.session,
+      });
     }
-  );
+
+    console.log("ロイヤリティ設定削除成功:", settingId);
+    res.redirect("/royalty/settings");
+  } catch (error) {
+    console.error("ロイヤリティ設定削除エラー:", error);
+    return res.status(500).render("error", {
+      message: "ロイヤリティ設定の削除に失敗しました",
+      session: req.session,
+    });
+  }
 });
 
 // ロイヤリティ計算一覧
@@ -506,7 +588,7 @@ async function processRoyaltyCalculations(salesData, year, month, res) {
 }
 
 // ロイヤリティ計算結果削除
-router.post("/calculations/delete", requireAdmin, (req, res) => {
+router.post("/calculations/delete", requireAdmin, async (req, res) => {
   const { year, month } = req.body;
 
   if (!year || !month) {
@@ -516,25 +598,33 @@ router.post("/calculations/delete", requireAdmin, (req, res) => {
     });
   }
 
-  const query =
-    "DELETE FROM royalty_calculations WHERE calculation_year = ? AND calculation_month = ?";
+  try {
+    const { error } = await db
+      .from("royalty_calculations")
+      .delete()
+      .eq("calculation_year", year)
+      .eq("calculation_month", month);
 
-  db.run(query, [year, month], function (err) {
-    if (err) {
-      console.error("ロイヤリティ計算削除エラー:", err);
+    if (error) {
+      console.error("ロイヤリティ計算削除エラー:", error);
       return res.status(500).json({
         success: false,
         message: "ロイヤリティ計算の削除に失敗しました",
       });
     }
 
-    console.log(`${year}年${month}月のロイヤリティ計算削除完了:`, this.changes);
+    console.log(`${year}年${month}月のロイヤリティ計算削除完了`);
     res.json({
       success: true,
       message: `${year}年${month}月のロイヤリティ計算を削除しました`,
-      deleted: this.changes,
     });
-  });
+  } catch (error) {
+    console.error("ロイヤリティ計算削除エラー:", error);
+    return res.status(500).json({
+      success: false,
+      message: "ロイヤリティ計算の削除に失敗しました",
+    });
+  }
 });
 
 // 月次ロイヤリティレポート
