@@ -191,8 +191,8 @@
                     <div class="col-md-6 mb-3">
                       <div class="info-label">登録日</div>
                       <div class="info-value">
-                        <% if (customer.registration_date) { %> <%= new
-                        Date(customer.registration_date).toLocaleDateString('ja-JP')
+                        <% if (customer.created_at) { %> <%= new
+                        Date(customer.created_at).toLocaleDateString('ja-JP')
                         %> <% } else { %>
                         <span class="text-muted">不明</span>
                         <% } %>
