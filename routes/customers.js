@@ -1047,193 +1047,115 @@ router.get("/:id/monthly-sales", requireAuth, (req, res) => {
 });
 
 // 店舗の顧客一覧と売上情報取得（API）
-router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
-  const storeId = req.params.storeId;
-  const isAdmin = req.session.user.role === "admin";
+router.get("/store/:storeId/with-sales", requireAuth, async (req, res) => {
+  try {
+    const storeId = req.params.storeId;
+    const isAdmin = req.session.user.role === "admin";
 
-  console.log("顧客売上情報取得リクエスト:", {
-    storeId,
-    isAdmin,
-    isSupabase: true,
-  });
+    console.log("顧客売上情報取得リクエスト:", {
+      storeId,
+      isAdmin,
+      isSupabase: true,
+    });
 
-  // 権限チェック
-  if (!isAdmin && req.session.user.store_id !== parseInt(storeId)) {
-    return res.status(403).json({ error: "アクセス権限がありません" });
-  }
-
-      const useSupabase = true;
-
-  if (useSupabase) {
-    // Supabase環境では分離したクエリを使用
-    console.log("Supabase環境: 分離クエリを実行");
+    // 権限チェック
+    if (!isAdmin && req.session.user.store_id !== parseInt(storeId)) {
+      return res.status(403).json({ error: "アクセス権限がありません" });
+    }
 
     // まず顧客一覧を取得
-    db.all(
-      "SELECT id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, registration_date FROM customers WHERE store_id = ? ORDER BY name",
-      [storeId],
-      (err, customers) => {
-        if (err) {
-          console.error("Supabase顧客一覧取得エラー:", err);
-          return res
-            .status(500)
-            .json({ error: "顧客情報の取得に失敗しました" });
-        }
+    const { data: customers, error: customersError } = await db
+      .from("customers")
+      .select("id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, registration_date")
+      .eq("store_id", storeId)
+      .order("name");
 
-        console.log("取得した顧客数:", customers.length);
+    if (customersError) {
+      console.error("顧客一覧取得エラー:", customersError);
+      return res.status(500).json({ error: "顧客情報の取得に失敗しました" });
+    }
 
-        if (customers.length === 0) {
-          return res.json({
-            customers: [],
-            summary: {
-              total_customers: 0,
-              active_customers: 0,
-              total_revenue: 0,
-              average_revenue_per_customer: 0,
-            },
-          });
-        }
+    console.log("取得した顧客数:", customers.length);
 
-        // 各顧客の取引統計を個別に取得
-        const customerIds = customers.map((c) => c.id);
-        const placeholders = customerIds.map(() => "?").join(",");
+    if (customers.length === 0) {
+      return res.json({
+        customers: [],
+        summary: {
+          total_customers: 0,
+          active_customers: 0,
+          total_revenue: 0,
+          average_revenue_per_customer: 0,
+        },
+      });
+    }
 
-        db.all(
-          `SELECT 
-            customer_id,
-            COUNT(*) as transaction_count,
-            SUM(amount) as total_amount,
-            MAX(transaction_date) as last_transaction_date
-          FROM customer_transactions 
-          WHERE customer_id IN (${placeholders})
-          GROUP BY customer_id`,
-          customerIds,
-          (err, transactions) => {
-            if (err) {
-              console.error("Supabase取引統計取得エラー:", err);
-              return res
-                .status(500)
-                .json({ error: "取引統計の取得に失敗しました" });
-            }
+    // 各顧客の取引統計を取得
+    const customerIds = customers.map((c) => c.id);
+    const { data: transactions, error: transactionsError } = await db
+      .from("customer_transactions")
+      .select("customer_id, amount, transaction_date")
+      .in("customer_id", customerIds);
 
-            console.log("取得した取引統計数:", transactions.length);
+    if (transactionsError) {
+      console.error("取引統計取得エラー:", transactionsError);
+      return res.status(500).json({ error: "取引統計の取得に失敗しました" });
+    }
 
-            // 顧客データと取引統計をマージ
-            const transactionMap = {};
-            transactions.forEach((t) => {
-              transactionMap[t.customer_id] = {
-                actual_transactions: t.transaction_count || 0,
-                actual_total: t.total_amount || 0,
-                last_transaction_date: t.last_transaction_date,
-              };
-            });
+    console.log("取得した取引数:", transactions.length);
 
-            const enrichedCustomers = customers.map((customer) => ({
-              ...customer,
-              actual_transactions:
-                transactionMap[customer.id]?.actual_transactions || 0,
-              actual_total: transactionMap[customer.id]?.actual_total || 0,
-              last_transaction_date:
-                transactionMap[customer.id]?.last_transaction_date || null,
-            }));
-
-            // 実際の売上順でソート
-            enrichedCustomers.sort(
-              (a, b) => (b.actual_total || 0) - (a.actual_total || 0)
-            );
-
-            // 統計情報を計算
-            const totalCustomers = enrichedCustomers.length;
-            const activeCustomers = enrichedCustomers.filter(
-              (c) => c.actual_transactions > 0
-            ).length;
-            const totalRevenue = enrichedCustomers.reduce(
-              (sum, c) => sum + (c.actual_total || 0),
-              0
-            );
-            const averageRevenue =
-              totalCustomers > 0
-                ? Math.round(totalRevenue / totalCustomers)
-                : 0;
-
-            console.log("最終統計:", {
-              totalCustomers,
-              activeCustomers,
-              totalRevenue,
-              averageRevenue,
-            });
-
-            res.json({
-              customers: enrichedCustomers,
-              summary: {
-                total_customers: totalCustomers,
-                active_customers: activeCustomers,
-                total_revenue: totalRevenue,
-                average_revenue_per_customer: averageRevenue,
-              },
-            });
-          }
-        );
+    // 顧客ごとに取引を集計
+    const transactionMap = {};
+    transactions.forEach((t) => {
+      if (!transactionMap[t.customer_id]) {
+        transactionMap[t.customer_id] = {
+          transaction_count: 0,
+          total_amount: 0,
+          last_transaction_date: null,
+        };
       }
-    );
-  } else {
-    // SQLite環境では従来のJOINクエリを使用
-    console.log("SQLite環境: JOINクエリを実行");
-
-    db.all(
-      `SELECT 
-        customers.id,
-        customers.customer_code,
-        customers.name,
-        customers.email,
-        customers.phone,
-        customers.total_purchase_amount,
-        customers.visit_count,
-        customers.last_visit_date,
-        customers.registration_date,
-        COUNT(customer_transactions.id) as actual_transactions,
-        COALESCE(SUM(customer_transactions.amount), 0) as actual_total,
-        MAX(customer_transactions.transaction_date) as last_transaction_date
-      FROM customers 
-      LEFT JOIN customer_transactions ON customers.id = customer_transactions.customer_id
-      WHERE customers.store_id = ?
-      GROUP BY customers.id, customers.customer_code, customers.name, customers.email, customers.phone, 
-               customers.total_purchase_amount, customers.visit_count, customers.last_visit_date, customers.registration_date
-      ORDER BY actual_total DESC, customers.name`,
-      [storeId],
-      (err, customers) => {
-        if (err) {
-          console.error("SQLite顧客売上情報取得エラー:", err);
-          return res
-            .status(500)
-            .json({ error: "顧客情報の取得に失敗しました" });
-        }
-
-        console.log("SQLite取得顧客数:", customers.length);
-
-        // 統計情報を計算
-        const totalCustomers = customers.length;
-        const activeCustomers = customers.filter(
-          (c) => c.actual_transactions > 0
-        ).length;
-        const totalRevenue = customers.reduce(
-          (sum, c) => sum + (c.actual_total || 0),
-          0
-        );
-        const averageRevenue =
-          totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
-
-        res.json({
-          customers,
-          summary: {
-            total_customers: totalCustomers,
-            active_customers: activeCustomers,
-            total_revenue: totalRevenue,
-            average_revenue_per_customer: averageRevenue,
-          },
-        });
+      transactionMap[t.customer_id].transaction_count++;
+      transactionMap[t.customer_id].total_amount += t.amount || 0;
+      if (!transactionMap[t.customer_id].last_transaction_date || 
+          t.transaction_date > transactionMap[t.customer_id].last_transaction_date) {
+        transactionMap[t.customer_id].last_transaction_date = t.transaction_date;
       }
-    );
+    });
+
+    const enrichedCustomers = customers.map((customer) => ({
+      ...customer,
+      actual_transactions: transactionMap[customer.id]?.transaction_count || 0,
+      actual_total: transactionMap[customer.id]?.total_amount || 0,
+      last_transaction_date: transactionMap[customer.id]?.last_transaction_date || null,
+    }));
+
+    // 実際の売上順でソート
+    enrichedCustomers.sort((a, b) => (b.actual_total || 0) - (a.actual_total || 0));
+
+    // 統計情報を計算
+    const totalCustomers = enrichedCustomers.length;
+    const activeCustomers = enrichedCustomers.filter((c) => c.actual_transactions > 0).length;
+    const totalRevenue = enrichedCustomers.reduce((sum, c) => sum + (c.actual_total || 0), 0);
+    const averageRevenue = totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
+
+    console.log("最終統計:", {
+      totalCustomers,
+      activeCustomers,
+      totalRevenue,
+      averageRevenue,
+    });
+
+    res.json({
+      customers: enrichedCustomers,
+      summary: {
+        total_customers: totalCustomers,
+        active_customers: activeCustomers,
+        total_revenue: totalRevenue,
+        average_revenue_per_customer: averageRevenue,
+      },
+    });
+  } catch (error) {
+    console.error("顧客売上情報取得エラー:", error);
+    res.status(500).json({ error: "顧客情報の取得に失敗しました" });
   }
 });
 
