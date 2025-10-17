@@ -810,30 +810,33 @@ router.post("/update/:id", requireAuth, (req, res) => {
 });
 
 // 顧客削除処理
-router.post("/delete/:id", requireAuth, (req, res) => {
+router.post("/delete/:id", requireAuth, async (req, res) => {
   const customerId = req.params.id;
   const isAdmin = req.session.user.role === "admin";
 
-  // 権限チェック
-  let checkQuery, checkParams;
-  if (isAdmin) {
-    checkQuery = "SELECT * FROM customers WHERE id = ?";
-    checkParams = [customerId];
-  } else {
-    checkQuery = "SELECT * FROM customers WHERE id = ? AND store_id = ?";
-    checkParams = [customerId, req.session.user.store_id];
-  }
+  try {
+    // 権限チェック - 顧客の存在確認
+    let customerQuery = db
+      .from("customers")
+      .select("*")
+      .eq("id", customerId);
 
-  db.get(checkQuery, checkParams, (err, customer) => {
-    if (err) {
-      console.error("顧客取得エラー:", err);
+    // 店舗ユーザーは自店舗の顧客のみ削除可能
+    if (!isAdmin) {
+      customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
+    }
+
+    const { data: customers, error: fetchError } = await customerQuery.limit(1);
+
+    if (fetchError) {
+      console.error("顧客取得エラー:", fetchError);
       return res.status(500).render("error", {
         message: "顧客の取得に失敗しました",
         session: req.session,
       });
     }
 
-    if (!customer) {
+    if (!customers || customers.length === 0) {
       return res.status(404).render("error", {
         message: "顧客が見つかりません",
         session: req.session,
@@ -841,19 +844,28 @@ router.post("/delete/:id", requireAuth, (req, res) => {
     }
 
     // 顧客削除
-    db.run("DELETE FROM customers WHERE id = ?", [customerId], function (err) {
-      if (err) {
-        console.error("顧客削除エラー:", err);
-        return res.status(500).render("error", {
-          message: "顧客の削除に失敗しました",
-          session: req.session,
-        });
-      }
+    const { error: deleteError } = await db
+      .from("customers")
+      .delete()
+      .eq("id", customerId);
 
-      console.log("顧客削除成功:", customerId);
-      res.redirect("/customers/list");
+    if (deleteError) {
+      console.error("顧客削除エラー:", deleteError);
+      return res.status(500).render("error", {
+        message: "顧客の削除に失敗しました",
+        session: req.session,
+      });
+    }
+
+    console.log("顧客削除成功:", customerId);
+    res.redirect("/customers/list");
+  } catch (error) {
+    console.error("顧客削除処理エラー:", error);
+    return res.status(500).render("error", {
+      message: `エラー: ${error.message}`,
+      session: req.session,
     });
-  });
+  }
 });
 
 // 顧客の取引履歴取得（API）
