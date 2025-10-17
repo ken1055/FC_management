@@ -27,7 +27,7 @@ function requireAdmin(req, res, next) {
 }
 
 // 顧客一覧表示（管理者・店舗共通）
-router.get("/list", requireAuth, (req, res) => {
+router.get("/list", requireAuth, async (req, res) => {
   const isAdmin = req.session.user.role === "admin";
 
   // 店舗ユーザーの場合は専用ページにリダイレクト
@@ -35,110 +35,84 @@ router.get("/list", requireAuth, (req, res) => {
     return res.redirect("/customers/store");
   }
 
-  const selectedStoreId = req.query.store_id;
-  const searchTerm = req.query.search || "";
+  try {
+    const selectedStoreId = req.query.store_id;
+    const searchTerm = req.query.search || "";
 
-  let query, params;
-
-  if (isAdmin) {
-    // 管理者の場合は店舗フィルターと検索に対応
-    let whereConditions = [];
-    let queryParams = [];
-
-    if (selectedStoreId && selectedStoreId !== "all") {
-      whereConditions.push("c.store_id = ?");
-      queryParams.push(selectedStoreId);
-    }
-
-    if (searchTerm) {
-      whereConditions.push(
-        "(c.name LIKE ? OR c.customer_code LIKE ? OR c.email LIKE ?)"
-      );
-      queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
-    }
-
-    const whereClause =
-      whereConditions.length > 0
-        ? `WHERE ${whereConditions.join(" AND ")}`
-        : "";
-
-    query = `
-      SELECT c.*, s.name as store_name 
-      FROM customers c 
-      LEFT JOIN stores s ON c.store_id = s.id 
-      ${whereClause}
-      ORDER BY c.created_at DESC
-    `;
-    params = queryParams;
-  } else {
-    // 店舗ユーザーは自店舗の顧客のみ表示（検索対応）
-    let whereConditions = ["c.store_id = ?"];
-    let queryParams = [req.session.user.store_id];
-
-    if (searchTerm) {
-      whereConditions.push(
-        "(c.name LIKE ? OR c.customer_code LIKE ? OR c.email LIKE ?)"
-      );
-      queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
-    }
-
-    query = `
-      SELECT c.*, s.name as store_name 
-      FROM customers c 
-      LEFT JOIN stores s ON c.store_id = s.id 
-      WHERE ${whereConditions.join(" AND ")}
-      ORDER BY c.created_at DESC
-    `;
-    params = queryParams;
-  }
-
-  // 店舗一覧取得（管理者の場合）
-  const getStoresList = (callback) => {
+    // 店舗一覧取得（管理者の場合）
+    let stores = [];
     if (isAdmin) {
-      db.all("SELECT id, name FROM stores ORDER BY name", [], callback);
-    } else {
-      callback(null, []);
-    }
-  };
+      const { data: storesData, error: storesError } = await db
+        .from("stores")
+        .select("id, name")
+        .order("name", { ascending: true });
 
-  getStoresList((storeErr, stores) => {
-    if (storeErr) {
-      console.error("店舗一覧取得エラー:", storeErr);
-      return res.status(500).render("error", {
-        message: "店舗一覧の取得に失敗しました",
-        session: req.session,
-      });
-    }
-
-    db.all(query, params, (err, customers) => {
-      if (err) {
-        console.error("顧客一覧取得エラー:", err);
-        console.error("SQL:", query);
-        console.error("パラメータ:", params);
-
-        let errorMessage = "顧客一覧の取得に失敗しました";
-        if (process.env.NODE_ENV !== "production") {
-          errorMessage += ` [詳細: ${err.message}]`;
-        }
-
+      if (storesError) {
+        console.error("店舗一覧取得エラー:", storesError);
         return res.status(500).render("error", {
-          message: errorMessage,
+          message: "店舗一覧の取得に失敗しました",
           session: req.session,
         });
       }
+      stores = storesData || [];
+    }
 
-      res.render("customers_list", {
-        customers: customers || [],
-        stores: stores || [],
-        selectedStoreId: selectedStoreId || "all",
-        searchTerm: searchTerm,
+    // 顧客一覧取得（Supabase対応）
+    let customersQuery = db
+      .from("customers")
+      .select("*, stores(name)")
+      .order("created_at", { ascending: false });
+
+    // 店舗フィルター
+    if (selectedStoreId && selectedStoreId !== "all") {
+      customersQuery = customersQuery.eq("store_id", selectedStoreId);
+    }
+
+    // 検索フィルター
+    if (searchTerm) {
+      customersQuery = customersQuery.or(
+        `name.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
+      );
+    }
+
+    const { data: customersData, error: customersError } = await customersQuery;
+
+    if (customersError) {
+      console.error("顧客一覧取得エラー:", customersError);
+      let errorMessage = "顧客一覧の取得に失敗しました";
+      if (process.env.NODE_ENV !== "production") {
+        errorMessage += ` [詳細: ${customersError.message}]`;
+      }
+
+      return res.status(500).render("error", {
+        message: errorMessage,
         session: req.session,
-        title: "顧客一覧",
-        isAdmin: isAdmin,
-        isSupabase: isSupabaseConfigured(),
       });
+    }
+
+    // データ整形（store_nameを追加）
+    const customers = (customersData || []).map((customer) => ({
+      ...customer,
+      store_name: customer.stores?.name || null,
+    }));
+
+    res.render("customers_list", {
+      customers: customers,
+      stores: stores,
+      selectedStoreId: selectedStoreId || "all",
+      searchTerm: searchTerm,
+      session: req.session,
+      title: "顧客一覧",
+      isAdmin: isAdmin,
+      isSupabase: true,
     });
-  });
+  } catch (error) {
+    console.error("顧客一覧取得エラー:", error);
+    return res.status(500).render("error", {
+      message: `エラー: ${error.message}`,
+      session: req.session,
+    });
+  }
 });
 
 // 店舗専用顧客一覧表示
