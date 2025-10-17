@@ -484,79 +484,49 @@ router.post("/create", requireAuth, (req, res) => {
     insertCustomer();
   }
 
-  function insertCustomer() {
-    const useSupabase = true;
-    console.log("=== INSERT処理開始 ===");
-    console.log("useSupabase:", useSupabase);
-
-    const query = useSupabase
-      ? `
-      INSERT INTO customers (
-        store_id, customer_code, name, kana, email, phone, address, birth_date, gender, notes, visit_count, total_purchase_amount, last_visit_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
-      : `
-      INSERT INTO customers (
-        store_id, customer_code, name, kana, email, phone, 
-        address, birth_date, gender, notes, visit_count, total_purchase_amount, last_visit_date, registration_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+  async function insertCustomer() {
+    console.log("=== INSERT処理開始（Supabase） ===");
 
     const toNull = (v) =>
       v !== undefined && v !== null && String(v).trim() !== "" ? v : null;
 
-    const params = true
-      ? [
-          finalStoreId,
-          toNull(customer_code),
-          name,
-          toNull(kana),
-          toNull(email),
-          toNull(phone),
-          toNull(address),
-          toNull(birth_date),
-          toNull(gender),
-          toNull(notes),
-          parseInt(visit_count) || 0,
-          parseInt(total_purchase_amount) || 0,
-          toNull(last_visit_date),
-        ]
-      : [
-          finalStoreId,
-          toNull(customer_code),
-          name,
-          toNull(kana),
-          toNull(email),
-          toNull(phone),
-          toNull(address),
-          toNull(birth_date),
-          toNull(gender),
-          toNull(notes),
-          parseInt(visit_count) || 0,
-          parseInt(total_purchase_amount) || 0,
-          toNull(last_visit_date),
-          new Date().toISOString().slice(0, 10),
-        ];
+    const customerData = {
+      store_id: finalStoreId,
+      customer_code: toNull(customer_code),
+      name,
+      kana: toNull(kana),
+      email: toNull(email),
+      phone: toNull(phone),
+      address: toNull(address),
+      birth_date: toNull(birth_date),
+      gender: toNull(gender),
+      notes: toNull(notes),
+      visit_count: parseInt(visit_count) || 0,
+      total_purchase_amount: parseInt(total_purchase_amount) || 0,
+      last_visit_date: toNull(last_visit_date),
+    };
 
-    console.log("実行SQL:", query);
-    console.log("パラメータ:", params);
+    console.log("顧客データ:", customerData);
 
-    db.run(query, params, function (err) {
-      if (err) {
-        console.error("顧客登録エラー:", err);
-        console.error("実行SQL:", query);
-        console.error("パラメータ:", params);
+    try {
+      const { data, error } = await db
+        .from("customers")
+        .insert(customerData)
+        .select();
+
+      if (error) {
+        console.error("顧客登録エラー:", error);
 
         let errorMessage = "顧客の登録に失敗しました";
 
-        // PostgreSQLの制約エラーを識別
-        if (err.code === "23505") {
+        // Supabaseの制約エラーを識別
+        if (error.code === "23505") {
           errorMessage =
             "重複するデータが存在しています。顧客コードなどの重複を確認してください。";
-        } else if (err.code === "23503") {
+        } else if (error.code === "23503") {
           errorMessage = "関連する店舗データが存在しません。";
         } else if (process.env.NODE_ENV !== "production") {
-          errorMessage += ` [詳細: ${err.message}]`;
+          errorMessage += ` [詳細: ${error.message}]`;
         }
 
         return res.status(500).render("error", {
@@ -565,9 +535,15 @@ router.post("/create", requireAuth, (req, res) => {
         });
       }
 
-      console.log("顧客登録成功:", this.lastID);
+      console.log("顧客登録成功:", data[0].id);
       res.redirect("/customers/list");
-    });
+    } catch (error) {
+      console.error("顧客登録処理エラー:", error);
+      return res.status(500).render("error", {
+        message: `エラー: ${error.message}`,
+        session: req.session,
+      });
+    }
   }
 });
 
