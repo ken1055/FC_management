@@ -927,7 +927,8 @@ router.get("/invoices", requireAdmin, async (req, res) => {
 
         enrichedInvoices = invoices.map((invoice) => ({
           ...invoice,
-          store_name: storeMap[invoice.store_id] || `店舗ID ${invoice.store_id}`,
+          store_name:
+            storeMap[invoice.store_id] || `店舗ID ${invoice.store_id}`,
         }));
       }
     }
@@ -1220,7 +1221,7 @@ async function generateInvoicePDF(calculation, req) {
         doc.moveDown(2);
 
         // 左側：合計金額（表の前）
-        const totalAmount = (calculation.royalty_amount || 0) + 1000;
+        const totalAmount = (calculation.royalty_amount || 0) + 20000;
         const totalY = doc.y;
         doc.fontSize(12).fillColor("#000");
         doc.text(`合計金額：¥${totalAmount.toLocaleString()}`, leftX, totalY);
@@ -1280,14 +1281,26 @@ async function generateInvoicePDF(calculation, req) {
           { align: "right", width: col3Width - 10 }
         );
 
-        // 行2：システム使用料
+        // 行2：システム利用料
         currentY += 20;
         doc.rect(col1X, currentY, col1Width, 20).stroke();
         doc.rect(col2X, currentY, col2Width, 20).stroke();
         doc.rect(col3X, currentY, col3Width, 20).stroke();
-        doc.text("システム使用料　１ヶ月", col1X + 5, currentY + 5);
+        doc.text("システム利用料　１ヶ月", col1X + 5, currentY + 5);
         doc.text("1", col2X + 5, currentY + 5);
-        doc.text("¥1,000", col3X + 5, currentY + 5, {
+        doc.text("¥10,000", col3X + 5, currentY + 5, {
+          align: "right",
+          width: col3Width - 10,
+        });
+
+        // 行3：SNS利用料
+        currentY += 20;
+        doc.rect(col1X, currentY, col1Width, 20).stroke();
+        doc.rect(col2X, currentY, col2Width, 20).stroke();
+        doc.rect(col3X, currentY, col3Width, 20).stroke();
+        doc.text("SNS利用料　１ヶ月", col1X + 5, currentY + 5);
+        doc.text("1", col2X + 5, currentY + 5);
+        doc.text("¥10,000", col3X + 5, currentY + 5, {
           align: "right",
           width: col3Width - 10,
         });
@@ -1358,10 +1371,11 @@ function generateInvoiceHTML(calculation) {
   const dd = String(invoiceDate.getDate()).padStart(2, "0");
   const invoiceNo = `${calculation.store_id}-${yyyy}${mm}${dd}${pageNo}`;
 
-  // 件名・固定費用（システム使用料）
-  const subject = "ロイヤリティ、システム使用料（今は1000円）";
-  const systemFee = 1000;
-  const totalAmount = (calculation.royalty_amount || 0) + systemFee;
+  // 件名・固定費用（システム利用料、SNS利用料）
+  const subject = "ロイヤリティ、システム利用料、SNS利用料";
+  const systemFee = 10000;
+  const snsFee = 10000;
+  const totalAmount = (calculation.royalty_amount || 0) + systemFee + snsFee;
 
   return `
 <!DOCTYPE html>
@@ -1601,10 +1615,16 @@ function generateInvoiceHTML(calculation) {
                     ).toLocaleString()}</td>
                 </tr>
                 <tr>
-                    <td class="item-name">システム使用料 １ヶ月</td>
+                    <td class="item-name">システム利用料 １ヶ月</td>
                     <td>-</td>
                     <td>-</td>
                     <td class="amount">¥${systemFee.toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td class="item-name">SNS利用料 １ヶ月</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td class="amount">¥${snsFee.toLocaleString()}</td>
                 </tr>
                 <tr class="total-row">
                     <td class="item-name">合計請求金額 (税込)</td>
