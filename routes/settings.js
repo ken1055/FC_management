@@ -63,16 +63,14 @@ router.post("/official-line", requireRole(["admin"]), async (req, res) => {
   try {
     // Supabase用のUPSERT
     console.log("Supabase用クエリ実行中...");
-    const { error } = await db
-      .from("system_settings")
-      .upsert(
-        {
-          key: "official_line_url",
-          value: url || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "key" }
-      );
+    const { error } = await db.from("system_settings").upsert(
+      {
+        key: "official_line_url",
+        value: url || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "key" }
+    );
 
     if (error) {
       console.error("Supabase設定保存エラー:", error);

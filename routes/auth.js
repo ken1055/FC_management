@@ -314,7 +314,10 @@ router.post("/register", async (req, res) => {
         ? { email, password: hashedPassword, store_id: null }
         : { email, password: hashedPassword };
 
-    const { data, error } = await db.from(tableName).insert(insertData).select();
+    const { data, error } = await db
+      .from(tableName)
+      .insert(insertData)
+      .select();
 
     if (error) {
       console.error("ユーザー作成エラー:", error);

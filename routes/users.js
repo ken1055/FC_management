@@ -64,7 +64,7 @@ async function checkUserIdIntegrity(callback) {
 function fixUserIds(callback) {
   console.log("=== 管理者ID修正（Supabase環境） ===");
   console.log("Supabase環境ではIDは自動管理されるため、修正は不要です");
-  
+
   // Supabaseでは自動インクリメントIDが自動管理されるため、何もせずに成功を返す
   callback(null);
 }
@@ -369,10 +369,7 @@ router.post("/delete/:id", requireRole(["admin"]), async (req, res) => {
 // API: アカウント削除（従来の機能を維持）
 router.delete("/:id", async (req, res) => {
   try {
-    const { error } = await db
-      .from("users")
-      .delete()
-      .eq("id", req.params.id);
+    const { error } = await db.from("users").delete().eq("id", req.params.id);
 
     if (error) {
       console.error("ユーザー削除エラー:", error);

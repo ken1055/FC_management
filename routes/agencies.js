@@ -253,110 +253,76 @@ async function renderAgenciesList(
       return res.status(500).send("DBエラー: " + groupsError.message);
     }
 
-    // データベースタイプに応じて store_products 参照を制御
-    const { isSupabaseConfigured } = require("../config/database");
-    const isPostgres = !!process.env.DATABASE_URL;
-    const useSupabase = isSupabaseConfigured && isSupabaseConfigured();
+    // Supabaseでは店舗一覧を取得（シンプルなクエリ）
+    let storesQuery = db.from("stores").select(`
+      *,
+      group_members!left(group_id, groups!left(name))
+    `);
 
-    let query = `
-    SELECT 
-      a.*,
-      g.name as group_name,
-      ${
-        useSupabase
-          ? "NULL as product_count, NULL as product_names"
-          : isPostgres
-          ? "COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count, STRING_AGG(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ' ORDER BY ap.product_name) as product_names"
-          : "COUNT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN 1 END) as product_count, GROUP_CONCAT(CASE WHEN ap.product_name IS NOT NULL AND ap.product_name != '' THEN ap.product_name END, ', ') as product_names"
-      },
-      COALESCE(COUNT(s.id), 0) as sales_count,
-      COALESCE(SUM(s.amount), 0) as total_sales
-    FROM stores a 
-    LEFT JOIN group_members ga ON a.id = ga.store_id 
-    LEFT JOIN groups g ON ga.group_id = g.id
-    ${useSupabase ? "" : "LEFT JOIN store_products ap ON a.id = ap.store_id"}
-    LEFT JOIN sales s ON a.id = s.store_id
-  `;
-    let params = [];
-    let conditions = [];
-
+    // グループフィルタ
     if (groupId) {
-      conditions.push("ga.group_id = ?");
-      params.push(groupId);
+      storesQuery = storesQuery.eq("group_members.group_id", groupId);
     }
 
+    // 検索フィルタ
     if (searchQuery) {
-      if (useSupabase) {
-        conditions.push("(a.name LIKE ?)");
-        params.push(`%${searchQuery}%`);
-      } else {
-        conditions.push(
-          "(a.name LIKE ? OR a.address LIKE ? OR a.bank_info LIKE ? OR ap.product_name LIKE ?)"
-        );
-        params.push(
-          `%${searchQuery}%`,
-          `%${searchQuery}%`,
-          `%${searchQuery}%`,
-          `%${searchQuery}%`
-        );
-      }
+      storesQuery = storesQuery.ilike("name", `%${searchQuery}%`);
     }
 
-    if (conditions.length > 0) {
-      query += " WHERE " + conditions.join(" AND ");
+    storesQuery = storesQuery.order("id", { ascending: true });
+
+    const { data: rawStores, error: storesError } = await storesQuery;
+
+    if (storesError) {
+      console.error("代理店一覧取得エラー:", storesError);
+      let errorMessage = "店舗一覧の取得に失敗しました";
+      if (process.env.NODE_ENV !== "production") {
+        errorMessage += ` [詳細: ${storesError.message}]`;
+      }
+      return res.status(500).send(errorMessage);
     }
 
-    // PostgreSQLでは、SELECTで選択するすべての非集約列をGROUP BYに含める必要がある
-    if (!useSupabase && isPostgres) {
-      query +=
-        " GROUP BY a.id, a.name, a.business_address, a.main_phone, a.manager_name, a.mobile_phone, a.representative_email, a.contract_type, a.contract_start_date, a.royalty_rate, a.invoice_number, a.bank_name, a.branch_name, a.account_type, a.account_number, a.account_holder, a.license_status, a.license_type, a.license_number, a.license_file_path, a.line_official_id, a.representative_gmail, g.name ORDER BY a.id";
-    } else {
-      query += " GROUP BY a.id ORDER BY a.id";
-    }
+    // データ整形（group_nameを追加）
+    const stores = (rawStores || []).map((store) => ({
+      ...store,
+      group_name: store.group_members?.[0]?.groups?.name || null,
+      product_count: null, // Supabaseではstore_productsは使用しない
+      product_names: null,
+      sales_count: 0, // 簡易的に0を設定（必要に応じて別途集計可能）
+      total_sales: 0,
+    }));
 
-    db.all(query, params, (err, stores) => {
-      if (err) {
-        console.error("代理店一覧取得エラー:", err);
-        console.error("実行SQL:", query);
-        console.error("パラメータ:", params);
-
-        let errorMessage = "店舗一覧の取得に失敗しました";
-        if (process.env.NODE_ENV !== "production") {
-          errorMessage += ` [詳細: ${err.message}]`;
-        }
-
-        return res.status(500).send(errorMessage);
-      }
-
-      if (stores && stores.length > 0) {
-        const sample = stores[0];
-        console.log("stores_list 表示用フィールド確認:", Object.keys(sample));
-        console.log("sample:", {
-          id: sample.id,
-          name: sample.name,
-          manager_name: sample.manager_name,
-          business_address: sample.business_address,
-          main_phone: sample.main_phone,
-          contract_type: sample.contract_type,
-          contract_start_date: sample.contract_start_date,
-          royalty_rate: sample.royalty_rate,
-        });
-      }
-
-      console.log("代理店一覧取得完了:", stores.length, "件");
-
-      res.render("stores_list", {
-        stores,
-        groups,
-        selectedGroupId: groupId,
-        searchQuery,
-        session: req.session,
-        success: message,
-        integrityInfo,
-        autoFixMessage,
+    if (stores && stores.length > 0) {
+      const sample = stores[0];
+      console.log("stores_list 表示用フィールド確認:", Object.keys(sample));
+      console.log("sample:", {
+        id: sample.id,
+        name: sample.name,
+        manager_name: sample.manager_name,
+        business_address: sample.business_address,
+        main_phone: sample.main_phone,
+        contract_type: sample.contract_type,
+        contract_start_date: sample.contract_start_date,
+        royalty_rate: sample.royalty_rate,
       });
+    }
+
+    console.log("代理店一覧取得完了:", stores.length, "件");
+
+    res.render("stores_list", {
+      stores,
+      groups: groups || [],
+      selectedGroupId: groupId,
+      searchQuery,
+      session: req.session,
+      success: message,
+      integrityInfo,
+      autoFixMessage,
     });
-  });
+  } catch (error) {
+    console.error("renderAgenciesList実行エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 }
 
 // 新規登録フォーム
@@ -453,7 +419,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // 新規登録（フォームPOST対応）
-router.post("/new", requireRole(["admin"]), (req, res) => {
+router.post("/new", requireRole(["admin"]), async (req, res) => {
   console.log("=== 新規登録処理開始 ===");
   console.log("リクエストボディ:", req.body);
 
@@ -513,171 +479,109 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 
     // メールアドレスの重複チェック
     if (email) {
-      db.get(
-        "SELECT id FROM users WHERE email = ?",
-        [email],
-        (err, existingUser) => {
-          if (err) {
-            console.error("メールアドレス重複チェックエラー:", err);
-            return res.status(500).send("DBエラー");
-          }
-          if (existingUser) {
-            return res
-              .status(400)
-              .send("このメールアドレスは既に使用されています");
-          }
+      const { data: existingUsers, error: checkError } = await db
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .limit(1);
 
-          // 代理店とユーザーを作成
-          createAgencyWithUser();
-        }
-      );
-    } else {
-      // メールアドレスが指定されていない場合は代理店のみ作成
-      createAgencyOnly();
+      if (checkError) {
+        console.error("メールアドレス重複チェックエラー:", checkError);
+        return res.status(500).send("DBエラー");
+      }
+
+      if (existingUsers && existingUsers.length > 0) {
+        return res.status(400).send("このメールアドレスは既に使用されています");
+      }
     }
 
-    function createAgencyOnly() {
-      db.run(
-        `INSERT INTO stores (
-          name, business_address, main_phone, manager_name, mobile_phone, representative_email,
-          contract_type, contract_start_date, royalty_rate,
-          invoice_number, bank_name, branch_name, account_type, account_number, account_holder,
-          license_status, license_type, license_number, license_file_path,
-          line_official_id, representative_gmail
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          name,
-          business_address,
-          main_phone,
-          manager_name,
-          mobile_phone,
-          representative_email,
-          contract_type,
-          processedContractStartDate,
-          processedRoyaltyRate,
-          invoice_number,
-          bank_name,
-          branch_name,
-          account_type,
-          account_number,
-          account_holder,
-          license_status || "none",
-          license_type,
-          license_number,
-          license_file_path,
-          line_official_id,
-          representative_gmail,
-        ],
-        function (err) {
-          if (err) {
-            console.error("店舗作成エラー:", err);
+    // 店舗データを作成
+    const storeData = {
+      name,
+      business_address,
+      main_phone,
+      manager_name,
+      mobile_phone,
+      representative_email,
+      contract_type,
+      contract_start_date: processedContractStartDate,
+      royalty_rate: processedRoyaltyRate,
+      invoice_number,
+      bank_name,
+      branch_name,
+      account_type,
+      account_number,
+      account_holder,
+      license_status: license_status || "none",
+      license_type,
+      license_number,
+      license_file_path,
+      line_official_id,
+      representative_gmail,
+    };
 
-            let errorMessage = "店舗の作成に失敗しました";
+    const { data: stores, error: storeError } = await db
+      .from("stores")
+      .insert(storeData)
+      .select();
 
-            // PostgreSQLの制約エラーを識別
-            if (err.code === "23505") {
-              errorMessage = "重複する店舗名またはデータが存在しています。";
-            } else if (err.code === "23503") {
-              errorMessage = "関連するデータが存在しません。";
-            } else if (process.env.NODE_ENV !== "production") {
-              errorMessage += ` [詳細: ${err.message}]`;
-            }
+    if (storeError) {
+      console.error("店舗作成エラー:", storeError);
 
-            return res.status(500).send(errorMessage);
-          }
+      let errorMessage = "店舗の作成に失敗しました";
+      if (storeError.code === "23505") {
+        errorMessage = "重複する店舗名またはデータが存在しています。";
+      } else if (storeError.code === "23503") {
+        errorMessage = "関連するデータが存在しません。";
+      } else if (process.env.NODE_ENV !== "production") {
+        errorMessage += ` [詳細: ${storeError.message}]`;
+      }
 
-          const agencyId = this.lastID;
-          console.log(`店舗作成完了: ID=${agencyId}, 名前=${name}`);
-          res.redirect(
-            "/stores/list?message=" + encodeURIComponent("店舗を作成しました")
-          );
-        }
-      );
+      return res.status(500).send(errorMessage);
     }
 
-    function createAgencyWithUser() {
-      // パスワードをハッシュ化
-      bcrypt.hash(password, 10, (err, hashedPassword) => {
-        if (err) return res.status(500).send("パスワードハッシュ化エラー");
+    const agencyId = stores[0].id;
+    console.log(`店舗作成完了: ID=${agencyId}, 名前=${name}`);
 
-        // 店舗を作成
-        db.run(
-          `INSERT INTO stores (
-            name, business_address, main_phone, manager_name, mobile_phone, representative_email,
-            contract_type, contract_start_date, royalty_rate,
-            invoice_number, bank_name, branch_name, account_type, account_number, account_holder,
-            license_status, license_type, license_number, license_file_path,
-            line_official_id, representative_gmail
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            name,
-            business_address,
-            main_phone,
-            manager_name,
-            mobile_phone,
-            representative_email,
-            contract_type,
-            processedContractStartDate,
-            processedRoyaltyRate,
-            invoice_number,
-            bank_name,
-            branch_name,
-            account_type,
-            account_number,
-            account_holder,
-            license_status || "none",
-            license_type,
-            license_number,
-            license_file_path,
-            line_official_id,
-            representative_gmail,
-          ],
-          function (err) {
-            if (err) {
-              console.error("店舗作成エラー:", err);
-              return res.status(500).send(`店舗作成エラー: ${err.message}`);
-            }
+    // ユーザーアカウントを作成（emailが指定されている場合）
+    if (email && password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-            const agencyId = this.lastID;
+      const { error: userError } = await db
+        .from("users")
+        .insert({
+          email,
+          password: hashedPassword,
+          store_id: agencyId,
+        });
 
-            // ユーザーアカウントを作成
-            db.run(
-              "INSERT INTO users (email, password, store_id) VALUES (?, ?, ?)",
-              [email, hashedPassword, agencyId],
-              function (err) {
-                if (err) {
-                  console.error("ユーザー作成エラー:", err);
+      if (userError) {
+        console.error("ユーザー作成エラー:", userError);
 
-                  // PostgreSQL固有のエラーハンドリング
-                  if (
-                    err.code === "23505" &&
-                    err.constraint === "users_email_key"
-                  ) {
-                    return res
-                      .status(400)
-                      .send(
-                        `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
-                      );
-                  }
-
-                  return res
-                    .status(500)
-                    .send(`ユーザーアカウント作成エラー: ${err.message}`);
-                }
-
-                console.log(
-                  `店舗ユーザーアカウント作成: ${email} (store_id: ${agencyId})`
-                );
-                res.redirect(
-                  "/stores/list?message=" +
-                    encodeURIComponent("店舗とユーザーアカウントを作成しました")
-                );
-              }
+        if (userError.code === "23505") {
+          return res
+            .status(400)
+            .send(
+              `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
             );
-          }
-        );
-      });
+        }
+
+        return res
+          .status(500)
+          .send(`ユーザーアカウント作成エラー: ${userError.message}`);
+      }
+
+      console.log(`店舗ユーザーアカウント作成: ${email} (store_id: ${agencyId})`);
+      return res.redirect(
+        "/stores/list?message=" +
+          encodeURIComponent("店舗とユーザーアカウントを作成しました")
+      );
     }
+
+    // メールアドレスが指定されていない場合は店舗のみ作成
+    res.redirect(
+      "/stores/list?message=" + encodeURIComponent("店舗を作成しました")
+    );
   } catch (error) {
     console.error("新規登録エラー:", error);
     res.status(500).send("エラーが発生しました: " + error.message);
@@ -685,8 +589,7 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
 });
 
 // 編集（フォームPOST対応）
-router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
-  const { isSupabaseConfigured } = require("../config/database");
+router.post("/edit/:id", requireRole(["admin"]), async (req, res) => {
   const {
     name,
     // 店舗基本情報
@@ -716,61 +619,57 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
     representative_gmail,
   } = req.body;
 
-  // データ処理: 空文字列をNULLに変換
-  const processedRoyaltyRate =
-    royalty_rate && royalty_rate.trim() !== "" ? parseFloat(royalty_rate) : 5.0;
-  const processedContractStartDate =
-    contract_start_date && contract_start_date.trim() !== ""
-      ? contract_start_date
-      : null;
+  try {
+    // データ処理: 空文字列をNULLに変換
+    const processedRoyaltyRate =
+      royalty_rate && royalty_rate.trim() !== "" ? parseFloat(royalty_rate) : 5.0;
+    const processedContractStartDate =
+      contract_start_date && contract_start_date.trim() !== ""
+        ? contract_start_date
+        : null;
 
-  db.run(
-    `UPDATE stores SET 
-      name=?, business_address=?, main_phone=?, manager_name=?, 
-      mobile_phone=?, representative_email=?, contract_type=?, 
-      contract_start_date=?, royalty_rate=?, invoice_number=?, 
-      bank_name=?, branch_name=?, account_type=?, account_number=?, 
-      account_holder=?, license_status=?, license_type=?, 
-      license_number=?, license_file_path=?, line_official_id=?, 
-      representative_gmail=?, updated_at=CURRENT_TIMESTAMP
-    WHERE id=?`,
-    [
-      name,
-      business_address,
-      main_phone,
-      manager_name,
-      mobile_phone,
-      representative_email,
-      contract_type,
-      processedContractStartDate,
-      processedRoyaltyRate,
-      invoice_number,
-      bank_name,
-      branch_name,
-      account_type,
-      account_number,
-      account_holder,
-      license_status || "none",
-      license_type,
-      license_number,
-      license_file_path,
-      line_official_id,
-      representative_gmail,
-      req.params.id,
-    ],
-    function (err) {
-      if (err) {
-        console.error("店舗更新エラー:", err);
-        return res.status(500).send("DBエラー: " + err.message);
-      }
+    const { error } = await db
+      .from("stores")
+      .update({
+        name,
+        business_address,
+        main_phone,
+        manager_name,
+        mobile_phone,
+        representative_email,
+        contract_type,
+        contract_start_date: processedContractStartDate,
+        royalty_rate: processedRoyaltyRate,
+        invoice_number,
+        bank_name,
+        branch_name,
+        account_type,
+        account_number,
+        account_holder,
+        license_status: license_status || "none",
+        license_type,
+        license_number,
+        license_file_path,
+        line_official_id,
+        representative_gmail,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", req.params.id);
 
-      console.log(`店舗更新完了: ID=${req.params.id}, 名前=${name}`);
-      res.redirect(
-        "/stores/list?success=" +
-          encodeURIComponent(`店舗「${name}」を更新しました`)
-      );
+    if (error) {
+      console.error("店舗更新エラー:", error);
+      return res.status(500).send("DBエラー: " + error.message);
     }
-  );
+
+    console.log(`店舗更新完了: ID=${req.params.id}, 名前=${name}`);
+    res.redirect(
+      "/stores/list?success=" +
+        encodeURIComponent(`店舗「${name}」を更新しました`)
+    );
+  } catch (error) {
+    console.error("店舗更新エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 // 代理店削除（管理者のみ）
@@ -908,168 +807,37 @@ router.get(
     }
 
     try {
-      let agency;
+      // 店舗情報を取得
+      const { data: stores, error: storeError } = await db
+        .from("stores")
+        .select("*")
+        .eq("id", agencyId)
+        .limit(1);
 
-      if (isVercel && supabase) {
-        // Vercel + Supabase環境
-        console.log("Supabase環境で代理店プロフィール取得");
-        const { data, error } = await supabase
-          .from("stores")
-          .select("*")
-          .eq("id", agencyId)
-          .single();
-
-        if (error || !data) {
-          console.error("Supabase代理店取得エラー:", error);
-          return res.status(404).send("代理店が見つかりません");
-        }
-
-        agency = data;
-      } else {
-        // ローカル環境（SQLite）
-        const agencyResult = await new Promise((resolve, reject) => {
-          db.get(
-            "SELECT * FROM stores WHERE id = ?",
-            [agencyId],
-            (err, result) => {
-              if (err) reject(err);
-              else resolve(result);
-            }
-          );
-        });
-
-        if (!agencyResult)
-          return res.status(404).send("代理店が見つかりません");
-        agency = agencyResult;
+      if (storeError || !stores || stores.length === 0) {
+        console.error("店舗取得エラー:", storeError);
+        return res.status(404).send("代理店が見つかりません");
       }
 
-      const handleRender = (productsList, groupName) => {
-        agency.products = (productsList || []).map((p) => ({
-          product_name: p.product_name,
-          product_detail: null,
-          product_url: null,
-        }));
-        agency.group_name = groupName || null;
+      const agency = stores[0];
 
-        res.render("agencies_profile", {
-          agency,
-          session: req.session,
-          title: agency.name + "のプロフィール",
-        });
-      };
+      // グループ名を取得
+      const { data: groupMembers } = await db
+        .from("group_members")
+        .select("group_id, groups(name)")
+        .eq("store_id", agencyId)
+        .limit(1);
 
-      const supa = isSupabaseConfigured();
+      const groupName = groupMembers?.[0]?.groups?.name || null;
 
-      // プロダクト取得
-      const fetchProducts = async (cb) => {
-        try {
-          if (isVercel && supabase) {
-            // Vercel + Supabase環境では商品機能を無効化
-            console.log("Supabase環境: 商品機能は無効化");
-            cb([]);
-            return;
-          }
+      // 商品はSupabaseでは使用しない
+      agency.products = [];
+      agency.group_name = groupName;
 
-          if (supa) return cb([]);
-
-          // ローカル環境（SQLite）
-          db.all(
-            "SELECT product_name FROM store_products WHERE store_id = ?",
-            [agencyId],
-            (err, rows) => {
-              if (err) {
-                console.error("商品取得エラー:", err);
-                return cb([]);
-              }
-              cb(rows || []);
-            }
-          );
-        } catch (error) {
-          console.error("商品取得エラー:", error);
-          cb([]);
-        }
-      };
-
-      // グループ名取得（Supabase対応）
-      const fetchGroupName = async (cb) => {
-        try {
-          if (isVercel && supabase) {
-            // Vercel + Supabase環境
-            console.log("Supabase環境でグループ名取得");
-
-            // group_membersから取得（複数可能性があるためsingleを外す）
-            const { data: groupMembers, error: gmError } = await supabase
-              .from("group_members")
-              .select("group_id")
-              .eq("store_id", agencyId);
-
-            if (gmError) {
-              console.log("グループメンバー取得エラー:", gmError);
-              cb(null);
-              return;
-            }
-
-            if (!groupMembers || groupMembers.length === 0) {
-              console.log("グループメンバーが見つかりません");
-              cb(null);
-              return;
-            }
-
-            // 最初のグループを取得
-            const groupId = groupMembers[0].group_id;
-
-            // groupsからグループ名を取得
-            const { data: groups, error: groupError } = await supabase
-              .from("groups")
-              .select("name")
-              .eq("id", groupId);
-
-            if (groupError) {
-              console.log("グループ取得エラー:", groupError);
-              cb(null);
-              return;
-            }
-
-            if (!groups || groups.length === 0) {
-              console.log("グループが見つかりません");
-              cb(null);
-              return;
-            }
-
-            cb(groups[0].name);
-          } else {
-            // ローカル環境（SQLite）
-            db.get(
-              "SELECT group_id FROM group_members WHERE store_id = ?",
-              [agencyId],
-              (e1, gm) => {
-                if (!e1 && gm && gm.group_id) {
-                  db.get(
-                    "SELECT name as group_name FROM groups WHERE id = ?",
-                    [gm.group_id],
-                    (e2, g) => cb(!e2 && g ? g.group_name : null)
-                  );
-                } else if (!supa) {
-                  // Fallback: 旧group_store（SQLiteのみ）
-                  db.get(
-                    "SELECT g.name as group_name FROM group_store ga LEFT JOIN groups g ON ga.group_id = g.id WHERE ga.store_id = ?",
-                    [agencyId],
-                    (e3, g2) => cb(!e3 && g2 ? g2.group_name : null)
-                  );
-                } else {
-                  cb(null);
-                }
-              }
-            );
-          }
-        } catch (error) {
-          console.error("グループ名取得エラー:", error);
-          cb(null);
-        }
-      };
-
-      fetchProducts((productsList) => {
-        fetchGroupName((groupName) => handleRender(productsList, groupName));
+      res.render("agencies_profile", {
+        agency,
+        session: req.session,
+        title: agency.name + "のプロフィール",
       });
     } catch (error) {
       console.error("代理店プロフィール表示エラー:", error);
@@ -1082,7 +850,7 @@ router.get(
 router.get(
   "/profile/:id/edit",
   requireRole(["admin", "agency"]),
-  (req, res) => {
+  async (req, res) => {
     const agencyId = req.params.id;
 
     // 代理店ユーザーは自分のプロフィールのみ編集可能
@@ -1092,41 +860,33 @@ router.get(
       }
     }
 
-    db.get("SELECT * FROM stores WHERE id = ?", [agencyId], (err, agency) => {
-      if (err || !agency) return res.status(404).send("代理店が見つかりません");
+    try {
+      const { data: stores, error } = await db
+        .from("stores")
+        .select("*")
+        .eq("id", agencyId)
+        .limit(1);
 
-      const renderForm = (products) => {
-        agency.products = (products || []).map((p) => ({
-          product_name: p.product_name,
-          product_detail: null,
-          product_url: null,
-        }));
-
-        res.render("agencies_form", {
-          agency,
-          session: req.session,
-          title: agency.name + "のプロフィール編集",
-          isProfile: true,
-        });
-      };
-
-      if (isSupabaseConfigured()) {
-        // Supabaseでは store_products は未使用
-        renderForm([]);
-      } else {
-        db.all(
-          "SELECT product_name FROM store_products WHERE store_id = ?",
-          [agencyId],
-          (err, products) => {
-            if (err) {
-              console.error("商品取得エラー:", err);
-              return renderForm([]);
-            }
-            renderForm(products || []);
-          }
-        );
+      if (error || !stores || stores.length === 0) {
+        console.error("店舗取得エラー:", error);
+        return res.status(404).send("代理店が見つかりません");
       }
-    });
+
+      const agency = stores[0];
+
+      // Supabaseでは store_products は使用しない
+      agency.products = [];
+
+      res.render("agencies_form", {
+        agency,
+        session: req.session,
+        title: agency.name + "のプロフィール編集",
+        isProfile: true,
+      });
+    } catch (error) {
+      console.error("編集フォーム取得エラー:", error);
+      return res.status(500).send(`エラー: ${error.message}`);
+    }
   }
 );
 
@@ -1253,69 +1013,43 @@ router.post(
       agencyId,
     ];
 
-    db.run(updateSql, updateParams, function (err) {
-      if (err) return res.status(500).send("DBエラー");
+    // Supabase対応: async/awaitで更新
+    (async () => {
+      try {
+        const { error } = await db
+          .from("stores")
+          .update({
+            name: toNull(name),
+            manager_name: toNull(manager_name),
+            business_address: toNull(address || business_address),
+            main_phone: toNull(main_phone),
+            mobile_phone: toNull(mobile_phone),
+            representative_email: toNull(representative_email),
+            contract_type: toNull(contract_type),
+            contract_start_date: toNull(processedContractDate || contract_start_date),
+            royalty_rate: normalizedRoyaltyRate,
+            invoice_number: toNull(invoice_number),
+            bank_name: toNull(bank_name),
+            branch_name: toNull(branch_name),
+            account_type: toNull(account_type),
+            account_number: toNull(account_number),
+            account_holder: toNull(account_holder),
+            license_status: toNull(license_status),
+            license_type: toNull(license_type),
+            license_number: toNull(license_number),
+            license_file_path: toNull(license_file_path),
+            line_official_id: toNull(line_official_id),
+            representative_gmail: toNull(representative_gmail),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", agencyId);
 
-      // Supabaseでは store_products を操作しない
-      if (!isSupabaseConfigured()) {
-        // 既存の商品を削除
-        db.run(
-          "DELETE FROM store_products WHERE store_id = ?",
-          [agencyId],
-          (err) => {
-            if (err) console.error("商品削除エラー:", err);
+        if (error) {
+          console.error("店舗更新エラー:", error);
+          return res.status(500).send("DBエラー");
+        }
 
-            // 新形式: 配列形式での商品データ処理
-            if (
-              product_names &&
-              Array.isArray(product_names) &&
-              product_names.length > 0
-            ) {
-              console.log("プロフィール編集: 新形式の商品データを処理");
-              product_names.forEach((productName, index) => {
-                if (productName && productName.trim() !== "") {
-                  db.run(
-                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                    [agencyId, productName.trim()],
-                    (err) => {
-                      if (err) console.error("商品保存エラー:", err);
-                    }
-                  );
-                }
-              });
-            }
-            // 旧形式: JSON文字列での商品データ処理（互換性のため）
-            else if (products) {
-              console.log("プロフィール編集: 旧形式の商品データを処理");
-              const productList = Array.isArray(products)
-                ? products
-                : [products];
-              productList.forEach((productStr) => {
-                try {
-                  const product = JSON.parse(productStr);
-                  db.run(
-                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                    [agencyId, product.product_name],
-                    (err) => {
-                      if (err) console.error("商品保存エラー:", err);
-                    }
-                  );
-                } catch (parseErr) {
-                  console.error("商品データパースエラー:", parseErr);
-                  // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
-                  db.run(
-                    "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-                    [agencyId, productStr],
-                    (err) => {
-                      if (err) console.error("商品保存エラー（文字列）:", err);
-                    }
-                  );
-                }
-              });
-            }
-          }
-        );
-      }
+        // Supabaseでは store_products は使用しない
 
       // プロフィール更新通知メール（代理店ユーザーが自分で更新した場合のみ）
       if (req.session.user.role === "agency") {
