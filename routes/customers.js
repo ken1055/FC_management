@@ -1066,7 +1066,7 @@ router.get("/store/:storeId/with-sales", requireAuth, async (req, res) => {
     // まず顧客一覧を取得
     const { data: customers, error: customersError } = await db
       .from("customers")
-      .select("id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, registration_date")
+      .select("id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, created_at")
       .eq("store_id", storeId)
       .order("name");
 
