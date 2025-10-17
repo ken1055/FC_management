@@ -1054,7 +1054,7 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
   console.log("顧客売上情報取得リクエスト:", {
     storeId,
     isAdmin,
-    isSupabase: isSupabaseConfigured(),
+    isSupabase: true,
   });
 
   // 権限チェック
