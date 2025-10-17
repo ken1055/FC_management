@@ -227,42 +227,6 @@ router.get("/detail/:id", requireAuth, async (req, res) => {
         ...data[0],
         store_name: data[0].stores?.name || null,
       };
-    } else {
-      // ローカル環境（SQLite）
-      let query, params;
-      if (isAdmin) {
-        query = `
-          SELECT c.*, s.name as store_name 
-          FROM customers c 
-          LEFT JOIN stores s ON c.store_id = s.id 
-          WHERE c.id = ?
-        `;
-        params = [customerId];
-      } else {
-        query = `
-          SELECT c.*, s.name as store_name 
-          FROM customers c 
-          LEFT JOIN stores s ON c.store_id = s.id 
-          WHERE c.id = ? AND c.store_id = ?
-        `;
-        params = [customerId, req.session.user.store_id];
-      }
-
-      const customerResult = await new Promise((resolve, reject) => {
-        db.get(query, params, (err, result) => {
-          if (err) reject(err);
-          else resolve(result);
-        });
-      });
-
-      if (!customerResult) {
-        return res.status(404).render("error", {
-          message: "顧客が見つかりません",
-          session: req.session,
-        });
-      }
-
-      customer = customerResult;
     }
 
     res.render("customers_detail", {
@@ -304,38 +268,21 @@ router.get("/new", requireAuth, async (req, res) => {
     let stores = [];
 
     if (isAdmin) {
-      if (isVercel && supabase) {
-        // Vercel + Supabase環境
-        console.log("Supabase環境で店舗一覧取得");
-        const { data, error } = await supabase
-          .from("stores")
-          .select("id, name")
-          .order("name");
+      console.log("店舗一覧取得");
+      const { data, error } = await db
+        .from("stores")
+        .select("id, name")
+        .order("name");
 
-        if (error) {
-          console.error("Supabase店舗一覧取得エラー:", error);
-          return res.status(500).render("error", {
-            message: "店舗一覧の取得に失敗しました",
-            session: req.session,
-          });
-        }
-
-        stores = data || [];
-      } else {
-        // ローカル環境（SQLite）
-        const storesResult = await new Promise((resolve, reject) => {
-          db.all(
-            "SELECT id, name FROM stores ORDER BY name",
-            [],
-            (err, result) => {
-              if (err) reject(err);
-              else resolve(result);
-            }
-          );
+      if (error) {
+        console.error("店舗一覧取得エラー:", error);
+        return res.status(500).render("error", {
+          message: "店舗一覧の取得に失敗しました",
+          session: req.session,
         });
-
-        stores = storesResult || [];
       }
+
+      stores = data || [];
     }
 
     res.render("customers_form", {
@@ -356,135 +303,127 @@ router.get("/new", requireAuth, async (req, res) => {
 });
 
 // 顧客編集フォーム表示
-router.get("/edit/:id", requireAuth, (req, res) => {
-  const customerId = req.params.id;
-  const isAdmin = req.session.user.role === "admin";
+router.get("/edit/:id", requireAuth, async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    const isAdmin = req.session.user.role === "admin";
 
-  let customerQuery, customerParams;
-  if (isAdmin) {
-    customerQuery = "SELECT * FROM customers WHERE id = ?";
-    customerParams = [customerId];
-  } else {
-    customerQuery = "SELECT * FROM customers WHERE id = ? AND store_id = ?";
-    customerParams = [customerId, req.session.user.store_id];
-  }
+    let customerQuery = db.from("customers").select("*").eq("id", customerId);
 
-  db.get(customerQuery, customerParams, (err, customer) => {
-    if (err) {
-      console.error("顧客取得エラー:", err);
-      return res.status(500).render("error", {
-        message: "顧客の取得に失敗しました",
-        session: req.session,
-      });
+    if (!isAdmin) {
+      customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
     }
 
-    if (!customer) {
+    const { data: customer, error: customerError } = await customerQuery.single();
+
+    if (customerError || !customer) {
+      console.error("顧客取得エラー:", customerError);
       return res.status(404).render("error", {
         message: "顧客が見つかりません",
         session: req.session,
       });
     }
 
+    let stores = [];
     if (isAdmin) {
       // 管理者の場合は店舗一覧も取得
-      db.all("SELECT id, name FROM stores ORDER BY name", [], (err, stores) => {
-        if (err) {
-          console.error("店舗一覧取得エラー:", err);
-          return res.status(500).render("error", {
-            message: "店舗一覧の取得に失敗しました",
-            session: req.session,
-          });
-        }
+      const { data: storesData, error: storesError } = await db
+        .from("stores")
+        .select("id, name")
+        .order("name");
 
-        res.render("customers_form", {
-          customer: customer,
-          stores: stores || [],
+      if (storesError) {
+        console.error("店舗一覧取得エラー:", storesError);
+        return res.status(500).render("error", {
+          message: "店舗一覧の取得に失敗しました",
           session: req.session,
-          title: "顧客編集",
-          isAdmin: isAdmin,
-          isSupabase: true,
         });
-      });
-    } else {
-      res.render("customers_form", {
-        customer: customer,
-        stores: [],
-        session: req.session,
-        title: "顧客編集",
-        isAdmin: isAdmin,
-        isSupabase: true,
-      });
+      }
+
+      stores = storesData || [];
     }
-  });
-});
 
-// 顧客登録処理
-router.post("/create", requireAuth, (req, res) => {
-  console.log("=== 顧客登録処理開始 ===");
-  console.log("リクエストボディ:", req.body);
-  console.log("セッションユーザー:", req.session.user);
-  console.log("Supabase設定:", true);
-
-  const {
-    customer_code,
-    name,
-    kana,
-    email,
-    phone,
-    address,
-    birth_date,
-    gender,
-    store_id,
-    notes,
-    visit_count,
-    total_purchase_amount,
-    last_visit_date,
-  } = req.body;
-
-  const isAdmin = req.session.user.role === "admin";
-  const finalStoreId = isAdmin ? store_id : req.session.user.store_id;
-
-  console.log("isAdmin:", isAdmin);
-  console.log("finalStoreId:", finalStoreId);
-
-  // 必須フィールドの検証
-  if (!name || !finalStoreId) {
-    return res.status(400).render("error", {
-      message: "顧客名と店舗IDは必須です",
+    res.render("customers_form", {
+      customer: customer,
+      stores: stores,
+      session: req.session,
+      title: "顧客編集",
+      isAdmin: isAdmin,
+      isSupabase: true,
+    });
+  } catch (error) {
+    console.error("顧客編集フォーム表示エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
       session: req.session,
     });
   }
+});
 
-  // 顧客コードの重複チェック
-  if (customer_code) {
-    db.get(
-      "SELECT id FROM customers WHERE customer_code = ?",
-      [customer_code],
-      (err, existing) => {
-        if (err) {
-          console.error("顧客コード重複チェックエラー:", err);
-          return res.status(500).render("error", {
-            message: "顧客コードの重複チェックに失敗しました",
-            session: req.session,
-          });
-        }
+// 顧客登録処理
+router.post("/create", requireAuth, async (req, res) => {
+  try {
+    console.log("=== 顧客登録処理開始 ===");
+    console.log("リクエストボディ:", req.body);
+    console.log("セッションユーザー:", req.session.user);
+    console.log("Supabase設定:", true);
 
-        if (existing) {
-          return res.status(400).render("error", {
-            message: "この顧客コードは既に使用されています",
-            session: req.session,
-          });
-        }
+    const {
+      customer_code,
+      name,
+      kana,
+      email,
+      phone,
+      address,
+      birth_date,
+      gender,
+      store_id,
+      notes,
+      visit_count,
+      total_purchase_amount,
+      last_visit_date,
+    } = req.body;
 
-        // 顧客登録
-        insertCustomer();
+    const isAdmin = req.session.user.role === "admin";
+    const finalStoreId = isAdmin ? store_id : req.session.user.store_id;
+
+    console.log("isAdmin:", isAdmin);
+    console.log("finalStoreId:", finalStoreId);
+
+    // 必須フィールドの検証
+    if (!name || !finalStoreId) {
+      return res.status(400).render("error", {
+        message: "顧客名と店舗IDは必須です",
+        session: req.session,
+      });
+    }
+
+    // 顧客コードの重複チェック
+    if (customer_code) {
+      const { data: existing, error: checkError } = await db
+        .from("customers")
+        .select("id")
+        .eq("customer_code", customer_code)
+        .single();
+
+      if (checkError && checkError.code !== "PGRST116") {
+        // PGRST116は「見つからない」エラーなので無視
+        console.error("顧客コード重複チェックエラー:", checkError);
+        return res.status(500).render("error", {
+          message: "顧客コードの重複チェックに失敗しました",
+          session: req.session,
+        });
       }
-    );
-  } else {
-    insertCustomer();
-  }
 
-  async function insertCustomer() {
+      if (existing) {
+        return res.status(400).render("error", {
+          message: "この顧客コードは既に使用されています",
+          session: req.session,
+        });
+      }
+    }
+
+    // 顧客登録
     console.log("=== INSERT処理開始（Supabase） ===");
 
     const toNull = (v) =>
@@ -508,42 +447,40 @@ router.post("/create", requireAuth, (req, res) => {
 
     console.log("顧客データ:", customerData);
 
-    try {
-      const { data, error } = await db
-        .from("customers")
-        .insert(customerData)
-        .select();
+    const { data, error } = await db
+      .from("customers")
+      .insert(customerData)
+      .select();
 
-      if (error) {
-        console.error("顧客登録エラー:", error);
+    if (error) {
+      console.error("顧客登録エラー:", error);
 
-        let errorMessage = "顧客の登録に失敗しました";
+      let errorMessage = "顧客の登録に失敗しました";
 
-        // Supabaseの制約エラーを識別
-        if (error.code === "23505") {
-          errorMessage =
-            "重複するデータが存在しています。顧客コードなどの重複を確認してください。";
-        } else if (error.code === "23503") {
-          errorMessage = "関連する店舗データが存在しません。";
-        } else if (process.env.NODE_ENV !== "production") {
-          errorMessage += ` [詳細: ${error.message}]`;
-        }
-
-        return res.status(500).render("error", {
-          message: errorMessage,
-          session: req.session,
-        });
+      // Supabaseの制約エラーを識別
+      if (error.code === "23505") {
+        errorMessage =
+          "重複するデータが存在しています。顧客コードなどの重複を確認してください。";
+      } else if (error.code === "23503") {
+        errorMessage = "関連する店舗データが存在しません。";
+      } else if (process.env.NODE_ENV !== "production") {
+        errorMessage += ` [詳細: ${error.message}]`;
       }
 
-      console.log("顧客登録成功:", data[0].id);
-      res.redirect("/customers/list");
-    } catch (error) {
-      console.error("顧客登録処理エラー:", error);
       return res.status(500).render("error", {
-        message: `エラー: ${error.message}`,
+        message: errorMessage,
         session: req.session,
       });
     }
+
+    console.log("顧客登録成功:", data[0].id);
+    res.redirect("/customers/list");
+  } catch (error) {
+    console.error("顧客登録処理エラー:", error);
+    res.status(500).render("error", {
+      message: "システムエラーが発生しました",
+      session: req.session,
+    });
   }
 });
 
@@ -796,254 +733,195 @@ router.post("/delete/:id", requireAuth, async (req, res) => {
 });
 
 // 顧客の取引履歴取得（API）
-router.get("/:id/transactions", requireAuth, (req, res) => {
-  const customerId = req.params.id;
-  const isAdmin = req.session.user.role === "admin";
+router.get("/:id/transactions", requireAuth, async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    const isAdmin = req.session.user.role === "admin";
 
-  console.log("取引履歴取得リクエスト:", {
-    customerId,
-    userRole: req.session.user.role,
-  });
+    console.log("取引履歴取得リクエスト:", {
+      customerId,
+      userRole: req.session.user.role,
+    });
 
-  // 顧客の存在確認と権限チェック
-  let customerQuery =
-    "SELECT c.*, s.name as store_name FROM customers c LEFT JOIN stores s ON c.store_id = s.id WHERE c.id = ?";
-  let customerParams = [customerId];
-
-  // 店舗ユーザーは自店舗の顧客のみアクセス可能
-  if (!isAdmin) {
-    customerQuery += " AND c.store_id = ?";
-    customerParams.push(req.session.user.store_id);
-  }
-
-  db.get(customerQuery, customerParams, (err, customer) => {
-    if (err) {
-      console.error("顧客確認エラー:", err);
-      return res.status(500).json({ error: "データベースエラー" });
+    // 顧客の存在確認と権限チェック
+    let customerQuery = db.from("customers").select("*, stores!inner(name)").eq("id", customerId);
+    
+    // 店舗ユーザーは自店舗の顧客のみアクセス可能
+    if (!isAdmin) {
+      customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
     }
 
-    if (!customer) {
-      return res
-        .status(404)
-        .json({ error: "顧客が見つからないか、アクセス権限がありません" });
+    const { data: customerData, error: customerError } = await customerQuery.single();
+
+    if (customerError || !customerData) {
+      console.error("顧客確認エラー:", customerError);
+      return res.status(404).json({ error: "顧客が見つからないか、アクセス権限がありません" });
     }
+
+    // Supabaseのレスポンスを整形
+    const customer = {
+      ...customerData,
+      store_name: customerData.stores?.name || null
+    };
 
     // 取引履歴を取得
-    const useSupabase = true;
+    const { data: transactions, error: transactionsError } = await db
+      .from("customer_transactions")
+      .select("id, transaction_date, amount, description, payment_method, created_at, store_id, stores!inner(name)")
+      .eq("customer_id", customerId)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false });
 
-    if (useSupabase) {
-      // Supabase環境では分離クエリを使用
-      db.all(
-        `SELECT 
-          id,
-          transaction_date,
-          amount,
-          description,
-          payment_method,
-          created_at,
-          store_id
-        FROM customer_transactions 
-        WHERE customer_id = ?
-        ORDER BY transaction_date DESC, created_at DESC`,
-        [customerId],
-        (err, transactions) => {
-          if (err) {
-            console.error("Supabase取引履歴取得エラー:", err);
-            return res
-              .status(500)
-              .json({ error: "取引履歴の取得に失敗しました" });
-          }
-
-          // 店舗名を別途取得してマージ
-          if (transactions.length > 0) {
-            const storeIds = [...new Set(transactions.map((t) => t.store_id))];
-            const storePlaceholders = storeIds.map(() => "?").join(",");
-
-            db.all(
-              `SELECT id, name FROM stores WHERE id IN (${storePlaceholders})`,
-              storeIds,
-              (err, stores) => {
-                if (err) {
-                  console.error("店舗情報取得エラー:", err);
-                  // エラーでも取引履歴は返す（店舗名なし）
-                  processTransactionData(
-                    transactions.map((t) => ({ ...t, store_name: null }))
-                  );
-                  return;
-                }
-
-                const storeMap = {};
-                stores.forEach((s) => {
-                  storeMap[s.id] = s.name;
-                });
-
-                const enrichedTransactions = transactions.map((t) => ({
-                  ...t,
-                  store_name: storeMap[t.store_id] || null,
-                }));
-
-                processTransactionData(enrichedTransactions);
-              }
-            );
-          } else {
-            processTransactionData(transactions);
-          }
-        }
-      );
-    } else {
-      // SQLite環境では従来のJOINクエリを使用
-      db.all(
-        `SELECT 
-          customer_transactions.id,
-          customer_transactions.transaction_date,
-          customer_transactions.amount,
-          customer_transactions.description,
-          customer_transactions.payment_method,
-          customer_transactions.created_at,
-          stores.name as store_name
-        FROM customer_transactions 
-        LEFT JOIN stores ON customer_transactions.store_id = stores.id
-        WHERE customer_transactions.customer_id = ?
-        ORDER BY customer_transactions.transaction_date DESC, customer_transactions.created_at DESC`,
-        [customerId],
-        (err, transactions) => {
-          if (err) {
-            console.error("SQLite取引履歴取得エラー:", err);
-            return res
-              .status(500)
-              .json({ error: "取引履歴の取得に失敗しました" });
-          }
-
-          processTransactionData(transactions);
-        }
-      );
+    if (transactionsError) {
+      console.error("取引履歴取得エラー:", transactionsError);
+      return res.status(500).json({ error: "取引履歴の取得に失敗しました" });
     }
 
-    function processTransactionData(transactions) {
-      // 統計情報を計算
-      const totalAmount = transactions.reduce(
-        (sum, t) => sum + (t.amount || 0),
-        0
-      );
-      const transactionCount = transactions.length;
-      const averageAmount =
-        transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
+    // 取引データを整形
+    const enrichedTransactions = transactions.map((t) => ({
+      id: t.id,
+      transaction_date: t.transaction_date,
+      amount: t.amount,
+      description: t.description,
+      payment_method: t.payment_method,
+      created_at: t.created_at,
+      store_id: t.store_id,
+      store_name: t.stores?.name || null,
+    }));
 
-      // 月別集計
-      const monthlyStats = {};
-      transactions.forEach((t) => {
-        const date = new Date(t.transaction_date);
-        const monthKey = `${date.getFullYear()}-${String(
-          date.getMonth() + 1
-        ).padStart(2, "0")}`;
+    // 統計情報を計算
+    const totalAmount = enrichedTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const transactionCount = enrichedTransactions.length;
+    const averageAmount = transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
 
-        if (!monthlyStats[monthKey]) {
-          monthlyStats[monthKey] = { amount: 0, count: 0 };
-        }
-        monthlyStats[monthKey].amount += t.amount || 0;
-        monthlyStats[monthKey].count += 1;
-      });
+    // 月別集計
+    const monthlyStats = {};
+    enrichedTransactions.forEach((t) => {
+      const date = new Date(t.transaction_date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
-      const monthlyData = Object.entries(monthlyStats)
-        .map(([month, stats]) => ({
-          month,
-          amount: stats.amount,
-          count: stats.count,
-        }))
-        .sort((a, b) => b.month.localeCompare(a.month));
+      if (!monthlyStats[monthKey]) {
+        monthlyStats[monthKey] = { amount: 0, count: 0 };
+      }
+      monthlyStats[monthKey].amount += t.amount || 0;
+      monthlyStats[monthKey].count += 1;
+    });
 
-      res.json({
-        customer: {
-          id: customer.id,
-          name: customer.name,
-          customer_code: customer.customer_code,
-          store_name: customer.store_name,
-        },
-        transactions,
-        summary: {
-          total_amount: totalAmount,
-          transaction_count: transactionCount,
-          average_amount: averageAmount,
-          recorded_total: customer.total_purchase_amount || 0,
-          recorded_visits: customer.visit_count || 0,
-          last_visit: customer.last_visit_date,
-        },
-        monthly_data: monthlyData,
-      });
-    }
-  });
+    const monthlyData = Object.entries(monthlyStats)
+      .map(([month, stats]) => ({
+        month,
+        amount: stats.amount,
+        count: stats.count,
+      }))
+      .sort((a, b) => b.month.localeCompare(a.month));
+
+    res.json({
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        customer_code: customer.customer_code,
+        store_name: customer.store_name,
+      },
+      transactions: enrichedTransactions,
+      summary: {
+        total_amount: totalAmount,
+        transaction_count: transactionCount,
+        average_amount: averageAmount,
+        recorded_total: customer.total_purchase_amount || 0,
+        recorded_visits: customer.visit_count || 0,
+        last_visit: customer.last_visit_date,
+      },
+      monthly_data: monthlyData,
+    });
+  } catch (error) {
+    console.error("取引履歴取得エラー:", error);
+    res.status(500).json({ error: "取引履歴の取得に失敗しました" });
+  }
 });
 
 // 顧客別月次売上取得（API）
-router.get("/:id/monthly-sales", requireAuth, (req, res) => {
-  const customerId = req.params.id;
-  const { year, month } = req.query;
-  const isAdmin = req.session.user.role === "admin";
+router.get("/:id/monthly-sales", requireAuth, async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    const { year, month } = req.query;
+    const isAdmin = req.session.user.role === "admin";
 
-  // 権限チェック
-  let customerQuery = "SELECT id, name, store_id FROM customers WHERE id = ?";
-  let customerParams = [customerId];
+    // 権限チェック
+    let customerQuery = db.from("customers").select("id, name, store_id").eq("id", customerId);
 
-  if (!isAdmin) {
-    customerQuery += " AND store_id = ?";
-    customerParams.push(req.session.user.store_id);
-  }
-
-  db.get(customerQuery, customerParams, (err, customer) => {
-    if (err) {
-      return res.status(500).json({ error: "データベースエラー" });
+    if (!isAdmin) {
+      customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
     }
 
-    if (!customer) {
+    const { data: customer, error: customerError } = await customerQuery.single();
+
+    if (customerError || !customer) {
       return res.status(404).json({ error: "顧客が見つかりません" });
     }
 
-    // 月次売上を取得
-    let salesQuery = `
-      SELECT 
-        strftime('%Y', ct.transaction_date) as year,
-        strftime('%m', ct.transaction_date) as month,
-        SUM(ct.amount) as monthly_amount,
-        COUNT(*) as transaction_count,
-        AVG(ct.amount) as average_amount
-      FROM customer_transactions ct
-      WHERE ct.customer_id = ?
-    `;
-    let salesParams = [customerId];
+    // 取引データを取得
+    let transactionsQuery = db
+      .from("customer_transactions")
+      .select("transaction_date, amount")
+      .eq("customer_id", customerId);
 
-    if (year) {
-      salesQuery += " AND strftime('%Y', ct.transaction_date) = ?";
-      salesParams.push(year);
+    const { data: transactions, error: transactionsError } = await transactionsQuery;
+
+    if (transactionsError) {
+      console.error("月次売上取得エラー:", transactionsError);
+      return res.status(500).json({ error: "月次売上の取得に失敗しました" });
     }
 
-    if (month) {
-      salesQuery += " AND strftime('%m', ct.transaction_date) = ?";
-      salesParams.push(String(month).padStart(2, "0"));
-    }
+    // JavaScriptで月次集計
+    const monthlySales = {};
+    transactions.forEach((t) => {
+      const date = new Date(t.transaction_date);
+      const txYear = date.getFullYear();
+      const txMonth = date.getMonth() + 1;
 
-    salesQuery += " GROUP BY year, month ORDER BY year DESC, month DESC";
+      // フィルタ条件をチェック
+      if (year && txYear !== parseInt(year)) return;
+      if (month && txMonth !== parseInt(month)) return;
 
-    db.all(salesQuery, salesParams, (err, monthlySales) => {
-      if (err) {
-        console.error("月次売上取得エラー:", err);
-        return res.status(500).json({ error: "月次売上の取得に失敗しました" });
+      const key = `${txYear}-${String(txMonth).padStart(2, "0")}`;
+      if (!monthlySales[key]) {
+        monthlySales[key] = {
+          year: txYear,
+          month: txMonth,
+          amount: 0,
+          transaction_count: 0,
+          total_for_avg: 0,
+        };
       }
-
-      res.json({
-        customer: {
-          id: customer.id,
-          name: customer.name,
-        },
-        monthly_sales: monthlySales.map((row) => ({
-          year: parseInt(row.year),
-          month: parseInt(row.month),
-          amount: row.monthly_amount || 0,
-          transaction_count: row.transaction_count || 0,
-          average_amount: Math.round(row.average_amount || 0),
-        })),
-      });
+      monthlySales[key].amount += t.amount || 0;
+      monthlySales[key].transaction_count += 1;
+      monthlySales[key].total_for_avg += t.amount || 0;
     });
-  });
+
+    const monthlySalesArray = Object.values(monthlySales)
+      .map((row) => ({
+        year: row.year,
+        month: row.month,
+        amount: row.amount,
+        transaction_count: row.transaction_count,
+        average_amount: row.transaction_count > 0 ? Math.round(row.total_for_avg / row.transaction_count) : 0,
+      }))
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.month - a.month;
+      });
+
+    res.json({
+      customer: {
+        id: customer.id,
+        name: customer.name,
+      },
+      monthly_sales: monthlySalesArray,
+    });
+  } catch (error) {
+    console.error("月次売上取得エラー:", error);
+    res.status(500).json({ error: "月次売上の取得に失敗しました" });
+  }
 });
 
 // 店舗の顧客一覧と売上情報取得（API）
