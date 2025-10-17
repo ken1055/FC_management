@@ -1,11 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const db = require("../db");
 const { getSupabaseClient } = require("../config/supabase");
 
-// Vercel環境の検出
-const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
-const supabase = isVercel ? getSupabaseClient() : null;
+// Supabase接続（Vercel + Supabase専用）
+const db = getSupabaseClient();
 
 // 権限チェック関数
 function requireRole(allowedRoles) {
@@ -21,30 +19,35 @@ function requireRole(allowedRoles) {
 }
 
 // 設定一覧表示
-router.get("/", requireRole(["admin"]), (req, res) => {
-  // 公式ラインURLを取得
-  db.get(
-    "SELECT value FROM settings WHERE key_name = ?",
-    ["official_line_url"],
-    (err, row) => {
-      if (err) {
-        console.error("設定取得エラー:", err);
-        return res.status(500).send("設定取得エラー");
-      }
+router.get("/", requireRole(["admin"]), async (req, res) => {
+  try {
+    // 公式ラインURLを取得
+    const { data, error } = await db
+      .from("system_settings")
+      .select("value")
+      .eq("key", "official_line_url")
+      .limit(1);
 
-      const officialLineUrl = row ? row.value : "";
-
-      res.render("settings/index", {
-        session: req.session,
-        title: "システム設定",
-        officialLineUrl,
-      });
+    if (error) {
+      console.error("設定取得エラー:", error);
+      return res.status(500).send("設定取得エラー");
     }
-  );
+
+    const officialLineUrl = data && data.length > 0 ? data[0].value : "";
+
+    res.render("settings/index", {
+      session: req.session,
+      title: "システム設定",
+      officialLineUrl,
+    });
+  } catch (error) {
+    console.error("設定取得エラー:", error);
+    return res.status(500).send("設定取得エラー");
+  }
 });
 
 // 公式LINE URL設定
-router.post("/official-line", requireRole(["admin"]), (req, res) => {
+router.post("/official-line", requireRole(["admin"]), async (req, res) => {
   const { url } = req.body;
 
   console.log("=== 公式LINE URL設定保存 ===");
@@ -57,43 +60,30 @@ router.post("/official-line", requireRole(["admin"]), (req, res) => {
     return res.status(400).send("有効なURLを入力してください");
   }
 
-  const isPostgres = !!process.env.DATABASE_URL;
-  console.log("データベース環境:", isPostgres ? "PostgreSQL" : "SQLite");
+  try {
+    // Supabase用のUPSERT
+    console.log("Supabase用クエリ実行中...");
+    const { error } = await db
+      .from("system_settings")
+      .upsert(
+        {
+          key: "official_line_url",
+          value: url || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
 
-  if (isPostgres) {
-    // PostgreSQL用のUPSERT
-    console.log("PostgreSQL用クエリ実行中...");
-    db.run(
-      `INSERT INTO settings (key_name, value, updated_at) 
-       VALUES ($1, $2, CURRENT_TIMESTAMP) 
-       ON CONFLICT (key_name) 
-       DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-      ["official_line_url", url || null],
-      (err) => {
-        if (err) {
-          console.error("PostgreSQL設定保存エラー:", err);
-          return res.status(500).send("設定保存エラー");
-        }
-        console.log("PostgreSQL設定保存成功:", url);
-        res.redirect("/settings?success=1");
-      }
-    );
-  } else {
-    // SQLite用のUPSERT
-    console.log("SQLite用クエリ実行中...");
-    db.run(
-      `INSERT OR REPLACE INTO settings (key_name, value, updated_at) 
-       VALUES (?, ?, datetime('now'))`,
-      ["official_line_url", url || null],
-      (err) => {
-        if (err) {
-          console.error("SQLite設定保存エラー:", err);
-          return res.status(500).send("設定保存エラー");
-        }
-        console.log("SQLite設定保存成功:", url);
-        res.redirect("/settings?success=1");
-      }
-    );
+    if (error) {
+      console.error("Supabase設定保存エラー:", error);
+      return res.status(500).send("設定保存エラー");
+    }
+
+    console.log("Supabase設定保存成功:", url);
+    res.redirect("/settings?success=1");
+  } catch (error) {
+    console.error("設定保存エラー:", error);
+    return res.status(500).send("設定保存エラー");
   }
 });
 
@@ -104,47 +94,26 @@ router.get("/api/official-line-url", async (req, res) => {
   console.log("セッション情報:", req.session?.user?.role);
 
   try {
-    if (isVercel && supabase) {
-      // Vercel + Supabase環境
-      console.log("Supabase環境で公式LINE URL取得");
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("value")
-        .eq("key", "official_line_url");
+    // Supabase環境で公式LINE URL取得
+    console.log("Supabase環境で公式LINE URL取得");
+    const { data, error } = await db
+      .from("system_settings")
+      .select("value")
+      .eq("key", "official_line_url")
+      .limit(1);
 
-      if (error) {
-        console.error("Supabase設定取得エラー:", error);
-        return res.status(500).json({ error: "設定取得エラー" });
-      }
-
-      console.log("データベース取得結果:", data);
-      const url = data && data.length > 0 ? data[0].value : null;
-      console.log("返送するURL:", url);
-
-      res.json({
-        url: url,
-      });
-    } else {
-      // ローカル環境（SQLite）
-      db.get(
-        "SELECT value FROM settings WHERE key_name = ?",
-        ["official_line_url"],
-        (err, row) => {
-          if (err) {
-            console.error("設定取得エラー:", err);
-            return res.status(500).json({ error: "設定取得エラー" });
-          }
-
-          console.log("データベース取得結果:", row);
-          const url = row ? row.value : null;
-          console.log("返送するURL:", url);
-
-          res.json({
-            url: url,
-          });
-        }
-      );
+    if (error) {
+      console.error("Supabase設定取得エラー:", error);
+      return res.status(500).json({ error: "設定取得エラー" });
     }
+
+    console.log("データベース取得結果:", data);
+    const url = data && data.length > 0 ? data[0].value : null;
+    console.log("返送するURL:", url);
+
+    res.json({
+      url: url,
+    });
   } catch (error) {
     console.error("公式LINE URL取得エラー:", error);
     res.status(500).json({ error: "システムエラー" });

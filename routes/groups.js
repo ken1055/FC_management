@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const db = require("../db");
+const { getSupabaseClient } = require("../config/supabase");
+
+// Supabase接続（Vercel + Supabase専用）
+const db = getSupabaseClient();
 
 function requireRole(roles) {
   return (req, res, next) => {
@@ -12,27 +15,47 @@ function requireRole(roles) {
 }
 
 // グループ一覧表示
-router.get("/list", requireRole(["admin"]), (req, res) => {
-  db.all(
-    `SELECT 
-      g.id, 
-      g.name, 
-      COUNT(ga.store_id) as agency_count
-    FROM groups g 
-    LEFT JOIN group_members ga ON g.id = ga.group_id 
-    GROUP BY g.id, g.name 
-    ORDER BY g.name`,
-    [],
-    (err, groups) => {
-      if (err) return res.status(500).send("DBエラー");
+router.get("/list", requireRole(["admin"]), async (req, res) => {
+  try {
+    // グループを取得
+    const { data: groups, error: groupsError } = await db
+      .from("groups")
+      .select("id, name")
+      .order("name", { ascending: true });
 
-      res.render("groups_list", {
-        groups,
-        session: req.session,
-        title: "グループ管理",
+    if (groupsError) {
+      console.error("グループ取得エラー:", groupsError);
+      return res.status(500).send("DBエラー");
+    }
+
+    // 各グループの所属店舗数を取得
+    const groupsWithCounts = [];
+    for (const group of groups || []) {
+      const { count, error: countError } = await db
+        .from("group_members")
+        .select("id", { count: "exact", head: true })
+        .eq("group_id", group.id);
+
+      if (countError) {
+        console.error("所属数取得エラー:", countError);
+      }
+
+      groupsWithCounts.push({
+        id: group.id,
+        name: group.name,
+        agency_count: count || 0,
       });
     }
-  );
+
+    res.render("groups_list", {
+      groups: groupsWithCounts,
+      session: req.session,
+      title: "グループ管理",
+    });
+  } catch (error) {
+    console.error("グループ一覧取得エラー:", error);
+    return res.status(500).send("DBエラー");
+  }
 });
 
 // グループ新規作成フォーム
@@ -45,20 +68,31 @@ router.get("/new", requireRole(["admin"]), (req, res) => {
 });
 
 // グループ編集フォーム
-router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
-  db.get("SELECT * FROM groups WHERE id = ?", [req.params.id], (err, group) => {
-    if (err || !group) return res.status(404).send("グループが見つかりません");
+router.get("/edit/:id", requireRole(["admin"]), async (req, res) => {
+  try {
+    const { data: groups, error } = await db
+      .from("groups")
+      .select("*")
+      .eq("id", req.params.id)
+      .limit(1);
+
+    if (error || !groups || groups.length === 0) {
+      return res.status(404).send("グループが見つかりません");
+    }
 
     res.render("groups_form", {
-      group,
+      group: groups[0],
       session: req.session,
       title: "グループ編集",
     });
-  });
+  } catch (error) {
+    console.error("グループ取得エラー:", error);
+    return res.status(500).send("DBエラー");
+  }
 });
 
 // グループ作成
-router.post("/new", requireRole(["admin"]), (req, res) => {
+router.post("/new", requireRole(["admin"]), async (req, res) => {
   const { name } = req.body;
 
   if (!name || name.trim() === "") {
@@ -70,115 +104,178 @@ router.post("/new", requireRole(["admin"]), (req, res) => {
     });
   }
 
-  db.run("INSERT INTO groups (name) VALUES (?)", [name], function (err) {
-    if (err) return res.status(500).send("DBエラー");
+  try {
+    const { error } = await db.from("groups").insert({ name });
+
+    if (error) {
+      console.error("グループ作成エラー:", error);
+      return res.status(500).send("DBエラー");
+    }
+
     res.redirect("/groups/list");
-  });
+  } catch (error) {
+    console.error("グループ作成エラー:", error);
+    return res.status(500).send("DBエラー");
+  }
 });
 
 // グループ更新
-router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
+router.post("/edit/:id", requireRole(["admin"]), async (req, res) => {
   const { name } = req.body;
 
   if (!name || name.trim() === "") {
-    return db.get(
-      "SELECT * FROM groups WHERE id = ?",
-      [req.params.id],
-      (err, group) => {
-        if (err || !group)
-          return res.status(404).send("グループが見つかりません");
+    try {
+      const { data: groups, error } = await db
+        .from("groups")
+        .select("*")
+        .eq("id", req.params.id)
+        .limit(1);
 
-        res.render("groups_form", {
-          group,
-          session: req.session,
-          title: "グループ編集",
-          error: "グループ名を入力してください",
-        });
+      if (error || !groups || groups.length === 0) {
+        return res.status(404).send("グループが見つかりません");
       }
-    );
+
+      return res.render("groups_form", {
+        group: groups[0],
+        session: req.session,
+        title: "グループ編集",
+        error: "グループ名を入力してください",
+      });
+    } catch (error) {
+      console.error("グループ取得エラー:", error);
+      return res.status(500).send("DBエラー");
+    }
   }
 
-  db.run(
-    "UPDATE groups SET name = ? WHERE id = ?",
-    [name, req.params.id],
-    function (err) {
-      if (err) return res.status(500).send("DBエラー");
-      res.redirect("/groups/list");
+  try {
+    const { error } = await db
+      .from("groups")
+      .update({ name })
+      .eq("id", req.params.id);
+
+    if (error) {
+      console.error("グループ更新エラー:", error);
+      return res.status(500).send("DBエラー");
     }
-  );
+
+    res.redirect("/groups/list");
+  } catch (error) {
+    console.error("グループ更新エラー:", error);
+    return res.status(500).send("DBエラー");
+  }
 });
 
 // グループ削除
-router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
-  // まず関連する代理店の割り当てを削除
-  db.run(
-    "DELETE FROM group_members WHERE group_id = ?",
-    [req.params.id],
-    (err) => {
-      if (err) return res.status(500).send("DBエラー");
+router.post("/delete/:id", requireRole(["admin"]), async (req, res) => {
+  try {
+    // まず関連する代理店の割り当てを削除
+    const { error: membersError } = await db
+      .from("group_members")
+      .delete()
+      .eq("group_id", req.params.id);
 
-      // グループを削除
-      db.run(
-        "DELETE FROM groups WHERE id = ?",
-        [req.params.id],
-        function (err) {
-          if (err) return res.status(500).send("DBエラー");
-          res.redirect("/groups/list");
-        }
-      );
+    if (membersError) {
+      console.error("グループメンバー削除エラー:", membersError);
+      return res.status(500).send("DBエラー");
     }
-  );
+
+    // グループを削除
+    const { error: groupError } = await db
+      .from("groups")
+      .delete()
+      .eq("id", req.params.id);
+
+    if (groupError) {
+      console.error("グループ削除エラー:", groupError);
+      return res.status(500).send("DBエラー");
+    }
+
+    res.redirect("/groups/list");
+  } catch (error) {
+    console.error("グループ削除エラー:", error);
+    return res.status(500).send("DBエラー");
+  }
 });
 
 // グループの代理店管理画面
-router.get("/manage/:id", requireRole(["admin"]), (req, res) => {
+router.get("/manage/:id", requireRole(["admin"]), async (req, res) => {
   const groupId = req.params.id;
 
-  // グループ情報を取得
-  db.get("SELECT * FROM groups WHERE id = ?", [groupId], (err, group) => {
-    if (err || !group) return res.status(404).send("グループが見つかりません");
+  try {
+    // グループ情報を取得
+    const { data: groups, error: groupError } = await db
+      .from("groups")
+      .select("*")
+      .eq("id", groupId)
+      .limit(1);
+
+    if (groupError || !groups || groups.length === 0) {
+      return res.status(404).send("グループが見つかりません");
+    }
+
+    const group = groups[0];
 
     // グループに所属している代理店を取得
-    db.all(
-      `SELECT a.id, a.name 
-       FROM stores a 
-       INNER JOIN group_members ga ON a.id = ga.store_id 
-       WHERE ga.group_id = ? 
-       ORDER BY a.name`,
-      [groupId],
-      (err, groupAgencies) => {
-        if (err) return res.status(500).send("DBエラー");
+    const { data: members, error: membersError } = await db
+      .from("group_members")
+      .select("store_id")
+      .eq("group_id", groupId);
 
-        // グループに所属していない代理店を取得
-        db.all(
-          `SELECT a.id, a.name 
-           FROM stores a 
-           WHERE a.id NOT IN (
-             SELECT ga.store_id 
-             FROM group_members ga 
-             WHERE ga.group_id = ?
-           ) 
-           ORDER BY a.name`,
-          [groupId],
-          (err, availableAgencies) => {
-            if (err) return res.status(500).send("DBエラー");
+    if (membersError) {
+      console.error("グループメンバー取得エラー:", membersError);
+      return res.status(500).send("DBエラー");
+    }
 
-            res.render("groups_manage", {
-              group,
-              groupAgencies,
-              availableAgencies,
-              session: req.session,
-              title: `${group.name} - 代理店管理`,
-            });
-          }
-        );
+    const memberStoreIds = (members || []).map((m) => m.store_id);
+
+    // 所属している店舗の情報を取得
+    let groupAgencies = [];
+    if (memberStoreIds.length > 0) {
+      const { data: stores, error: storesError } = await db
+        .from("stores")
+        .select("id, name")
+        .in("id", memberStoreIds)
+        .order("name", { ascending: true });
+
+      if (storesError) {
+        console.error("店舗取得エラー:", storesError);
+        return res.status(500).send("DBエラー");
       }
+
+      groupAgencies = stores || [];
+    }
+
+    // 全ての店舗を取得
+    const { data: allStores, error: allStoresError } = await db
+      .from("stores")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (allStoresError) {
+      console.error("全店舗取得エラー:", allStoresError);
+      return res.status(500).send("DBエラー");
+    }
+
+    // 所属していない店舗をフィルタリング
+    const availableAgencies = (allStores || []).filter(
+      (store) => !memberStoreIds.includes(store.id)
     );
-  });
+
+    res.render("groups_manage", {
+      group,
+      groupAgencies,
+      availableAgencies,
+      session: req.session,
+      title: `${group.name} - 代理店管理`,
+    });
+  } catch (error) {
+    console.error("グループ管理画面エラー:", error);
+    return res.status(500).send("DBエラー");
+  }
 });
 
 // 代理店をグループに追加
-router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
+router.post("/add-agency/:id", requireRole(["admin"]), async (req, res) => {
   const groupId = req.params.id;
   const { store_id } = req.body;
 
@@ -188,77 +285,69 @@ router.post("/add-agency/:id", requireRole(["admin"]), (req, res) => {
 
   console.log("グループ代理店追加:", { groupId, store_id });
 
-  // 既存の関連をチェック
-  db.get(
-    "SELECT * FROM group_members WHERE group_id = ? AND store_id = ?",
-    [groupId, store_id],
-    (err, existing) => {
-      if (err) {
-        console.error("既存チェックエラー:", err);
-        return res.status(500).send(`DBエラー: ${err.message}`);
-      }
+  try {
+    // 既存の関連をチェック
+    const { data: existing, error: checkError } = await db
+      .from("group_members")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("store_id", store_id)
+      .limit(1);
 
-      if (existing) {
-        console.log("既に関連が存在します");
-        return res.redirect(`/groups/manage/${groupId}`);
-      }
-
-      // 新しい関連を作成
-      db.run(
-        "INSERT INTO group_members (group_id, store_id) VALUES (?, ?)",
-        [groupId, store_id],
-        function (err) {
-          if (err) {
-            console.error("グループ代理店追加エラー:", err);
-            return res.status(500).send(`DBエラー: ${err.message}`);
-          }
-          console.log("グループ代理店追加成功");
-          res.redirect(`/groups/manage/${groupId}`);
-        }
-      );
+    if (checkError) {
+      console.error("既存チェックエラー:", checkError);
+      return res.status(500).send(`DBエラー: ${checkError.message}`);
     }
-  );
+
+    if (existing && existing.length > 0) {
+      console.log("既に関連が存在します");
+      return res.redirect(`/groups/manage/${groupId}`);
+    }
+
+    // 新しい関連を作成
+    const { error: insertError } = await db
+      .from("group_members")
+      .insert({ group_id: groupId, store_id: store_id });
+
+    if (insertError) {
+      console.error("グループ代理店追加エラー:", insertError);
+      return res.status(500).send(`DBエラー: ${insertError.message}`);
+    }
+
+    console.log("グループ代理店追加成功");
+    res.redirect(`/groups/manage/${groupId}`);
+  } catch (error) {
+    console.error("グループ代理店追加エラー:", error);
+    return res.status(500).send(`DBエラー: ${error.message}`);
+  }
 });
 
 // 代理店をグループから削除
 router.post(
   "/remove-agency/:groupId/:agencyId",
   requireRole(["admin"]),
-  (req, res) => {
+  async (req, res) => {
     const { groupId, agencyId } = req.params;
     console.log("グループ代理店削除: ", { groupId, agencyId });
 
-    db.run(
-      "DELETE FROM group_members WHERE group_id = ? AND store_id = ?",
-      [groupId, agencyId],
-      function (err) {
-        if (err) {
-          console.error("グループ代理店削除エラー:", err);
-          return res.status(500).send(`DBエラー: ${err.message}`);
-        }
-        console.log("削除件数:", this && this.changes);
-        // 変更がなければ、存在有無を追加チェック
-        if (!this || this.changes === 0) {
-          db.get(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND store_id = ?",
-            [groupId, agencyId],
-            (e, row) => {
-              if (e) {
-                console.error("削除後存在確認エラー:", e);
-              } else {
-                console.log(
-                  "削除後存在確認:",
-                  row ? "まだ存在します" : "存在しません"
-                );
-              }
-              return res.redirect(`/groups/manage/${groupId}`);
-            }
-          );
-        } else {
-          return res.redirect(`/groups/manage/${groupId}`);
-        }
+    try {
+      const { error } = await db
+        .from("group_members")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("store_id", agencyId);
+
+      if (error) {
+        console.error("グループ代理店削除エラー:", error);
+        return res.status(500).send(`DBエラー: ${error.message}`);
       }
-    );
+
+      console.log("グループ代理店削除成功");
+      res.redirect(`/groups/manage/${groupId}`);
+    } catch (error) {
+      console.error("グループ代理店削除エラー:", error);
+      return res.status(500).send(`DBエラー: ${error.message}`);
+    }
   }
 );
 
