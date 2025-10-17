@@ -2015,7 +2015,7 @@ router.get("/create-profile", requireRole(["agency"]), (req, res) => {
 });
 
 // 代理店プロフィール作成（代理店ユーザー用）
-router.post("/create-profile", requireRole(["agency"]), (req, res) => {
+router.post("/create-profile", requireRole(["agency"]), async (req, res) => {
   // 既にプロフィールが存在する場合はエラー
   if (req.session.user.store_id) {
     return res.status(400).send("既にプロフィールが存在します");
@@ -2044,132 +2044,144 @@ router.post("/create-profile", requireRole(["agency"]), (req, res) => {
     contract_date && contract_date.trim() !== "" ? contract_date : null;
   // start_date は廃止（Supabaseスキーマ未定義）
 
-  db.run(
-    "INSERT INTO stores (name, business_address, bank_info, contract_start_date) VALUES (?, ?, ?, ?)",
-    [name, address, bank_info, processedContractDate],
-    function (err) {
-      if (err) return res.status(500).send("DBエラー");
+  try {
+    // Supabase環境での店舗作成
+    const { data: stores, error: storeError } = await db
+      .from("stores")
+      .insert({
+        name,
+        business_address: address,
+        bank_info,
+        contract_start_date: processedContractDate,
+      })
+      .select();
 
-      const agencyId = this.lastID;
-
-      // 新形式: 配列形式での商品データ処理
-      if (
-        product_names &&
-        Array.isArray(product_names) &&
-        product_names.length > 0
-      ) {
-        console.log("プロフィール作成: 新形式の商品データを処理");
-        product_names.forEach((productName, index) => {
-          if (productName && productName.trim() !== "") {
-            db.run(
-              "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-              [agencyId, productName.trim()],
-              (err) => {
-                if (err) console.error("商品保存エラー:", err);
-              }
-            );
-          }
-        });
-      }
-      // 旧形式: JSON文字列での商品データ処理（互換性のため）
-      else if (products) {
-        console.log("プロフィール作成: 旧形式の商品データを処理");
-        const productList = Array.isArray(products) ? products : [products];
-        productList.forEach((productStr) => {
-          try {
-            const product = JSON.parse(productStr);
-            db.run(
-              "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-              [agencyId, product.product_name],
-              (err) => {
-                if (err) console.error("商品保存エラー:", err);
-              }
-            );
-          } catch (parseErr) {
-            console.error("商品データパースエラー:", parseErr);
-            // JSON解析に失敗した場合は文字列として扱う（旧形式対応）
-            db.run(
-              "INSERT INTO store_products (store_id, product_name) VALUES (?, ?)",
-              [agencyId, productStr],
-              (err) => {
-                if (err) console.error("商品保存エラー（文字列）:", err);
-              }
-            );
-          }
-        });
-      }
-
-      // ユーザーテーブルのstore_idを更新
-      console.log("=== アカウント連携開始 ===");
-      console.log("agencyId:", agencyId, "type:", typeof agencyId);
-      console.log(
-        "session.user.id:",
-        req.session.user.id,
-        "type:",
-        typeof req.session.user.id
-      );
-      console.log("session.user:", req.session.user);
-      console.log("PostgreSQL環境:", !!process.env.DATABASE_URL);
-
-      // PostgreSQL環境でのパラメータ形式を調整
-      const isPostgres = !!process.env.DATABASE_URL;
-      const updateQuery = isPostgres
-        ? "UPDATE users SET store_id = $1 WHERE id = $2"
-        : "UPDATE users SET store_id = ? WHERE id = ?";
-
-      db.run(
-        updateQuery,
-        [parseInt(agencyId), parseInt(req.session.user.id)],
-        function (err) {
-          if (err) {
-            console.error("=== ユーザーのstore_id更新エラー ===");
-            console.error("エラー詳細:", err);
-            console.error("エラーコード:", err.code);
-            console.error("エラーメッセージ:", err.message);
-            console.error("更新対象のagencyId:", agencyId);
-            console.error("更新対象のuserId:", req.session.user.id);
-            return res
-              .status(500)
-              .send(
-                `プロフィール作成は完了しましたが、アカウント連携でエラーが発生しました。<br>エラー詳細: ${err.message}<br><a href="/">ダッシュボードに戻る</a>`
-              );
-          }
-
-          console.log("=== アカウント連携成功 ===");
-          console.log("更新された行数:", this.changes || "不明");
-
-          // セッションのstore_idも更新
-          req.session.user.store_id = agencyId;
-
-          // プロフィール作成時のメール通知を送信
-          const agencyData = {
-            id: agencyId,
-            name,
-            age,
-            address,
-            bank_info,
-            experience_years,
-            contract_date,
-            start_date,
-          };
-
-          const userData = {
-            email: req.session.user.email,
-            id: req.session.user.id,
-          };
-
-          // 非同期でメール送信（エラーがあってもリダイレクトは継続）
-          sendProfileRegistrationNotification(agencyData, userData).catch(
-            (error) => {
-              console.error("メール送信エラー:", error);
-            }
-          );
-
-          res.redirect("/stores/profile/" + agencyId);
-        }
-      );
+    if (storeError) {
+      console.error("店舗作成エラー:", storeError);
+      return res.status(500).send(`DBエラー: ${storeError.message}`);
     }
-  );
+
+    const agencyId = stores[0].id;
+
+    // 新形式: 配列形式での商品データ処理
+    if (
+      product_names &&
+      Array.isArray(product_names) &&
+      product_names.length > 0
+    ) {
+      console.log("プロフィール作成: 新形式の商品データを処理");
+      const productInserts = product_names
+        .filter((productName) => productName && productName.trim() !== "")
+        .map((productName) => ({
+          store_id: agencyId,
+          product_name: productName.trim(),
+        }));
+
+      if (productInserts.length > 0) {
+        const { error: productError } = await db
+          .from("store_products")
+          .insert(productInserts);
+        if (productError) {
+          console.error("商品保存エラー:", productError);
+        }
+      }
+    }
+    // 旧形式: JSON文字列での商品データ処理（互換性のため）
+    else if (products) {
+      console.log("プロフィール作成: 旧形式の商品データを処理");
+      const productList = Array.isArray(products) ? products : [products];
+      const productInserts = [];
+
+      for (const productStr of productList) {
+        try {
+          const product = JSON.parse(productStr);
+          productInserts.push({
+            store_id: agencyId,
+            product_name: product.product_name,
+          });
+        } catch (parseErr) {
+          console.error("商品データパースエラー:", parseErr);
+          // JSON解析に失敗した場合は文字列として扱う
+          productInserts.push({
+            store_id: agencyId,
+            product_name: productStr,
+          });
+        }
+      }
+
+      if (productInserts.length > 0) {
+        const { error: productError } = await db
+          .from("store_products")
+          .insert(productInserts);
+        if (productError) {
+          console.error("商品保存エラー:", productError);
+        }
+      }
+    }
+
+    // ユーザーテーブルのstore_idを更新
+    console.log("=== アカウント連携開始 ===");
+    console.log("agencyId:", agencyId, "type:", typeof agencyId);
+    console.log(
+      "session.user.id:",
+      req.session.user.id,
+      "type:",
+      typeof req.session.user.id
+    );
+    console.log("session.user:", req.session.user);
+
+    const { error: updateError } = await db
+      .from("users")
+      .update({ store_id: agencyId })
+      .eq("id", req.session.user.id);
+
+    if (updateError) {
+      console.error("=== ユーザーのstore_id更新エラー ===");
+      console.error("エラー詳細:", updateError);
+      console.error("エラーコード:", updateError.code);
+      console.error("エラーメッセージ:", updateError.message);
+      console.error("更新対象のagencyId:", agencyId);
+      console.error("更新対象のuserId:", req.session.user.id);
+      return res
+        .status(500)
+        .send(
+          `プロフィール作成は完了しましたが、アカウント連携でエラーが発生しました。<br>エラー詳細: ${updateError.message}<br><a href="/">ダッシュボードに戻る</a>`
+        );
+    }
+
+    console.log("=== アカウント連携成功 ===");
+
+    // セッションのstore_idも更新
+    req.session.user.store_id = agencyId;
+
+    // プロフィール作成時のメール通知を送信
+    const agencyData = {
+      id: agencyId,
+      name,
+      age,
+      address,
+      bank_info,
+      experience_years,
+      contract_date,
+    };
+
+    const userData = {
+      email: req.session.user.email,
+      id: req.session.user.id,
+    };
+
+    // 非同期でメール送信（エラーがあってもリダイレクトは継続）
+    sendProfileRegistrationNotification(agencyData, userData).catch(
+      (error) => {
+        console.error("メール送信エラー:", error);
+      }
+    );
+
+    res.redirect("/stores/profile/" + agencyId);
+  } catch (error) {
+    console.error("プロフィール作成エラー:", error);
+    return res.status(500).send(`プロフィール作成エラー: ${error.message}`);
+  }
 });
 
 module.exports = router;
