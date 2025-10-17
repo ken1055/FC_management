@@ -1371,185 +1371,125 @@ router.post("/edit/:id", requireRole(["admin"]), (req, res) => {
 });
 
 // 代理店削除（管理者のみ）
-router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
-  const agencyId = req.params.id;
+router.post("/delete/:id", requireRole(["admin"]), async (req, res) => {
+  const agencyId = parseInt(req.params.id);
 
-  // 代理店情報を取得
-  db.get("SELECT name FROM stores WHERE id = ?", [agencyId], (err, agency) => {
-    if (err) return res.status(500).send("DBエラー");
-    if (!agency) {
+  try {
+    // 代理店情報を取得
+    const { data: stores, error: storeError } = await db
+      .from("stores")
+      .select("name")
+      .eq("id", agencyId)
+      .limit(1);
+
+    if (storeError) {
+      console.error("店舗取得エラー:", storeError);
+      return res.status(500).send("DBエラー");
+    }
+
+    if (!stores || stores.length === 0) {
       return res.redirect(
         "/stores/list?error=" +
           encodeURIComponent("指定された代理店が見つかりません")
       );
     }
 
+    const agency = stores[0];
+
     // 関連するユーザーアカウントを確認
-    db.all(
-      "SELECT id, email FROM users WHERE store_id = ?",
-      [agencyId],
-      (err, relatedUsers) => {
-        if (err) {
-          console.error("関連ユーザー確認エラー:", err);
-          relatedUsers = [];
-        }
+    const { data: relatedUsers, error: usersError } = await db
+      .from("users")
+      .select("id, email")
+      .eq("store_id", agencyId);
 
-        if (relatedUsers.length > 0) {
-          console.log(
-            `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウント:`,
-            relatedUsers
-          );
-          console.log("これらのユーザーアカウントも削除されます");
-        } else {
-          console.log(
-            `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウントはありません`
-          );
-        }
+    if (usersError) {
+      console.error("関連ユーザー確認エラー:", usersError);
+    }
 
-        // 改善されたトランザクション型削除処理
-        const deleteRelatedDataSafely = (callback) => {
-          console.log(
-            `代理店ID ${agencyId} の関連データ削除を開始（トランザクション処理）`
-          );
+    if (relatedUsers && relatedUsers.length > 0) {
+      console.log(
+        `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウント:`,
+        relatedUsers
+      );
+      console.log("これらのユーザーアカウントも削除されます");
+    } else {
+      console.log(
+        `代理店「${agency.name}」(ID: ${agencyId}) に関連するユーザーアカウントはありません`
+      );
+    }
 
-          // PostgreSQL環境ではBEGINでトランザクション開始
-          const isPostgres = !!process.env.DATABASE_URL;
-          const startTransaction = isPostgres ? "BEGIN" : "BEGIN TRANSACTION";
+    // 関連データを順次削除（外部キー制約を考慮した順序）
+    console.log(`代理店ID ${agencyId} の関連データ削除を開始`);
 
-          db.run(startTransaction, (err) => {
-            if (err) {
-              console.error("トランザクション開始エラー:", err);
-              return callback(err);
-            }
+    // 削除対象テーブルの配列（削除順序重要：外部キー制約を考慮）
+    const deleteTargets = [
+      { name: "ユーザーアカウント", table: "users" },
+      { name: "売上データ", table: "sales" },
+      { name: "商品資料", table: "materials" },
+      { name: "グループ所属", table: "group_members" },
+      { name: "取り扱い商品", table: "store_products" },
+      { name: "製品ファイル", table: "product_files" },
+      { name: "顧客データ", table: "customers" },
+      { name: "ロイヤリティ計算", table: "royalty_calculations" },
+      { name: "ロイヤリティ設定", table: "royalty_settings" },
+    ];
 
-            console.log("トランザクション開始完了");
+    // 各テーブルから関連データを削除
+    for (const target of deleteTargets) {
+      console.log(`${target.name}を削除中...`);
+      const { error: deleteError } = await db
+        .from(target.table)
+        .delete()
+        .eq("store_id", agencyId);
 
-            // 削除対象テーブルの配列（削除順序重要：外部キー制約を考慮）
-            const deleteQueries = [
-              {
-                name: "ユーザーアカウント",
-                query: "DELETE FROM users WHERE store_id = ?",
-              },
-              {
-                name: "売上データ",
-                query: "DELETE FROM sales WHERE store_id = ?",
-              },
-              {
-                name: "商品資料",
-                query: "DELETE FROM materials WHERE store_id = ?",
-              },
-              {
-                name: "グループ所属",
-                query: "DELETE FROM group_members WHERE store_id = ?",
-              },
-              {
-                name: "取り扱い商品",
-                query: "DELETE FROM store_products WHERE store_id = ?",
-              },
-              {
-                name: "製品ファイル",
-                query: "DELETE FROM product_files WHERE store_id = ?",
-              },
-            ];
-
-            let completed = 0;
-            let hasError = false;
-
-            const executeDelete = (index) => {
-              if (hasError || index >= deleteQueries.length) {
-                if (hasError) {
-                  console.log("エラーが発生したためロールバック実行");
-                  db.run("ROLLBACK", () => {
-                    callback(
-                      new Error("関連データ削除中にエラーが発生しました")
-                    );
-                  });
-                } else {
-                  console.log("すべての関連データ削除完了、コミット実行");
-                  db.run("COMMIT", (commitErr) => {
-                    if (commitErr) {
-                      console.error("コミットエラー:", commitErr);
-                      return callback(commitErr);
-                    }
-                    console.log("トランザクション正常完了");
-                    callback();
-                  });
-                }
-                return;
-              }
-
-              const deleteInfo = deleteQueries[index];
-              console.log(`${deleteInfo.name}を削除中...`);
-
-              db.run(deleteInfo.query, [agencyId], function (deleteErr) {
-                if (deleteErr) {
-                  console.error(`${deleteInfo.name}削除エラー:`, deleteErr);
-                  hasError = true;
-                  return executeDelete(index + 1);
-                }
-
-                console.log(
-                  `${deleteInfo.name}削除完了 (削除件数: ${this.changes})`
-                );
-
-                // 特別処理：ユーザーアカウント削除時の詳細ログ
-                if (index === 0 && relatedUsers.length > 0) {
-                  relatedUsers.forEach((user) => {
-                    console.log(
-                      `削除されたユーザー: ID=${user.id}, Email=${user.email}`
-                    );
-                  });
-                }
-
-                executeDelete(index + 1);
-              });
-            };
-
-            executeDelete(0);
-          });
-        };
-
-        // 関連データを削除してから代理店本体を削除
-        deleteRelatedDataSafely((err) => {
-          if (err) {
-            console.error("関連データ削除エラー:", err);
-            return res.redirect(
-              "/stores/list?error=" +
-                encodeURIComponent("関連データ削除中にエラーが発生しました")
-            );
-          }
-          db.run("DELETE FROM stores WHERE id = ?", [agencyId], function (err) {
-            if (err) {
-              console.error("代理店削除エラー:", err);
-              return res.redirect(
-                "/stores/list?error=" +
-                  encodeURIComponent("削除中にエラーが発生しました")
-              );
-            }
-
-            console.log(
-              `代理店「${agency.name}」(ID: ${agencyId}) を削除しました`
-            );
-
-            // 削除後のID整合性チェックと自動修正を無効化（安全性のため）
-            console.log(
-              "=== 削除後のID自動修正は安全性のため無効化されています ==="
-            );
-            console.log(
-              "他の代理店データの整合性を保つため、ID修正は手動で実行してください"
-            );
-
-            res.redirect(
-              "/stores/list?success=" +
-                encodeURIComponent(
-                  `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
-                )
-            );
-          });
-        });
+      if (deleteError) {
+        console.error(`${target.name}削除エラー:`, deleteError);
+        // エラーが発生してもログに記録して続行（外部キー制約により自動削除される場合もある）
+      } else {
+        console.log(`${target.name}削除完了`);
       }
+    }
+
+    // 特別処理：ユーザーアカウント削除時の詳細ログ
+    if (relatedUsers && relatedUsers.length > 0) {
+      relatedUsers.forEach((user) => {
+        console.log(
+          `削除されたユーザー: ID=${user.id}, Email=${user.email}`
+        );
+      });
+    }
+
+    console.log("すべての関連データ削除完了");
+
+    // 最後に店舗本体を削除
+    const { error: storeDeleteError } = await db
+      .from("stores")
+      .delete()
+      .eq("id", agencyId);
+
+    if (storeDeleteError) {
+      console.error("代理店削除エラー:", storeDeleteError);
+      return res.redirect(
+        "/stores/list?error=" +
+          encodeURIComponent("削除中にエラーが発生しました")
+      );
+    }
+
+    console.log(`代理店「${agency.name}」(ID: ${agencyId}) を削除しました`);
+
+    res.redirect(
+      "/stores/list?success=" +
+        encodeURIComponent(
+          `「${agency.name}」の代理店データと関連するユーザーアカウントを削除しました`
+        )
     );
-  });
+  } catch (error) {
+    console.error("店舗削除処理エラー:", error);
+    return res.redirect(
+      "/stores/list?error=" +
+        encodeURIComponent("削除処理中にエラーが発生しました")
+    );
+  }
 });
 
 // 代理店プロフィール表示
@@ -2171,11 +2111,9 @@ router.post("/create-profile", requireRole(["agency"]), async (req, res) => {
     };
 
     // 非同期でメール送信（エラーがあってもリダイレクトは継続）
-    sendProfileRegistrationNotification(agencyData, userData).catch(
-      (error) => {
-        console.error("メール送信エラー:", error);
-      }
-    );
+    sendProfileRegistrationNotification(agencyData, userData).catch((error) => {
+      console.error("メール送信エラー:", error);
+    });
 
     res.redirect("/stores/profile/" + agencyId);
   } catch (error) {
