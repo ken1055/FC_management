@@ -230,7 +230,7 @@ router.get("/list", requireRole(["admin"]), (req, res) => {
 });
 
 // 代理店一覧画面の描画関数
-function renderAgenciesList(
+async function renderAgenciesList(
   req,
   res,
   groupId,
@@ -242,11 +242,15 @@ function renderAgenciesList(
   console.log("=== renderAgenciesList実行 ===");
   console.log("グループID:", groupId);
 
-  // グループ一覧を取得
-  db.all("SELECT * FROM groups", [], (err, groups) => {
-    if (err) {
-      console.error("グループ取得エラー:", err);
-      return res.status(500).send("DBエラー: " + err.message);
+  try {
+    // グループ一覧を取得
+    const { data: groups, error: groupsError } = await db
+      .from("groups")
+      .select("*");
+
+    if (groupsError) {
+      console.error("グループ取得エラー:", groupsError);
+      return res.status(500).send("DBエラー: " + groupsError.message);
     }
 
     // データベースタイプに応じて store_products 参照を制御
@@ -365,77 +369,87 @@ router.get("/new", requireRole(["admin"]), (req, res) => {
 });
 
 // 編集フォーム
-router.get("/edit/:id", requireRole(["admin"]), (req, res) => {
-  const { isSupabaseConfigured } = require("../config/database");
-  db.get(
-    "SELECT * FROM stores WHERE id = ?",
-    [req.params.id],
-    (err, agency) => {
-      if (err || !agency) return res.status(404).send("データがありません");
+router.get("/edit/:id", requireRole(["admin"]), async (req, res) => {
+  try {
+    const { data: agencies, error } = await db
+      .from("stores")
+      .select("*")
+      .eq("id", req.params.id)
+      .limit(1);
 
-      // Supabaseでは store_products は未使用のためスキップ
-      if (isSupabaseConfigured && isSupabaseConfigured()) {
-        agency.products = [];
-        return res.render("agencies_form", {
-          agency,
-          session: req.session,
-          title: "店舗編集",
-        });
-      }
-
-      // 取り扱い商品を取得（ローカルSQLite等）
-      db.all(
-        "SELECT product_name FROM store_products WHERE store_id = ?",
-        [req.params.id],
-        (err, products) => {
-          if (err) {
-            console.error("商品取得エラー:", err);
-            products = [];
-          }
-
-          agency.products = products.map((p) => ({
-            product_name: p.product_name,
-            product_detail: null,
-            product_url: null,
-          }));
-
-          res.render("agencies_form", {
-            agency,
-            session: req.session,
-            title: "店舗編集",
-          });
-        }
-      );
+    if (error || !agencies || agencies.length === 0) {
+      console.error("店舗取得エラー:", error);
+      return res.status(404).send("データがありません");
     }
-  );
+
+    const agency = agencies[0];
+
+    // Supabaseでは store_products は使用しない
+    agency.products = [];
+
+    res.render("agencies_form", {
+      agency,
+      session: req.session,
+      title: "店舗編集",
+    });
+  } catch (error) {
+    console.error("編集フォーム取得エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 // 代理店登録
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   const { name, age, address, bank_info, experience_years, contract_date } =
     req.body;
-  db.run(
-    "INSERT INTO stores (name, business_address, contract_start_date) VALUES (?, ?, ?)",
-    [name, address, contract_date || null],
-    function (err) {
-      if (err) return res.status(500).send("DBエラー");
-      res.json({ id: this.lastID });
+  
+  try {
+    const { data, error } = await db
+      .from("stores")
+      .insert({
+        name,
+        business_address: address,
+        contract_start_date: contract_date || null,
+      })
+      .select();
+
+    if (error) {
+      console.error("代理店登録エラー:", error);
+      return res.status(500).send("DBエラー");
     }
-  );
+
+    res.json({ id: data[0].id });
+  } catch (error) {
+    console.error("代理店登録エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 // 代理店編集
-router.put("/:id", (req, res) => {
+router.put("/:id", async (req, res) => {
   const { name, age, address, bank_info, experience_years, contract_date } =
     req.body;
-  db.run(
-    "UPDATE stores SET name=?, business_address=?, contract_start_date=? WHERE id=?",
-    [name, address, contract_date || null, req.params.id],
-    function (err) {
-      if (err) return res.status(500).send("DBエラー");
-      res.send("更新完了");
+  
+  try {
+    const { error } = await db
+      .from("stores")
+      .update({
+        name,
+        business_address: address,
+        contract_start_date: contract_date || null,
+      })
+      .eq("id", req.params.id);
+
+    if (error) {
+      console.error("代理店更新エラー:", error);
+      return res.status(500).send("DBエラー");
     }
-  );
+
+    res.send("更新完了");
+  } catch (error) {
+    console.error("代理店更新エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 // 新規登録（フォームPOST対応）
