@@ -344,7 +344,7 @@ router.get("/new", requireAuth, async (req, res) => {
       session: req.session,
       title: "顧客登録",
       isAdmin: isAdmin,
-      isSupabase: isSupabaseConfigured(),
+      isSupabase: true,
     });
   } catch (error) {
     console.error("顧客登録フォーム表示エラー:", error);
@@ -402,7 +402,7 @@ router.get("/edit/:id", requireAuth, (req, res) => {
           session: req.session,
           title: "顧客編集",
           isAdmin: isAdmin,
-          isSupabase: isSupabaseConfigured(),
+          isSupabase: true,
         });
       });
     } else {
@@ -412,7 +412,7 @@ router.get("/edit/:id", requireAuth, (req, res) => {
         session: req.session,
         title: "顧客編集",
         isAdmin: isAdmin,
-        isSupabase: isSupabaseConfigured(),
+        isSupabase: true,
       });
     }
   });
@@ -423,7 +423,7 @@ router.post("/create", requireAuth, (req, res) => {
   console.log("=== 顧客登録処理開始 ===");
   console.log("リクエストボディ:", req.body);
   console.log("セッションユーザー:", req.session.user);
-  console.log("Supabase設定:", isSupabaseConfigured());
+  console.log("Supabase設定:", true);
 
   const {
     customer_code,
@@ -485,7 +485,7 @@ router.post("/create", requireAuth, (req, res) => {
   }
 
   function insertCustomer() {
-    const useSupabase = isSupabaseConfigured();
+    const useSupabase = true;
     console.log("=== INSERT処理開始 ===");
     console.log("useSupabase:", useSupabase);
 
@@ -505,7 +505,7 @@ router.post("/create", requireAuth, (req, res) => {
     const toNull = (v) =>
       v !== undefined && v !== null && String(v).trim() !== "" ? v : null;
 
-    const params = isSupabaseConfigured()
+    const params = true
       ? [
           finalStoreId,
           toNull(customer_code),
@@ -657,7 +657,7 @@ router.post("/update/:id", requireAuth, (req, res) => {
     }
 
     function updateCustomer() {
-      const useSupabase = isSupabaseConfigured();
+      const useSupabase = true;
       console.log("=== UPDATE処理開始 ===");
       console.log("useSupabase:", useSupabase);
       console.log("customerId:", customerId);
@@ -679,7 +679,7 @@ router.post("/update/:id", requireAuth, (req, res) => {
       const toNull = (v) =>
         v !== undefined && v !== null && String(v).trim() !== "" ? v : null;
 
-      const params = isSupabaseConfigured()
+      const params = true
         ? [
             finalStoreId,
             toNull(customer_code),
@@ -853,7 +853,7 @@ router.get("/:id/transactions", requireAuth, (req, res) => {
     }
 
     // 取引履歴を取得
-    const useSupabase = isSupabaseConfigured();
+    const useSupabase = true;
 
     if (useSupabase) {
       // Supabase環境では分離クエリを使用
@@ -1086,7 +1086,7 @@ router.get("/store/:storeId/with-sales", requireAuth, (req, res) => {
     return res.status(403).json({ error: "アクセス権限がありません" });
   }
 
-  const useSupabase = isSupabaseConfigured();
+      const useSupabase = true;
 
   if (useSupabase) {
     // Supabase環境では分離したクエリを使用
