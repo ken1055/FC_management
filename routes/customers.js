@@ -128,96 +128,47 @@ router.get("/store", requireAuth, async (req, res) => {
     const searchTerm = req.query.search || "";
     const storeId = req.session.user.store_id;
 
-    if (isVercel && supabase) {
-      // Vercel + Supabase環境
-      console.log("Supabase環境で店舗専用顧客一覧取得");
-      console.log("Store ID:", storeId, "Search Term:", searchTerm);
+    console.log("Supabase環境で店舗専用顧客一覧取得");
+    console.log("Store ID:", storeId, "Search Term:", searchTerm);
 
-      let query = supabase
-        .from("customers")
-        .select(
-          `
-          *,
-          stores!inner(name)
-        `
-        )
-        .eq("store_id", storeId)
-        .order("created_at", { ascending: false });
+    let query = db
+      .from("customers")
+      .select("*, stores!inner(name)")
+      .eq("store_id", storeId)
+      .order("created_at", { ascending: false });
 
-      // 検索条件を追加
-      if (searchTerm) {
-        query = query.or(
-          `name.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
-        );
-      }
+    // 検索条件を追加
+    if (searchTerm) {
+      query = query.or(
+        `name.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
+      );
+    }
 
-      const { data: customers, error } = await query;
+    const { data: customers, error } = await query;
 
-      if (error) {
-        console.error("Supabase顧客一覧取得エラー:", error);
-        return res.status(500).render("error", {
-          message: "顧客一覧の取得に失敗しました",
-          session: req.session,
-        });
-      }
-
-      // データを整形（store_nameを追加）
-      const formattedCustomers = customers.map((customer) => ({
-        ...customer,
-        store_name: customer.stores?.name || null,
-      }));
-
-      console.log("取得した顧客数:", formattedCustomers.length);
-
-      res.render("customers_store_list", {
-        customers: formattedCustomers || [],
-        searchTerm: searchTerm,
+    if (error) {
+      console.error("Supabase顧客一覧取得エラー:", error);
+      return res.status(500).render("error", {
+        message: "顧客一覧の取得に失敗しました",
         session: req.session,
-        title: "顧客一覧",
-        isSupabase: isSupabaseConfigured(),
-      });
-    } else {
-      // ローカル環境（SQLite）
-      let whereConditions = ["c.store_id = ?"];
-      let queryParams = [storeId];
-
-      if (searchTerm) {
-        whereConditions.push(
-          "(c.name LIKE ? OR c.customer_code LIKE ? OR c.email LIKE ?)"
-        );
-        queryParams.push(
-          `%${searchTerm}%`,
-          `%${searchTerm}%`,
-          `%${searchTerm}%`
-        );
-      }
-
-      const query = `
-        SELECT c.*, s.name as store_name
-        FROM customers c
-        LEFT JOIN stores s ON c.store_id = s.id
-        WHERE ${whereConditions.join(" AND ")}
-        ORDER BY c.created_at DESC
-      `;
-
-      db.all(query, queryParams, (err, customers) => {
-        if (err) {
-          console.error("顧客一覧取得エラー:", err);
-          return res.status(500).render("error", {
-            message: "顧客一覧の取得に失敗しました",
-            session: req.session,
-          });
-        }
-
-        res.render("customers_store_list", {
-          customers: customers || [],
-          searchTerm: searchTerm,
-          session: req.session,
-          title: "顧客一覧",
-          isSupabase: isSupabaseConfigured(),
-        });
       });
     }
+
+    // データを整形（store_nameを追加）
+    const formattedCustomers = customers.map((customer) => ({
+      ...customer,
+      store_name: customer.stores?.name || null,
+    }));
+
+    console.log("取得した顧客数:", formattedCustomers.length);
+
+    res.render("customers_store_list", {
+      customers: formattedCustomers || [],
+      searchTerm: searchTerm,
+      session: req.session,
+      title: "顧客一覧",
+      isSupabase: true,
+    });
   } catch (error) {
     console.error("店舗専用顧客一覧エラー:", error);
     res.status(500).render("error", {
