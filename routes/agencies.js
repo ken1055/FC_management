@@ -894,7 +894,7 @@ router.get(
 router.post(
   "/profile/:id/edit",
   requireRole(["admin", "agency"]),
-  (req, res) => {
+  async (req, res) => {
     const agencyId = req.params.id;
 
     // 代理店ユーザーは自分のプロフィールのみ編集可能
@@ -942,114 +942,61 @@ router.post(
       representative_gmail,
     } = req.body;
 
-    // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
-    const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
-    const processedExperienceYears =
-      experience_years && experience_years.trim() !== ""
-        ? parseInt(experience_years)
-        : null;
-    const processedContractDate =
-      contract_date && contract_date.trim() !== "" ? contract_date : null;
-    // start_date は廃止（Supabaseスキーマ未定義）
+    try {
+      // PostgreSQL対応: 数値フィールドの空文字列をNULLに変換
+      const processedAge = age && age.trim() !== "" ? parseInt(age) : null;
+      const processedExperienceYears =
+        experience_years && experience_years.trim() !== ""
+          ? parseInt(experience_years)
+          : null;
+      const processedContractDate =
+        contract_date && contract_date.trim() !== "" ? contract_date : null;
 
-    // 空文字はNULLに正規化
-    const toNull = (v) =>
-      v !== undefined && v !== null && String(v).trim() !== "" ? v : null;
+      // 空文字はNULLに正規化
+      const toNull = (v) =>
+        v !== undefined && v !== null && String(v).trim() !== "" ? v : null;
 
-    // 数値系（royalty_rate）は数値へ
-    const normalizedRoyaltyRate =
-      royalty_rate !== undefined && royalty_rate !== ""
-        ? parseFloat(royalty_rate)
-        : null;
+      // 数値系（royalty_rate）は数値へ
+      const normalizedRoyaltyRate =
+        royalty_rate !== undefined && royalty_rate !== ""
+          ? parseFloat(royalty_rate)
+          : null;
 
-    const updateSql = `
-      UPDATE stores SET 
-        name = ?,
-        manager_name = ?,
-        business_address = ?,
-        main_phone = ?,
-        mobile_phone = ?,
-        representative_email = ?,
-        contract_type = ?,
-        contract_start_date = ?,
-        royalty_rate = ?,
-        invoice_number = ?,
-        bank_name = ?,
-        branch_name = ?,
-        account_type = ?,
-        account_number = ?,
-        account_holder = ?,
-        license_status = ?,
-        license_type = ?,
-        license_number = ?,
-        license_file_path = ?,
-        line_official_id = ?,
-        representative_gmail = ?
-      WHERE id = ?
-    `;
+      // Supabase対応: async/awaitで更新
+      const { error } = await db
+        .from("stores")
+        .update({
+          name: toNull(name),
+          manager_name: toNull(manager_name),
+          business_address: toNull(address || business_address),
+          main_phone: toNull(main_phone),
+          mobile_phone: toNull(mobile_phone),
+          representative_email: toNull(representative_email),
+          contract_type: toNull(contract_type),
+          contract_start_date: toNull(processedContractDate || contract_start_date),
+          royalty_rate: normalizedRoyaltyRate,
+          invoice_number: toNull(invoice_number),
+          bank_name: toNull(bank_name),
+          branch_name: toNull(branch_name),
+          account_type: toNull(account_type),
+          account_number: toNull(account_number),
+          account_holder: toNull(account_holder),
+          license_status: toNull(license_status),
+          license_type: toNull(license_type),
+          license_number: toNull(license_number),
+          license_file_path: toNull(license_file_path),
+          line_official_id: toNull(line_official_id),
+          representative_gmail: toNull(representative_gmail),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", agencyId);
 
-    const updateParams = [
-      toNull(name),
-      toNull(manager_name),
-      toNull(address || business_address),
-      toNull(main_phone),
-      toNull(mobile_phone),
-      toNull(representative_email),
-      toNull(contract_type),
-      toNull(processedContractDate || contract_start_date),
-      normalizedRoyaltyRate,
-      toNull(invoice_number),
-      toNull(bank_name),
-      toNull(branch_name),
-      toNull(account_type),
-      toNull(account_number),
-      toNull(account_holder),
-      toNull(license_status),
-      toNull(license_type),
-      toNull(license_number),
-      toNull(license_file_path),
-      toNull(line_official_id),
-      toNull(representative_gmail),
-      agencyId,
-    ];
+      if (error) {
+        console.error("店舗更新エラー:", error);
+        return res.status(500).send("DBエラー");
+      }
 
-    // Supabase対応: async/awaitで更新
-    (async () => {
-      try {
-        const { error } = await db
-          .from("stores")
-          .update({
-            name: toNull(name),
-            manager_name: toNull(manager_name),
-            business_address: toNull(address || business_address),
-            main_phone: toNull(main_phone),
-            mobile_phone: toNull(mobile_phone),
-            representative_email: toNull(representative_email),
-            contract_type: toNull(contract_type),
-            contract_start_date: toNull(processedContractDate || contract_start_date),
-            royalty_rate: normalizedRoyaltyRate,
-            invoice_number: toNull(invoice_number),
-            bank_name: toNull(bank_name),
-            branch_name: toNull(branch_name),
-            account_type: toNull(account_type),
-            account_number: toNull(account_number),
-            account_holder: toNull(account_holder),
-            license_status: toNull(license_status),
-            license_type: toNull(license_type),
-            license_number: toNull(license_number),
-            license_file_path: toNull(license_file_path),
-            line_official_id: toNull(line_official_id),
-            representative_gmail: toNull(representative_gmail),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", agencyId);
-
-        if (error) {
-          console.error("店舗更新エラー:", error);
-          return res.status(500).send("DBエラー");
-        }
-
-        // Supabaseでは store_products は使用しない
+      // Supabaseでは store_products は使用しない
 
       // プロフィール更新通知メール（代理店ユーザーが自分で更新した場合のみ）
       if (req.session.user.role === "agency") {
@@ -1070,7 +1017,10 @@ router.post(
       }
 
       res.redirect("/stores/profile/" + agencyId);
-    });
+    } catch (error) {
+      console.error("プロフィール更新エラー:", error);
+      return res.status(500).send(`エラー: ${error.message}`);
+    }
   }
 );
 
