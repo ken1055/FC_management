@@ -60,423 +60,13 @@ async function checkUserIdIntegrity(callback) {
 }
 
 // ID修正機能（PostgreSQL対応・管理者のみ）
+// ID修正機能（管理者用）- Supabase対応
 function fixUserIds(callback) {
-  console.log("管理者ID修正開始...");
-
-  // 現在の管理者を取得（emailでソート）
-  db.all("SELECT id, email FROM admins ORDER BY email", [], (err, admins) => {
-    if (err) return callback(err);
-
-    if (admins.length === 0) {
-      console.log("修正対象の管理者がありません");
-      return callback(null);
-    }
-
-    // 修正が必要かチェック
-    let needsFixing = false;
-    console.log(`取得した管理者数: ${admins.length}`);
-    admins.forEach((admin, index) => {
-      const expectedId = index + 1;
-      if (admin.id !== expectedId) {
-        console.log(
-          `修正が必要: ID=${admin.id} → 期待値=${expectedId} (${admin.email})`
-        );
-        needsFixing = true;
-      }
-    });
-
-    if (!needsFixing) {
-      console.log("管理者ID修正は不要です（すべて正常）");
-      return callback(null);
-    }
-
-    // データベースタイプを判定
-    // 実際のデータベース接続を確認してタイプを決定
-    const forceSQLite = process.env.FORCE_SQLITE === "true";
-    const hasPostgresUrl = !!process.env.DATABASE_URL;
-    const isRailway = !!process.env.RAILWAY_ENVIRONMENT_NAME;
-
-    // SQLiteを明示的に指定するか、PostgreSQL関連の環境変数がない場合はSQLite
-    const isPostgres = !forceSQLite && (hasPostgresUrl || isRailway);
-
-    console.log("管理者ID修正 - データベースタイプ判定:", {
-      DATABASE_URL: hasPostgresUrl,
-      RAILWAY_ENVIRONMENT_NAME: isRailway,
-      NODE_ENV: process.env.NODE_ENV,
-      FORCE_SQLITE: process.env.FORCE_SQLITE,
-      isPostgres: isPostgres,
-    });
-
-    if (isPostgres) {
-      // PostgreSQL用の修正処理
-      fixUserIdsPostgres(admins, callback);
-    } else {
-      // SQLite用の修正処理
-      fixUserIdsSQLite(admins, callback);
-    }
-  });
-}
-
-// PostgreSQL用のID修正処理（管理者のみ）
-function fixUserIdsPostgres(admins, callback) {
-  console.log("PostgreSQL環境での管理者ID修正を実行中...");
-
-  if (admins.length === 0) {
-    console.log("修正対象の管理者がありません");
-    return callback(null);
-  }
-
-  // 修正が必要な管理者のみ処理
-  console.log("PostgreSQL環境で管理者ID修正を実行します");
-
-  // 一時テーブルを作成してID修正を行う（PostgreSQL/SQLite共通の安全な方法）
-  db.run("CREATE TEMP TABLE temp_admins AS SELECT * FROM admins", (err) => {
-    if (err) {
-      console.error("一時テーブル作成エラー:", err);
-      return callback(err);
-    }
-
-    console.log("一時テーブル作成成功");
-
-    // PostgreSQL用: 外部キー制約を一時的に無効化
-    console.log("PostgreSQL: 管理者用外部キー制約を一時的に無効化中...");
-    db.run("SET session_replication_role = replica;", (err) => {
-      if (err) {
-        console.error("外部キー制約無効化エラー:", err);
-        // エラーでも続行（SQLiteとの互換性のため）
-      } else {
-        console.log("外部キー制約無効化完了");
-      }
-
-      // 元の管理者データを削除
-      db.run("DELETE FROM admins", (err) => {
-        if (err) {
-          console.error("管理者データ削除エラー:", err);
-          // 制約を再有効化してからエラーを返す
-          db.run("SET session_replication_role = DEFAULT;", () => {
-            return callback(err);
-          });
-          return;
-        }
-
-        console.log("管理者データ削除完了");
-
-        // 新しいIDで再挿入
-        let completed = 0;
-        let hasError = false;
-
-        admins.forEach((admin, index) => {
-          if (hasError) return;
-
-          const newId = index + 1;
-          console.log(`管理者ID修正: ${admin.id} → ${newId} (${admin.email})`);
-
-          db.run(
-            "INSERT INTO admins (id, email, password, created_at) SELECT ?, email, password, created_at FROM temp_admins WHERE id = ?",
-            [newId, admin.id],
-            function (err) {
-              if (err) {
-                console.error("管理者ID修正エラー:", err);
-                hasError = true;
-                return callback(err);
-              }
-
-              console.log(
-                `管理者 ${admin.email} のID修正完了: ${admin.id} → ${newId}`
-              );
-
-              // 関連テーブルのadmin_idも更新
-              db.run(
-                "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_admins WHERE id = ?)",
-                [newId, admin.id],
-                (err) => {
-                  if (err) {
-                    console.error("group_admin テーブル更新エラー:", err);
-                    hasError = true;
-                    return callback(err);
-                  }
-
-                  console.log(
-                    `group_admin テーブル更新完了: ${admin.id} → ${newId}`
-                  );
-
-                  completed++;
-                  console.log(
-                    `管理者ID修正完了: ${admin.id} → ${newId} (${admin.email}) [${completed}/${admins.length}]`
-                  );
-
-                  if (completed === admins.length && !hasError) {
-                    // 一時テーブルを削除
-                    db.run("DROP TABLE temp_admins", (err) => {
-                      if (err) {
-                        console.error("一時テーブル削除エラー:", err);
-                      } else {
-                        console.log("一時テーブル削除完了");
-                      }
-
-                      // PostgreSQL用: 外部キー制約を再有効化
-                      console.log(
-                        "PostgreSQL: 管理者用外部キー制約を再有効化中..."
-                      );
-                      db.run(
-                        "SET session_replication_role = DEFAULT;",
-                        (err) => {
-                          if (err) {
-                            console.error("外部キー制約再有効化エラー:", err);
-                          } else {
-                            console.log("外部キー制約再有効化完了");
-                          }
-
-                          // PostgreSQL用のシーケンスリセット（試行）
-                          resetPostgreSQLAdminSequence(admins.length, () => {
-                            console.log("管理者ID修正完了（PostgreSQL）");
-                            callback(null);
-                          });
-                        }
-                      );
-                    });
-                  }
-                }
-              );
-            }
-          );
-        });
-      });
-    });
-  });
-
-  // PostgreSQL用のシーケンスリセット関数
-  function resetPostgreSQLAdminSequence(maxId, callback) {
-    console.log("PostgreSQL管理者シーケンスリセット試行中...");
-    console.log("設定する最大ID:", maxId);
-
-    // 複数のシーケンスリセット方法を試行
-    const resetMethods = [
-      // 方法1: 現在の最大IDを取得してシーケンスをリセット
-      () => {
-        db.get(
-          "SELECT COALESCE(MAX(id), 0) as max_id FROM admins",
-          [],
-          (err, row) => {
-            if (err) {
-              console.log("最大ID取得失敗:", err.message);
-              tryMethod2();
-              return;
-            }
-
-            const currentMaxId = row.max_id;
-            console.log("現在の最大ID:", currentMaxId);
-
-            db.run(
-              "SELECT setval((SELECT pg_get_serial_sequence('admins', 'id')), ?, true)",
-              [currentMaxId],
-              (err) => {
-                if (err) {
-                  console.log(
-                    "管理者シーケンスリセット方法1失敗:",
-                    err.message
-                  );
-                  tryMethod2();
-                } else {
-                  console.log(
-                    `管理者シーケンスリセット方法1成功: ${currentMaxId}`
-                  );
-                  callback();
-                }
-              }
-            );
-          }
-        );
-      },
-      // 方法2: 固定シーケンス名で最大IDを使用
-      () => {
-        db.get(
-          "SELECT COALESCE(MAX(id), 0) as max_id FROM admins",
-          [],
-          (err, row) => {
-            if (err) {
-              console.log("最大ID取得失敗:", err.message);
-              tryMethod3();
-              return;
-            }
-
-            const currentMaxId = row.max_id;
-            console.log("現在の最大ID:", currentMaxId);
-
-            db.run(
-              "SELECT setval('admins_id_seq', ?, true)",
-              [currentMaxId],
-              (err) => {
-                if (err) {
-                  console.log(
-                    "管理者シーケンスリセット方法2失敗:",
-                    err.message
-                  );
-                  tryMethod3();
-                } else {
-                  console.log(
-                    `管理者シーケンスリセット方法2成功: ${currentMaxId}`
-                  );
-                  callback();
-                }
-              }
-            );
-          }
-        );
-      },
-      // 方法3: 指定されたmaxIdを使用
-      () => {
-        db.run("SELECT setval('admins_id_seq', ?, true)", [maxId], (err) => {
-          if (err) {
-            console.log("管理者シーケンスリセット方法3失敗:", err.message);
-            tryMethod4();
-          } else {
-            console.log(`管理者シーケンスリセット方法3成功: ${maxId}`);
-            callback();
-          }
-        });
-      },
-      // 方法4: SQLiteのシーケンステーブル更新（互換性のため）
-      () => {
-        db.run(
-          "UPDATE sqlite_sequence SET seq = ? WHERE name = 'admins'",
-          [maxId],
-          (err) => {
-            if (err) {
-              console.log("管理者シーケンスリセット方法4失敗:", err.message);
-            } else {
-              console.log(`管理者シーケンスリセット方法4成功: ${maxId}`);
-            }
-            // エラーがあってもcallbackを呼ぶ
-            callback();
-          }
-        );
-      },
-    ];
-
-    const tryMethod1 = resetMethods[0];
-    const tryMethod2 = resetMethods[1];
-    const tryMethod3 = resetMethods[2];
-    const tryMethod4 = resetMethods[3];
-
-    tryMethod1();
-  }
-}
-
-// SQLite用のID修正処理（管理者のみ）
-function fixUserIdsSQLite(admins, callback) {
-  console.log("SQLite環境での管理者ID修正を実行中...");
-
-  if (admins.length === 0) {
-    console.log("修正対象の管理者がありません");
-    return callback(null);
-  }
-
-  // 修正が必要な管理者のみ処理
-  console.log("SQLite環境で管理者ID修正を実行します");
-
-  // 一時テーブルを作成
-  db.run("CREATE TEMP TABLE temp_admins AS SELECT * FROM admins", (err) => {
-    if (err) {
-      console.error("一時テーブル作成エラー:", err);
-      return callback(err);
-    }
-
-    console.log("一時テーブル作成成功");
-
-    // 元の管理者データを削除
-    db.run("DELETE FROM admins", (err) => {
-      if (err) {
-        console.error("管理者データ削除エラー:", err);
-        return callback(err);
-      }
-
-      console.log("管理者データ削除完了");
-
-      // 新しいIDで再挿入
-      let completed = 0;
-      let hasError = false;
-
-      admins.forEach((admin, index) => {
-        if (hasError) return;
-
-        const newId = index + 1;
-        console.log(`管理者ID修正: ${admin.id} → ${newId} (${admin.email})`);
-
-        db.run(
-          "INSERT INTO admins (id, email, password, created_at) SELECT ?, email, password, created_at FROM temp_admins WHERE id = ?",
-          [newId, admin.id],
-          function (err) {
-            if (err) {
-              console.error("管理者ID修正エラー:", err);
-              hasError = true;
-              return callback(err);
-            }
-
-            console.log(
-              `管理者 ${admin.email} のID修正完了: ${admin.id} → ${newId}`
-            );
-
-            // 関連テーブルのadmin_idも更新
-            db.run(
-              "UPDATE group_admin SET admin_id = ? WHERE admin_id = (SELECT id FROM temp_admins WHERE id = ?)",
-              [newId, admin.id],
-              (err) => {
-                if (err) {
-                  console.error("group_admin テーブル更新エラー:", err);
-                  hasError = true;
-                  return callback(err);
-                }
-
-                console.log(
-                  `group_admin テーブル更新完了: ${admin.id} → ${newId}`
-                );
-
-                completed++;
-                console.log(
-                  `管理者ID修正完了: ${admin.id} → ${newId} (${admin.email}) [${completed}/${admins.length}]`
-                );
-
-                if (completed === admins.length && !hasError) {
-                  // 一時テーブルを削除
-                  db.run("DROP TABLE temp_admins", (err) => {
-                    if (err) {
-                      console.error("一時テーブル削除エラー:", err);
-                    } else {
-                      console.log("一時テーブル削除完了");
-                    }
-
-                    // SQLite環境でのみシーケンステーブルをリセット
-                    const forceSQLite = process.env.FORCE_SQLITE === "true";
-                    if (forceSQLite) {
-                      db.run(
-                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'admins'",
-                        [admins.length],
-                        (err) => {
-                          if (err) {
-                            console.error("シーケンスリセットエラー:", err);
-                          } else {
-                            console.log(
-                              `管理者シーケンスを${admins.length}にリセット`
-                            );
-                          }
-                          console.log("管理者ID修正完了（SQLite）");
-                          callback(null);
-                        }
-                      );
-                    } else {
-                      console.log("管理者ID修正完了（SQLite）");
-                      callback(null);
-                    }
-                  });
-                }
-              }
-            );
-          }
-        );
-      });
-    });
-  });
+  console.log("=== 管理者ID修正（Supabase環境） ===");
+  console.log("Supabase環境ではIDは自動管理されるため、修正は不要です");
+  
+  // Supabaseでは自動インクリメントIDが自動管理されるため、何もせずに成功を返す
+  callback(null);
 }
 
 // 管理者アカウント一覧表示（管理者のみ）
@@ -565,7 +155,7 @@ router.get("/new", requireRole(["admin"]), (req, res) => {
 });
 
 // 管理者アカウント追加
-router.post("/", requireRole(["admin"]), (req, res) => {
+router.post("/", requireRole(["admin"]), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.render("users_form", {
@@ -575,15 +165,25 @@ router.post("/", requireRole(["admin"]), (req, res) => {
       title: "新規管理者アカウント作成",
     });
 
-  db.get("SELECT COUNT(*) as cnt FROM admins", [], (err, row) => {
-    if (err) return res.status(500).send("DBエラー");
-    if (row.cnt >= 5)
+  try {
+    // 管理者数を確認
+    const { count, error: countError } = await db
+      .from("admins")
+      .select("*", { count: "exact", head: true });
+
+    if (countError) {
+      console.error("管理者数確認エラー:", countError);
+      return res.status(500).send("DBエラー");
+    }
+
+    if (count >= 5) {
       return res.render("users_form", {
         user: null,
         error: "管理者アカウントは5つまでです",
         session: req.session,
         title: "新規管理者アカウント作成",
       });
+    }
 
     // 本番環境ではパスワードをハッシュ化
     const hashedPassword =
@@ -591,40 +191,41 @@ router.post("/", requireRole(["admin"]), (req, res) => {
 
     console.log("管理者アカウント作成:", { email, role: "admin" });
 
-    db.run(
-      "INSERT INTO admins (email, password) VALUES (?, ?)",
-      [email, hashedPassword],
-      function (err) {
-        if (err) {
-          console.error("管理者アカウント作成エラー:", err);
+    const { data, error } = await db
+      .from("admins")
+      .insert({ email, password: hashedPassword })
+      .select();
 
-          // PostgreSQL固有のエラーハンドリング
-          if (err.code === "23505" && err.constraint === "admins_email_key") {
-            return res.render("users_form", {
-              user: null,
-              error: `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`,
-              session: req.session,
-              title: "新規管理者アカウント作成",
-            });
-          }
+    if (error) {
+      console.error("管理者アカウント作成エラー:", error);
 
-          return res.render("users_form", {
-            user: null,
-            error: `アカウント作成に失敗しました: ${err.message}`,
-            session: req.session,
-            title: "新規管理者アカウント作成",
-          });
-        }
-
-        console.log("管理者アカウント作成成功:", email);
-        res.redirect("/users/list");
+      if (error.code === "23505") {
+        return res.render("users_form", {
+          user: null,
+          error: `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`,
+          session: req.session,
+          title: "新規管理者アカウント作成",
+        });
       }
-    );
-  });
+
+      return res.render("users_form", {
+        user: null,
+        error: `アカウント作成に失敗しました: ${error.message}`,
+        session: req.session,
+        title: "新規管理者アカウント作成",
+      });
+    }
+
+    console.log("管理者アカウント作成成功:", email);
+    res.redirect("/users/list");
+  } catch (error) {
+    console.error("管理者アカウント作成エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 // 新規ユーザー作成（管理者のみ）
-router.post("/create", requireRole(["admin"]), (req, res) => {
+router.post("/create", requireRole(["admin"]), async (req, res) => {
   const { email, password, role } = req.body;
 
   if (!email || !password || !role) {
@@ -641,73 +242,74 @@ router.post("/create", requireRole(["admin"]), (req, res) => {
     });
   }
 
-  // 本番環境ではパスワードをハッシュ化
-  const hashedPassword =
-    process.env.NODE_ENV === "production" ? hashPassword(password) : password;
+  try {
+    // 本番環境ではパスワードをハッシュ化
+    const hashedPassword =
+      process.env.NODE_ENV === "production" ? hashPassword(password) : password;
 
-  // 管理者アカウントの場合はadminsテーブルに挿入
-  if (role === "admin") {
-    db.run(
-      "INSERT INTO admins (email, password) VALUES (?, ?)",
-      [email, hashedPassword],
-      function (err) {
-        if (err) {
-          console.error("管理者作成エラー:", err);
+    // 管理者アカウントの場合はadminsテーブルに挿入
+    if (role === "admin") {
+      const { data, error } = await db
+        .from("admins")
+        .insert({ email, password: hashedPassword })
+        .select();
 
-          // PostgreSQL固有のエラーハンドリング
-          if (err.code === "23505" && err.constraint === "admins_email_key") {
-            return res
-              .status(400)
-              .send(
-                `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
-              );
-          }
+      if (error) {
+        console.error("管理者作成エラー:", error);
 
-          return res.status(500).send(`管理者作成エラー: ${err.message}`);
-        }
-
-        res.json({
-          success: true,
-          message: "管理者が正常に作成されました",
-          userId: this.lastID,
-        });
-      }
-    );
-  } else {
-    // 代理店アカウントの場合はusersテーブルに挿入
-    db.run(
-      "INSERT INTO users (email, password, store_id) VALUES (?, ?, ?)",
-      [email, hashedPassword, null], // store_idはnull
-      function (err) {
-        if (err) {
-          console.error("代理店ユーザー作成エラー:", err);
-
-          // PostgreSQL固有のエラーハンドリング
-          if (err.code === "23505" && err.constraint === "users_email_key") {
-            return res
-              .status(400)
-              .send(
-                `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
-              );
-          }
-
+        if (error.code === "23505") {
           return res
-            .status(500)
-            .send(`代理店ユーザー作成エラー: ${err.message}`);
+            .status(400)
+            .send(
+              `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
+            );
         }
 
-        res.json({
-          success: true,
-          message: "代理店ユーザーが正常に作成されました",
-          userId: this.lastID,
-        });
+        return res.status(500).send(`管理者作成エラー: ${error.message}`);
       }
-    );
+
+      res.json({
+        success: true,
+        message: "管理者が正常に作成されました",
+        userId: data[0].id,
+      });
+    } else {
+      // 代理店アカウントの場合はusersテーブルに挿入
+      const { data, error } = await db
+        .from("users")
+        .insert({ email, password: hashedPassword, store_id: null })
+        .select();
+
+      if (error) {
+        console.error("代理店ユーザー作成エラー:", error);
+
+        if (error.code === "23505") {
+          return res
+            .status(400)
+            .send(
+              `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
+            );
+        }
+
+        return res
+          .status(500)
+          .send(`代理店ユーザー作成エラー: ${error.message}`);
+      }
+
+      res.json({
+        success: true,
+        message: "代理店ユーザーが正常に作成されました",
+        userId: data[0].id,
+      });
+    }
+  } catch (error) {
+    console.error("ユーザー作成エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
   }
 });
 
 // Webインターフェースでのアカウント削除
-router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
+router.post("/delete/:id", requireRole(["admin"]), async (req, res) => {
   const adminId = req.params.id;
 
   // 自分自身を削除しようとしていないかチェック
@@ -718,36 +320,70 @@ router.post("/delete/:id", requireRole(["admin"]), (req, res) => {
     );
   }
 
-  // 管理者情報を取得
-  db.get("SELECT * FROM admins WHERE id = ?", [adminId], (err, admin) => {
-    if (err) return res.status(500).send("DBエラー");
-    if (!admin)
+  try {
+    // 管理者情報を取得
+    const { data: admins, error: fetchError } = await db
+      .from("admins")
+      .select("*")
+      .eq("id", adminId)
+      .limit(1);
+
+    if (fetchError) {
+      console.error("管理者取得エラー:", fetchError);
+      return res.status(500).send("DBエラー");
+    }
+
+    if (!admins || admins.length === 0) {
       return res.redirect(
         "/users/list?error=" +
           encodeURIComponent("指定された管理者が見つかりません")
       );
+    }
 
-    db.run("DELETE FROM admins WHERE id = ?", [adminId], function (err) {
-      if (err) return res.status(500).send("削除エラー");
+    const admin = admins[0];
 
-      console.log(`管理者削除完了: ${admin.email} (ID: ${adminId})`);
-      console.log("=== 管理者削除後のID自動修正処理は無効化されています ===");
+    const { error: deleteError } = await db
+      .from("admins")
+      .delete()
+      .eq("id", adminId);
 
-      // ID修正処理を無効化し、削除完了メッセージのみ表示
-      res.redirect(
-        "/users/list?success=" +
-          encodeURIComponent(`${admin.email} のアカウントを削除しました`)
-      );
-    });
-  });
+    if (deleteError) {
+      console.error("管理者削除エラー:", deleteError);
+      return res.status(500).send("削除エラー");
+    }
+
+    console.log(`管理者削除完了: ${admin.email} (ID: ${adminId})`);
+    console.log("=== 管理者削除後のID自動修正処理は無効化されています ===");
+
+    // ID修正処理を無効化し、削除完了メッセージのみ表示
+    res.redirect(
+      "/users/list?success=" +
+        encodeURIComponent(`${admin.email} のアカウントを削除しました`)
+    );
+  } catch (error) {
+    console.error("管理者削除エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 // API: アカウント削除（従来の機能を維持）
-router.delete("/:id", (req, res) => {
-  db.run("DELETE FROM users WHERE id = ?", [req.params.id], function (err) {
-    if (err) return res.status(500).send("DBエラー");
+router.delete("/:id", async (req, res) => {
+  try {
+    const { error } = await db
+      .from("users")
+      .delete()
+      .eq("id", req.params.id);
+
+    if (error) {
+      console.error("ユーザー削除エラー:", error);
+      return res.status(500).send("DBエラー");
+    }
+
     res.send("削除完了");
-  });
+  } catch (error) {
+    console.error("ユーザー削除エラー:", error);
+    return res.status(500).send(`エラー: ${error.message}`);
+  }
 });
 
 module.exports = router;
