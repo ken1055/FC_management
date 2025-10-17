@@ -282,7 +282,7 @@ router.get("/register", (req, res) => {
 });
 
 // 新規登録処理
-router.post("/register", (req, res) => {
+router.post("/register", async (req, res) => {
   console.log("Registration attempt:", req.body);
   const { email, password, role } = req.body;
 
@@ -304,50 +304,39 @@ router.post("/register", (req, res) => {
   }
 
   try {
-    let store_id = null;
-    if (role === "agency") store_id = null;
-
     // bcryptでパスワードをハッシュ化
-    bcrypt.hash(password, 10, (err, hashedPassword) => {
-      if (err) {
-        console.error("パスワードハッシュ化エラー:", err);
-        return res.send(`
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Supabase環境での登録処理
+    const tableName = role === "agency" ? "users" : "admins";
+    const insertData =
+      role === "agency"
+        ? { email, password: hashedPassword, store_id: null }
+        : { email, password: hashedPassword };
+
+    const { data, error } = await db.from(tableName).insert(insertData).select();
+
+    if (error) {
+      console.error("ユーザー作成エラー:", error);
+
+      // Supabase/PostgreSQL固有のエラーハンドリング
+      if (error.code === "23505" || error.message.includes("duplicate")) {
+        return res.status(400).send(`
           <h1>登録エラー</h1>
-          <p>パスワードのハッシュ化に失敗しました</p>
+          <p>メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。</p>
           <a href="/auth/register">登録に戻る</a>
         `);
       }
 
-      const dbInsert =
-        role === "agency"
-          ? "INSERT INTO users (email, password, store_id) VALUES (?, ?, ?)"
-          : "INSERT INTO admins (email, password) VALUES (?, ?)";
-      const params =
-        role === "agency"
-          ? [email, hashedPassword, store_id]
-          : [email, hashedPassword];
+      return res.status(500).send(`
+        <h1>登録エラー</h1>
+        <p>ユーザー作成エラー: ${error.message}</p>
+        <a href="/auth/register">登録に戻る</a>
+      `);
+    }
 
-      db.run(dbInsert, params, function (err) {
-        if (err) {
-          console.error("ユーザー作成エラー:", err);
-
-          // PostgreSQL固有のエラーハンドリング
-          const constraint =
-            role === "agency" ? "users_email_key" : "admins_email_key";
-          if (err.code === "23505" && err.constraint === constraint) {
-            return res
-              .status(400)
-              .send(
-                `メールアドレス「${email}」は既に使用されています。別のメールアドレスを使用してください。`
-              );
-          }
-
-          return res.status(500).send(`ユーザー作成エラー: ${err.message}`);
-        }
-
-        res.redirect("/auth/login?message=" + encodeURIComponent("登録完了"));
-      });
-    });
+    console.log("ユーザー登録成功:", data);
+    res.redirect("/auth/login?message=" + encodeURIComponent("登録完了"));
   } catch (error) {
     console.error("Registration process error:", error);
     res.status(500).send(`
@@ -373,7 +362,7 @@ router.get("/promote", (req, res) => {
 });
 
 // 昇格申請処理
-router.post("/promote", (req, res) => {
+router.post("/promote", async (req, res) => {
   if (!req.session.user) return res.redirect("/auth/login");
 
   console.log("Promotion attempt:", req.body);
@@ -394,82 +383,77 @@ router.post("/promote", (req, res) => {
       promotion_pass === process.env.ADMIN_PROMOTION_PASS
     ) {
       // 現在の代理店ユーザー情報を取得
-      db.get(
-        "SELECT * FROM users WHERE id = ?",
-        [req.session.user.id],
-        (err, user) => {
-          if (err) {
-            console.error("User lookup error:", err);
-            return res.send(`
-              <h1>昇格エラー</h1>
-              <p>ユーザー情報の取得に失敗しました: ${err.message}</p>
-              <a href="/auth/promote">昇格申請に戻る</a>
-            `);
-          }
+      const { data: users, error: userError } = await db
+        .from("users")
+        .select("*")
+        .eq("id", req.session.user.id)
+        .limit(1);
 
-          if (!user) {
-            return res.send(`
-              <h1>昇格エラー</h1>
-              <p>ユーザーが見つかりません</p>
-              <a href="/auth/promote">昇格申請に戻る</a>
-            `);
-          }
+      if (userError) {
+        console.error("User lookup error:", userError);
+        return res.send(`
+          <h1>昇格エラー</h1>
+          <p>ユーザー情報の取得に失敗しました: ${userError.message}</p>
+          <a href="/auth/promote">昇格申請に戻る</a>
+        `);
+      }
 
-          // 管理者テーブルに新しいレコードを挿入
-          db.run(
-            "INSERT INTO admins (email, password) VALUES (?, ?)",
-            [user.email, user.password],
-            function (err) {
-              if (err) {
-                console.error("Admin creation error:", err);
-                return res.send(`
-                  <h1>昇格エラー</h1>
-                  <p>管理者アカウントの作成に失敗しました: ${err.message}</p>
-                  <a href="/auth/promote">昇格申請に戻る</a>
-                `);
-              }
+      const user = (users || [])[0];
+      if (!user) {
+        return res.send(`
+          <h1>昇格エラー</h1>
+          <p>ユーザーが見つかりません</p>
+          <a href="/auth/promote">昇格申請に戻る</a>
+        `);
+      }
 
-              const newAdminId = this.lastID;
-              console.log(`新しい管理者ID: ${newAdminId}`);
+      // 管理者テーブルに新しいレコードを挿入
+      const { data: newAdmins, error: adminError } = await db
+        .from("admins")
+        .insert({ email: user.email, password: user.password })
+        .select();
 
-              // 代理店ユーザーテーブルから削除
-              db.run(
-                "DELETE FROM users WHERE id = ?",
-                [req.session.user.id],
-                function (err) {
-                  if (err) {
-                    console.error("User deletion error:", err);
-                    // 作成した管理者レコードを削除（ロールバック）
-                    db.run("DELETE FROM admins WHERE id = ?", [newAdminId]);
-                    return res.send(`
-                      <h1>昇格エラー</h1>
-                      <p>代理店アカウントの削除に失敗しました: ${err.message}</p>
-                      <a href="/auth/promote">昇格申請に戻る</a>
-                    `);
-                  }
+      if (adminError) {
+        console.error("Admin creation error:", adminError);
+        return res.send(`
+          <h1>昇格エラー</h1>
+          <p>管理者アカウントの作成に失敗しました: ${adminError.message}</p>
+          <a href="/auth/promote">昇格申請に戻る</a>
+        `);
+      }
 
-                  console.log(
-                    `代理店ユーザーID ${req.session.user.id} を削除完了`
-                  );
+      const newAdmin = (newAdmins || [])[0];
+      console.log(`新しい管理者ID: ${newAdmin.id}`);
 
-                  // セッションを更新
-                  req.session.user = {
-                    id: newAdminId,
-                    email: user.email,
-                    role: "admin",
-                    store_id: null,
-                  };
+      // 代理店ユーザーテーブルから削除
+      const { error: deleteError } = await db
+        .from("users")
+        .delete()
+        .eq("id", req.session.user.id);
 
-                  console.log("昇格完了:", req.session.user);
-                  res.redirect(
-                    "/?message=" + encodeURIComponent("管理者に昇格しました")
-                  );
-                }
-              );
-            }
-          );
-        }
-      );
+      if (deleteError) {
+        console.error("User deletion error:", deleteError);
+        // 作成した管理者レコードを削除（ロールバック）
+        await db.from("admins").delete().eq("id", newAdmin.id);
+        return res.send(`
+          <h1>昇格エラー</h1>
+          <p>代理店アカウントの削除に失敗しました: ${deleteError.message}</p>
+          <a href="/auth/promote">昇格申請に戻る</a>
+        `);
+      }
+
+      console.log(`代理店ユーザーID ${req.session.user.id} を削除完了`);
+
+      // セッションを更新
+      req.session.user = {
+        id: newAdmin.id,
+        email: user.email,
+        role: "admin",
+        store_id: null,
+      };
+
+      console.log("昇格完了:", req.session.user);
+      res.redirect("/?message=" + encodeURIComponent("管理者に昇格しました"));
     } else {
       res.send(`
         <h1>昇格エラー</h1>
