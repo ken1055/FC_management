@@ -1,8 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const db = require("../db");
-const { isSupabaseConfigured } = require("../config/database");
 const { getSupabaseClient } = require("../config/supabase");
+const db = getSupabaseClient(); // Supabaseクライアントを使用
 const bcrypt = require("bcryptjs");
 const {
   sendProfileRegistrationNotification,
@@ -13,7 +12,7 @@ const {
 
 // Vercel環境の検出
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV;
-const supabase = isVercel ? getSupabaseClient() : null;
+const supabase = db; // dbと同じSupabaseクライアントを参照
 
 function requireRole(roles) {
   return (req, res, next) => {
