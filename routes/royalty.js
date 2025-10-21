@@ -418,8 +418,14 @@ async function calculateRoyaltyFromTransactions(year, month, res) {
     console.log(`ロイヤリティ計算開始: ${year}年${month}月`);
 
     // 指定月の取引データを取得
+    // 月の最終日を正しく計算（28日、29日、30日、31日に対応）
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = `${year}-${String(month).padStart(2, "0")}-31`;
+    const lastDayOfMonth = new Date(year, month, 0).getDate(); // 月の最終日を取得
+    const endDate = `${year}-${String(month).padStart(2, "0")}-${String(
+      lastDayOfMonth
+    ).padStart(2, "0")}`;
+
+    console.log(`検索期間: ${startDate} ～ ${endDate}`);
 
     const { data: transactions, error: transactionError } = await db
       .from("customer_transactions")
