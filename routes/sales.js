@@ -858,8 +858,16 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
 
       if (transactionError) {
         console.error("Supabase売上履歴取得エラー:", transactionError);
+
+        // 日付エラーの場合は具体的なメッセージを表示
+        let errorMessage = "売上履歴の取得に失敗しました";
+        if (transactionError.code === "22008") {
+          errorMessage =
+            "指定された日付が無効です。日付範囲を確認してください。";
+        }
+
         return res.status(500).render("error", {
-          message: "売上履歴の取得に失敗しました",
+          message: errorMessage,
           session: req.session,
         });
       }
@@ -1001,9 +1009,15 @@ router.get("/history", requireRole(["admin", "agency"]), async (req, res) => {
 
       if (transactionError) {
         console.error("取引データ取得エラー:", transactionError);
-        return res
-          .status(500)
-          .json({ success: false, error: "データ取得エラー" });
+
+        // 日付エラーの場合は具体的なメッセージを表示
+        let errorMessage = "データ取得エラー";
+        if (transactionError.code === "22008") {
+          errorMessage =
+            "指定された日付が無効です。日付範囲を確認してください。";
+        }
+
+        return res.status(500).json({ success: false, error: errorMessage });
       }
 
       if (!transactions || transactions.length === 0) {

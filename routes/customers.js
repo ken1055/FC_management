@@ -314,7 +314,8 @@ router.get("/edit/:id", requireAuth, async (req, res) => {
       customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
     }
 
-    const { data: customer, error: customerError } = await customerQuery.single();
+    const { data: customer, error: customerError } =
+      await customerQuery.single();
 
     if (customerError || !customer) {
       console.error("顧客取得エラー:", customerError);
@@ -680,10 +681,7 @@ router.post("/delete/:id", requireAuth, async (req, res) => {
 
   try {
     // 権限チェック - 顧客の存在確認
-    let customerQuery = db
-      .from("customers")
-      .select("*")
-      .eq("id", customerId);
+    let customerQuery = db.from("customers").select("*").eq("id", customerId);
 
     // 店舗ユーザーは自店舗の顧客のみ削除可能
     if (!isAdmin) {
@@ -744,37 +742,52 @@ router.get("/:id/transactions", requireAuth, async (req, res) => {
     });
 
     // 顧客の存在確認と権限チェック
-    let customerQuery = db.from("customers").select("*, stores!inner(name)").eq("id", customerId);
-    
+    let customerQuery = db
+      .from("customers")
+      .select("*, stores!inner(name)")
+      .eq("id", customerId);
+
     // 店舗ユーザーは自店舗の顧客のみアクセス可能
     if (!isAdmin) {
       customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
     }
 
-    const { data: customerData, error: customerError } = await customerQuery.single();
+    const { data: customerData, error: customerError } =
+      await customerQuery.single();
 
     if (customerError || !customerData) {
       console.error("顧客確認エラー:", customerError);
-      return res.status(404).json({ error: "顧客が見つからないか、アクセス権限がありません" });
+      return res
+        .status(404)
+        .json({ error: "顧客が見つからないか、アクセス権限がありません" });
     }
 
     // Supabaseのレスポンスを整形
     const customer = {
       ...customerData,
-      store_name: customerData.stores?.name || null
+      store_name: customerData.stores?.name || null,
     };
 
     // 取引履歴を取得
     const { data: transactions, error: transactionsError } = await db
       .from("customer_transactions")
-      .select("id, transaction_date, amount, description, payment_method, created_at, store_id, stores!inner(name)")
+      .select(
+        "id, transaction_date, amount, description, payment_method, created_at, store_id, stores!inner(name)"
+      )
       .eq("customer_id", customerId)
       .order("transaction_date", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (transactionsError) {
       console.error("取引履歴取得エラー:", transactionsError);
-      return res.status(500).json({ error: "取引履歴の取得に失敗しました" });
+
+      // 日付エラーの場合は具体的なメッセージを表示
+      let errorMessage = "取引履歴の取得に失敗しました";
+      if (transactionsError.code === "22008") {
+        errorMessage = "指定された日付が無効です。日付範囲を確認してください。";
+      }
+
+      return res.status(500).json({ error: errorMessage });
     }
 
     // 取引データを整形
@@ -790,15 +803,21 @@ router.get("/:id/transactions", requireAuth, async (req, res) => {
     }));
 
     // 統計情報を計算
-    const totalAmount = enrichedTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalAmount = enrichedTransactions.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0
+    );
     const transactionCount = enrichedTransactions.length;
-    const averageAmount = transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
+    const averageAmount =
+      transactionCount > 0 ? Math.round(totalAmount / transactionCount) : 0;
 
     // 月別集計
     const monthlyStats = {};
     enrichedTransactions.forEach((t) => {
       const date = new Date(t.transaction_date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      const monthKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}`;
 
       if (!monthlyStats[monthKey]) {
         monthlyStats[monthKey] = { amount: 0, count: 0 };
@@ -847,13 +866,17 @@ router.get("/:id/monthly-sales", requireAuth, async (req, res) => {
     const isAdmin = req.session.user.role === "admin";
 
     // 権限チェック
-    let customerQuery = db.from("customers").select("id, name, store_id").eq("id", customerId);
+    let customerQuery = db
+      .from("customers")
+      .select("id, name, store_id")
+      .eq("id", customerId);
 
     if (!isAdmin) {
       customerQuery = customerQuery.eq("store_id", req.session.user.store_id);
     }
 
-    const { data: customer, error: customerError } = await customerQuery.single();
+    const { data: customer, error: customerError } =
+      await customerQuery.single();
 
     if (customerError || !customer) {
       return res.status(404).json({ error: "顧客が見つかりません" });
@@ -865,7 +888,8 @@ router.get("/:id/monthly-sales", requireAuth, async (req, res) => {
       .select("transaction_date, amount")
       .eq("customer_id", customerId);
 
-    const { data: transactions, error: transactionsError } = await transactionsQuery;
+    const { data: transactions, error: transactionsError } =
+      await transactionsQuery;
 
     if (transactionsError) {
       console.error("月次売上取得エラー:", transactionsError);
@@ -904,7 +928,10 @@ router.get("/:id/monthly-sales", requireAuth, async (req, res) => {
         month: row.month,
         amount: row.amount,
         transaction_count: row.transaction_count,
-        average_amount: row.transaction_count > 0 ? Math.round(row.total_for_avg / row.transaction_count) : 0,
+        average_amount:
+          row.transaction_count > 0
+            ? Math.round(row.total_for_avg / row.transaction_count)
+            : 0,
       }))
       .sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year;
@@ -944,7 +971,9 @@ router.get("/store/:storeId/with-sales", requireAuth, async (req, res) => {
     // まず顧客一覧を取得
     const { data: customers, error: customersError } = await db
       .from("customers")
-      .select("id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, created_at")
+      .select(
+        "id, customer_code, name, email, phone, total_purchase_amount, visit_count, last_visit_date, created_at"
+      )
       .eq("store_id", storeId)
       .order("name");
 
@@ -993,9 +1022,12 @@ router.get("/store/:storeId/with-sales", requireAuth, async (req, res) => {
       }
       transactionMap[t.customer_id].transaction_count++;
       transactionMap[t.customer_id].total_amount += t.amount || 0;
-      if (!transactionMap[t.customer_id].last_transaction_date || 
-          t.transaction_date > transactionMap[t.customer_id].last_transaction_date) {
-        transactionMap[t.customer_id].last_transaction_date = t.transaction_date;
+      if (
+        !transactionMap[t.customer_id].last_transaction_date ||
+        t.transaction_date > transactionMap[t.customer_id].last_transaction_date
+      ) {
+        transactionMap[t.customer_id].last_transaction_date =
+          t.transaction_date;
       }
     });
 
@@ -1003,17 +1035,26 @@ router.get("/store/:storeId/with-sales", requireAuth, async (req, res) => {
       ...customer,
       actual_transactions: transactionMap[customer.id]?.transaction_count || 0,
       actual_total: transactionMap[customer.id]?.total_amount || 0,
-      last_transaction_date: transactionMap[customer.id]?.last_transaction_date || null,
+      last_transaction_date:
+        transactionMap[customer.id]?.last_transaction_date || null,
     }));
 
     // 実際の売上順でソート
-    enrichedCustomers.sort((a, b) => (b.actual_total || 0) - (a.actual_total || 0));
+    enrichedCustomers.sort(
+      (a, b) => (b.actual_total || 0) - (a.actual_total || 0)
+    );
 
     // 統計情報を計算
     const totalCustomers = enrichedCustomers.length;
-    const activeCustomers = enrichedCustomers.filter((c) => c.actual_transactions > 0).length;
-    const totalRevenue = enrichedCustomers.reduce((sum, c) => sum + (c.actual_total || 0), 0);
-    const averageRevenue = totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
+    const activeCustomers = enrichedCustomers.filter(
+      (c) => c.actual_transactions > 0
+    ).length;
+    const totalRevenue = enrichedCustomers.reduce(
+      (sum, c) => sum + (c.actual_total || 0),
+      0
+    );
+    const averageRevenue =
+      totalCustomers > 0 ? Math.round(totalRevenue / totalCustomers) : 0;
 
     console.log("最終統計:", {
       totalCustomers,
